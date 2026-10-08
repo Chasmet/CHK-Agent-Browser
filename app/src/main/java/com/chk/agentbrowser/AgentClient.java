@@ -36,13 +36,14 @@ public final class AgentClient {
     private volatile boolean inFlight;
     private Activity screen;
     private CommandHandler handler;
+    private CommandHandler backgroundHandler;
     private IncomingListener incoming;
     private JSONObject pending;
     private long receivedAt;
     private boolean presenting;
     private int networkErrors;
     private final Runnable tick = this::poll;
-    private final Runnable expiry = () -> finishPending(false, "Commande expirée sans confirmation sur le téléphone.");
+    private final Runnable expiry = () -> finishPending(false, "Commande expirée. Vérifie la connexion et le mode autonome.");
 
     public interface ResultCallback { void finish(boolean success, String result); }
     public interface CommandHandler {
@@ -66,6 +67,24 @@ public final class AgentClient {
     }
     public boolean isEnabled() { return settings.getBoolean("enabled", false); }
     public String mcpUrl() { return settings.getString("mcp_url", ""); }
+    public boolean isAutonomous(){return settings.getBoolean("autonomous_mode",false);}
+    public void setAutonomous(boolean allow){
+        settings.edit().putBoolean("autonomous_mode",allow).apply();
+        deliverPending();
+    }
+    public boolean isPreviewAllowed(){return settings.getBoolean("preview_allowed",false);}
+    public void setPreviewAllowed(boolean allow){settings.edit().putBoolean("preview_allowed",allow).apply();}
+    public void setBackgroundHandler(CommandHandler listener){
+        backgroundHandler=listener;
+        deliverPending();
+    }
+    public void removeBackgroundHandler(CommandHandler listener){
+        if(backgroundHandler==listener)backgroundHandler=null;
+    }
+    private CommandHandler activeHandler() {
+        return screen!=null && handler!=null ? handler :
+            (isAutonomous()?backgroundHandler:null);
+    }
     private synchronized String token() {
         String key = settings.getString("device_token", "");
         if(key.matches("[a-f0-9]{64}")) return key;
@@ -112,7 +131,7 @@ public final class AgentClient {
         incoming = null;
         finishPending(false, "Service MCP arrêté.");
     }
-    /** Called during MainActivity.onResume; never keep a hidden WebView alive. */
+    /** MainActivity overrides the service engine while the visible browser is active. */
     public void attach(Activity activity, CommandHandler h) {
         screen = activity; handler = h;
         deliverPending();
@@ -121,6 +140,7 @@ public final class AgentClient {
         if(screen == activity) {
             screen = null; handler = null;
             presenting = false;
+            deliverPending();
         }
     }
     private void poll() {
@@ -128,8 +148,9 @@ public final class AgentClient {
         if(inFlight) { ui.postDelayed(tick, 1200L); return; }
         inFlight = true;
         final boolean mustHeartbeat = pending != null;
-        final String page = handler == null ? "" : handler.pageUrl();
-        final String title = handler == null ? "" : handler.pageTitle();
+        final CommandHandler currentHandler=activeHandler();
+        final String page=currentHandler==null?"":currentHandler.pageUrl();
+        final String title=currentHandler==null?"":currentHandler.pageTitle();
         io.execute(() -> {
             JSONObject reply = null;
             try {
@@ -150,7 +171,7 @@ public final class AgentClient {
                 if(command != null && pending == null && command.has("id")) {
                     pending = command; receivedAt = SystemClock.elapsedRealtime(); presenting = false;
                     ui.postDelayed(expiry, COMMAND_TIMEOUT_MS);
-                    if(incoming != null) incoming.waitingForApproval(command.optString("action","Action"));
+                    if(incoming != null && !isAutonomous()) incoming.waitingForApproval(command.optString("action","Action"));
                     deliverPending();
                 }
                 ui.postDelayed(tick, networkErrors > 3 ? 7500L : (pending == null ? 3000L : 10000L));
@@ -158,33 +179,36 @@ public final class AgentClient {
         });
     }
     private void deliverPending() {
-        if(pending == null || presenting || screen == null || handler == null || screen.isFinishing()) return;
+        CommandHandler receiver=activeHandler();
+        if(pending == null || presenting || receiver == null ||
+            (screen != null && screen.isFinishing()))return;
         if(SystemClock.elapsedRealtime() - receivedAt >= COMMAND_TIMEOUT_MS) {
             finishPending(false, "Commande expirée."); return;
         }
         presenting = true;
         final String originalId = pending.optString("id", "");
         final JSONObject command = pending;
-        handler.onCommand(command, (approved, text) -> ui.post(() -> {
+        receiver.onCommand(command, (approved, text) -> ui.post(() -> {
             if(pending != null && originalId.equals(pending.optString("id"))) finishPending(approved, text);
         }));
     }
     private void finishPending(boolean ok, String message) {
         if(pending == null) return;
         String id = pending.optString("id", "");
+        String action = pending.optString("action","");
         pending = null;
         presenting = false;
         ui.removeCallbacks(expiry);
         if(incoming != null) incoming.approvalFinished();
-        sendResult(id, ok, message);
+        sendResult(id, action, ok, message);
         if(running) { ui.removeCallbacks(tick); ui.postDelayed(tick, 200L); }
     }
-    private void sendResult(String id, boolean success, String message) {
+    private void sendResult(String id, String action, boolean success, String message) {
         io.execute(() -> {
             try {
                 JSONObject result = new JSONObject();
                 result.put("id", id); result.put("ok", success);
-                if(success) result.put("result", limit(message, 11000));
+                if(success) result.put("result", limit(message, "preview".equals(action)?230000:11000));
                 else result.put("error", limit(message, 750));
                 request("POST", "/agentbrowser/api/result", result, true);
             } catch(Exception ignored) {}
@@ -205,7 +229,7 @@ public final class AgentClient {
             if(auth) c.setRequestProperty("Authorization", "Bearer "+token());
             if(body != null) {
                 byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
-                if(bytes.length>24000) throw new Exception("Message trop long");
+                if(bytes.length>(path.equals("/agentbrowser/api/result")?250000:24000)) throw new Exception("Message trop long");
                 c.setDoOutput(true);
                 c.setRequestProperty("Content-Type","application/json");
                 try(OutputStream stream=c.getOutputStream()) { stream.write(bytes); }
