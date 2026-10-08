@@ -48,9 +48,11 @@ public class MainActivity extends Activity {
     private ProgressBar progress;
     private TextView bookmark;
     private ValueCallback<Uri[]> fileCallback;
+    private AgentClient agentClient;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);setContentView(R.layout.activity_main);
         store=new BrowserStore(this);
+        agentClient=new AgentClient(this);
         container=findViewById(R.id.web_container);strip=findViewById(R.id.tab_strip);
         address=findViewById(R.id.address);progress=findViewById(R.id.progress);
         bookmark=findViewById(R.id.bookmark);
@@ -245,6 +247,135 @@ public class MainActivity extends Activity {
             })
         ).show();
     }
+    @Override protected void onResume(){
+        super.onResume();
+        if(agentClient!=null){
+            agentClient.start(this,new AgentClient.CommandHandler(){
+                @Override public String pageUrl(){return current==null||current.getUrl()==null?"":current.getUrl();}
+                @Override public String pageTitle(){return current==null||current.getTitle()==null?"":current.getTitle();}
+                @Override public void onCommand(JSONObject command,AgentClient.ResultCallback callback){
+                    confirmAgentCommand(command,callback);
+                }
+            });
+        }
+    }
+    @Override protected void onPause(){
+        if(agentClient!=null)agentClient.stop();
+        super.onPause();
+    }
+    private void confirmAgentCommand(JSONObject command,AgentClient.ResultCallback callback){
+        if(isFinishing()||current==null){
+            callback.finish(false,"Navigateur indisponible.");return;
+        }
+        String action=command.optString("action","");
+        JSONObject args=command.optJSONObject("args");
+        if(args==null)args=new JSONObject();
+        final JSONObject parameters=args;
+        String extra="";
+        switch(action){
+            case "read_page":extra="Lire le texte actuellement visible dans la page";break;
+            case "tabs":extra="Lister les onglets et leurs adresses";break;
+            case "open_url":extra="Ouvrir : "+args.optString("url","");break;
+            case "click":extra="Cliquer sur : "+args.optString("selector","");break;
+            case "type":
+                extra="Saisir dans "+args.optString("selector","")+
+                    "\nTexte : "+args.optString("text","");break;
+            case "scroll":extra="Faire défiler : "+args.optString("direction","");break;
+            default:callback.finish(false,"Commande MCP inconnue.");return;
+        }
+        String page=current.getUrl()==null?"Aucune page":current.getUrl();
+        new AlertDialog.Builder(this)
+            .setTitle("Autoriser l'action MCP ?")
+            .setMessage(extra+"\n\nPage actuelle : "+page+
+                "\n\nVérifie l'action avant de l'autoriser. Aucun clic ou saisie n'est automatique.")
+            .setNegativeButton("Refuser",(d,w)->callback.finish(false,"Action refusée sur le téléphone."))
+            .setPositiveButton("Autoriser",(d,w)->runAgentCommand(action,parameters,callback))
+            .setOnCancelListener(d->callback.finish(false,"Action annulée sur le téléphone."))
+            .show();
+    }
+    private void runAgentCommand(String action,JSONObject args,AgentClient.ResultCallback callback){
+        if(current==null){callback.finish(false,"Aucun onglet.");return;}
+        try{
+            switch(action){
+                case "tabs":{
+                    JSONArray list=new JSONArray();
+                    for(WebView web:tabs){
+                        JSONObject entry=new JSONObject();
+                        entry.put("title",web.getTitle()==null?"":web.getTitle());
+                        entry.put("url",web.getUrl()==null?"":web.getUrl());
+                        list.put(entry);
+                    }
+                    callback.finish(true,list.toString());return;
+                }
+                case "read_page":{
+                    final WebView web=current;
+                    final String page=web.getUrl(),title=web.getTitle();
+                    web.evaluateJavascript("(document.body && document.body.innerText || '').slice(0,10000)",raw->{
+                        String content=fromJavascript(raw);
+                        try{
+                            JSONObject out=new JSONObject();
+                            out.put("url",page==null?"":page);out.put("title",title==null?"":title);
+                            out.put("text",content);
+                            callback.finish(true,out.toString());
+                        }catch(Exception ex){callback.finish(false,"Lecture impossible");}
+                    });return;
+                }
+                case "open_url":{
+                    String url=args.optString("url","");
+                    Uri uri=Uri.parse(url);
+                    String hostname=uri.getHost();
+                    if(!"https".equalsIgnoreCase(uri.getScheme())||hostname==null||url.length()>2000
+                        ||hostname.equalsIgnoreCase("localhost")||hostname.endsWith(".local")
+                        ||hostname.startsWith("127.")||hostname.startsWith("192.168.")||hostname.startsWith("10.")){
+                        callback.finish(false,"Adresse HTTPS invalide ou réseau local interdit.");return;
+                    }
+                    current.loadUrl(url);
+                    callback.finish(true,"Navigation demandée vers "+url);return;
+                }
+                case "scroll":{
+                    int offset=(int)(current.getHeight()*0.7f);
+                    if("up".equals(args.optString("direction")))offset=-offset;
+                    current.scrollBy(0,offset);
+                    callback.finish(true,"Défilement effectué.");return;
+                }
+                case "click":{
+                    String selector=args.optString("selector","");
+                    String js="(function(){try{var el=document.querySelector("+JSONObject.quote(selector)+");"
+                        +"if(!el)return 'Élément introuvable';el.click();return 'Clic effectué';}"
+                        +"catch(e){return 'Erreur de sélection : '+e.message;}})()";
+                    current.evaluateJavascript(js,raw->{
+                        String result=fromJavascript(raw);
+                        callback.finish("Clic effectué".equals(result),result);
+                    });return;
+                }
+                case "type":{
+                    String selector=args.optString("selector","");
+                    String content=args.optString("text","");
+                    if(content.length()>500){callback.finish(false,"Texte trop long");return;}
+                    String js="(function(){try{var el=document.querySelector("+JSONObject.quote(selector)+");"
+                        +"if(!el)return 'Champ introuvable';"
+                        +"if(!('value' in el))return 'Champ non saisissable';"
+                        +"if(['password','file','hidden'].indexOf((el.type||'').toLowerCase())>=0)"
+                        +"return 'Champ sensible bloqué';"
+                        +"el.focus();el.value="+JSONObject.quote(content)+";"
+                        +"el.dispatchEvent(new Event('input',{bubbles:true}));"
+                        +"el.dispatchEvent(new Event('change',{bubbles:true}));"
+                        +"return 'Saisie effectuée';}catch(e){return 'Erreur de saisie : '+e.message;}})()";
+                    current.evaluateJavascript(js,raw->{
+                        String result=fromJavascript(raw);
+                        callback.finish("Saisie effectuée".equals(result),result);
+                    });return;
+                }
+                default:callback.finish(false,"Action inconnue");
+            }
+        }catch(Exception e){callback.finish(false,"Échec de l'action : "+e.getClass().getSimpleName());}
+    }
+    private static String fromJavascript(String raw){
+        if(raw==null)return "";
+        try{return new JSONArray("["+raw+"]").getString(0);}
+        catch(Exception e){return "Résultat illisible";}
+    }
+
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==FILE_REQUEST&&fileCallback!=null){
