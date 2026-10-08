@@ -39,6 +39,11 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             // Foreground-service starts from background can be blocked by Android.
         }
     }
+    public static String latestBackgroundUrl() {
+        AgentService running=instance;
+        return running!=null&&running.background!=null
+            ?running.background.pageUrl():"";
+    }
     public static void syncVisible(Context context,String url) {
         if(url==null||!url.startsWith("https://"))return;
         context.getApplicationContext().getSharedPreferences("browser_mcp_v1",MODE_PRIVATE)
