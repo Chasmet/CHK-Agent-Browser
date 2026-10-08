@@ -138,7 +138,11 @@ public class MainActivity extends Activity {
                 if(url.startsWith("https://")||url.startsWith("http://"))return false;
                 toast("Lien non autorisé");return true;
             }
+            @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap favicon){
+                applyCookiePolicy(v,url);
+            }
             @Override public void onPageFinished(WebView v,String url){
+                applyCookiePolicy(v,url);
                 if(url!=null)store.add("history",v.getTitle(),url);
                 if(v==current){address.setText(url);updateBookmark();refreshTabs();}
             }
@@ -172,6 +176,18 @@ public class MainActivity extends Activity {
                 .setNegativeButton("Annuler",null)
                 .setPositiveButton("Télécharger",(d,w)->startDownload(url,userAgent,mimeType)).show();
         });
+    }
+    private void applyCookiePolicy(WebView web,String url){
+        boolean allow=false;
+        try{
+            String host=Uri.parse(url==null?"":url).getHost();
+            if(host!=null){
+                host=host.toLowerCase(java.util.Locale.ROOT);
+                allow=host.equals("google.com")||host.endsWith(".google.com")
+                    ||host.endsWith(".googleusercontent.com")||host.endsWith(".gstatic.com");
+            }
+        }catch(Exception ignored){}
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web,allow);
     }
     private void startDownload(String url,String agent,String mime){
         try{
