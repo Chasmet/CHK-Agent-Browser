@@ -52,7 +52,7 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);setContentView(R.layout.activity_main);
         store=new BrowserStore(this);
-        agentClient=new AgentClient(this);
+        agentClient=AgentClient.get(this);
         container=findViewById(R.id.web_container);strip=findViewById(R.id.tab_strip);
         address=findViewById(R.id.address);progress=findViewById(R.id.progress);
         bookmark=findViewById(R.id.bookmark);
@@ -86,7 +86,7 @@ public class MainActivity extends Activity {
                 .setMessage("Télécharger une mise à jour officielle depuis GitHub ?")
                 .setNegativeButton("Plus tard",null)
                 .setPositiveButton("Télécharger",(d,w)->{
-                    try{new UpdateManager(this).download(release);toast("Téléchargement lancé. Installation dans Réglages.");}
+                    try{new UpdateManager(this).download(release);toast("Téléchargement lancé. Une notification proposera l’installation sur ce téléphone.");}
                     catch(Exception e){toast(e.getMessage());}
                 }).show();
         });
@@ -250,7 +250,8 @@ public class MainActivity extends Activity {
     @Override protected void onResume(){
         super.onResume();
         if(agentClient!=null){
-            agentClient.start(this,new AgentClient.CommandHandler(){
+            AgentService.ensureRunning(this);
+            agentClient.attach(this,new AgentClient.CommandHandler(){
                 @Override public String pageUrl(){return current==null||current.getUrl()==null?"":current.getUrl();}
                 @Override public String pageTitle(){return current==null||current.getTitle()==null?"":current.getTitle();}
                 @Override public void onCommand(JSONObject command,AgentClient.ResultCallback callback){
@@ -260,7 +261,7 @@ public class MainActivity extends Activity {
         }
     }
     @Override protected void onPause(){
-        if(agentClient!=null)agentClient.stop();
+        if(agentClient!=null)agentClient.detach(this);
         super.onPause();
     }
     private void confirmAgentCommand(JSONObject command,AgentClient.ResultCallback callback){
