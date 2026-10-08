@@ -13,8 +13,18 @@ public final class ScriptChecks {
         if(!RelayPolicy.isTerminalResultStatus(404)||!RelayPolicy.isTerminalResultStatus(410)
             ||RelayPolicy.isTerminalResultStatus(503)||RelayPolicy.isTerminalResultStatus(401))
             throw new AssertionError("Expired result must not block polling; transient errors retry");
-        java.nio.file.Files.write(java.nio.file.Paths.get(args[0],"read.js"),BrowserScripts.readPage().getBytes("UTF-8"));
-        java.nio.file.Files.write(java.nio.file.Paths.get(args[0],"type.js"),
+        java.nio.file.Path root=java.nio.file.Paths.get(args[0]);
+        java.nio.file.Files.write(root.resolve("read.js"),BrowserScripts.readPage().getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("type.js"),
             BrowserScripts.type("\"#target\"","\"hello\\nworld\"").getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("select.js"),
+            BrowserScripts.select("\"#select\"","\"b\"","\"\"",-1).getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("check.js"),
+            BrowserScripts.check("\"#check\"",true).getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("file.js"),
+            BrowserScripts.fileInfo("\"#file\"").getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("exists.js"),
+            BrowserScripts.exists("\"#target\"").getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("status.js"),BrowserScripts.pageStatus().getBytes("UTF-8"));
     }
 }
