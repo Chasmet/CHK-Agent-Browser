@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#0D1423" android:fillViewport="true">
+<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="RÉGLAGES" android:textSize="25sp" android:textStyle="bold" android:textColor="#FFFFFF" android:paddingBottom="15dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Navigation locale" android:textColor="#6ED2FF" android:textSize="17sp" android:paddingBottom="8dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Connexion Internet du téléphone ; aucun crédit d'API IA." android:textColor="#CAD8E9" android:paddingBottom="22dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Mises à jour APK" android:textColor="#6ED2FF" android:textSize="19sp" />
+    <TextView android:id="@+id/version" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Version : 1.0.0" android:textColor="#FFFFFF" android:paddingVertical="12dp" />
+    <Button android:id="@+id/check_update" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Vérifier les mises à jour" android:textAllCaps="false" />
+    <Button android:id="@+id/install_update" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Installer APK téléchargé" android:textAllCaps="false" android:visibility="gone" />
+    <TextView android:id="@+id/update_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#CAD8E9" android:paddingVertical="14dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="MCP : deuxième étape, non activé" android:textColor="#6ED2FF" android:textSize="17sp" android:paddingBottom="18dp" />
+    <Button android:id="@+id/clear_history" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Effacer l'historique local" android:textAllCaps="false" />
+</LinearLayout>
+</ScrollView>
