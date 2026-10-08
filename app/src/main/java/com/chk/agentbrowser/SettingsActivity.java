@@ -111,10 +111,6 @@ public final class SettingsActivity extends Activity {
         status.setText("GitHub Releases publiques : mises à jour directement sur ce téléphone.");
         showMcp();showInstall();
     }
-    @Override protected void onResume(){
-        super.onResume();AgentService.ensureRunning(this);
-        refresh.removeCallbacks(statusTick);refresh.post(statusTick);
-    }
     @Override protected void onPause(){refresh.removeCallbacks(statusTick);super.onPause();}
     private void showMcp() {
         boolean enabled=agent.isEnabled(), link=!agent.mcpUrl().isEmpty();
@@ -247,6 +243,7 @@ public final class SettingsActivity extends Activity {
     }
     @Override public void onResume() {
         super.onResume();
+        refresh.removeCallbacks(statusTick);refresh.post(statusTick);
         if(agent!=null && agent.isEnabled()) {
             AgentService.ensureRunning(this);
             requestNotificationsIfNeeded();
