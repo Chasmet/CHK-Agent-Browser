@@ -10,6 +10,9 @@ public final class ScriptChecks {
         }
         if(RelayPolicy.pollDelay(Integer.MAX_VALUE,false)>30000)
             throw new AssertionError("Retry overflow");
+        if(!RelayPolicy.isTerminalResultStatus(404)||!RelayPolicy.isTerminalResultStatus(410)
+            ||RelayPolicy.isTerminalResultStatus(503)||RelayPolicy.isTerminalResultStatus(401))
+            throw new AssertionError("Expired result must not block polling; transient errors retry");
         java.nio.file.Files.write(java.nio.file.Paths.get(args[0],"read.js"),BrowserScripts.readPage().getBytes("UTF-8"));
         java.nio.file.Files.write(java.nio.file.Paths.get(args[0],"type.js"),
             BrowserScripts.type("\"#target\"","\"hello\\nworld\"").getBytes("UTF-8"));

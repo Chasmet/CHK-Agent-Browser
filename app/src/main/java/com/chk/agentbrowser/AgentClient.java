@@ -44,6 +44,7 @@ public final class AgentClient {
     private int networkErrors;
     private int generation;
     private volatile long lastContact;
+    private long lastHeartbeat;
     private volatile String lastError = "";
     private final Runnable tick = this::poll;
     private final Runnable expiry = () -> finishPending(false, "Commande expirée. Vérifie la connexion et le mode autonome.");
@@ -173,12 +174,14 @@ public final class AgentClient {
             JSONObject reply = null;
             try {
                 flushResult();
-                if(mustHeartbeat) {
+                if(mustHeartbeat || SystemClock.elapsedRealtime()-lastHeartbeat>=15000L) {
                     JSONObject info = new JSONObject();
                     info.put("url", limit(page, 500)); info.put("title", limit(title, 150));
                     info.put("autonomous",isAutonomous());
                     request("POST", "/agentbrowser/api/heartbeat", info, true);
-                } else {
+                    lastHeartbeat=SystemClock.elapsedRealtime();
+                }
+                if(!mustHeartbeat) {
                     reply = request("GET", "/agentbrowser/api/poll", null, true);
                 }
                 networkErrors = 0;lastError="";
@@ -258,7 +261,14 @@ public final class AgentClient {
     private void flushResult() throws Exception {
         String saved=settings.getString("result_outbox","");
         if(saved.isEmpty())return;
-        request("POST","/agentbrowser/api/result",new JSONObject(saved),true);
+        try{
+            request("POST","/agentbrowser/api/result",new JSONObject(saved),true);
+        }catch(HttpFailure failure){
+            if(!RelayPolicy.isTerminalResultStatus(failure.status))throw failure;
+            // Expired/unknown commands cannot be acknowledged after relay restart.
+            // Preserve the local receipt, but unblock polling for the next command.
+            lastError="Résultat clos par le relais (HTTP "+failure.status+")";
+        }
         // Never discard a newer result written by the UI during this request.
         synchronized(settings) {
             if(saved.equals(settings.getString("result_outbox","")))
@@ -268,6 +278,10 @@ public final class AgentClient {
     private static String limit(String text, int max) {
         if(text == null) return "";
         return text.length() > max ? text.substring(0,max) : text;
+    }
+    private static final class HttpFailure extends java.io.IOException {
+        final int status;
+        HttpFailure(int code){super("HTTP "+code);status=code;}
     }
     private JSONObject request(String method, String path, JSONObject body, boolean auth) throws Exception {
         HttpURLConnection c = null;
@@ -286,7 +300,7 @@ public final class AgentClient {
                 try(OutputStream stream=c.getOutputStream()) { stream.write(bytes); }
             }
             int code=c.getResponseCode();
-            if(code<200 || code>=300) throw new Exception("HTTP "+code);
+            if(code<200 || code>=300) throw new HttpFailure(code);
             try(InputStream input=c.getInputStream()) {
                 ByteArrayOutputStream output=new ByteArrayOutputStream();
                 byte[] buf=new byte[4096]; int n;
