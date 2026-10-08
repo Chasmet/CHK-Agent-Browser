@@ -15,7 +15,7 @@ public final class BrowserScripts {
 
     public static String readPage() {
         return "(function(){"+finder()
-            + "var out={text:(document.body&&document.body.innerText||'').slice(0,7000),elements:[],forms:0,ready:document.readyState};"
+            + "var out={text:(document.body&&document.body.innerText||'').slice(0,5000),elements:[],forms:0,ready:document.readyState};"
             + "var rs=roots(),nodes=[];rs.forEach(function(r){try{nodes=nodes.concat(Array.from(r.querySelectorAll('input,textarea,select,button,a,[role=button],[role=checkbox],[role=radio],[contenteditable=true],[tabindex=\"0\"]')));}catch(e){}});"
             + "function label(el){return (el.getAttribute('aria-label')||el.getAttribute('title')||el.placeholder||el.innerText||el.name||'').trim().replace(/\\s+/g,' ').slice(0,120);}"
             + "function score(el){var tag=(el.tagName||'').toLowerCase(),v=label(el).toLowerCase();"
@@ -33,7 +33,7 @@ public final class BrowserScripts {
             + "var path=selector(el);if(!path||path.length>340)continue;var item={selector:path,tag:(el.tagName||'').toLowerCase(),type:el.type||'',label:label(el),disabled:!!el.disabled};"
             + "if((el.type||'').toLowerCase()==='checkbox'||(el.type||'').toLowerCase()==='radio')item.checked=!!el.checked;"
             + "if((el.type||'').toLowerCase()==='file')item.multiple=!!el.multiple;"
-            + "out.elements.push(item);if(JSON.stringify(out).length>13500){out.elements.pop();break;}}"
+            + "out.elements.push(item);if(JSON.stringify(out).length>9400){out.elements.pop();break;}}"
             + "try{out.forms=roots().reduce(function(n,r){return n+r.querySelectorAll('form').length;},0);}catch(e){}"
             + "return JSON.stringify(out);})()";
     }
