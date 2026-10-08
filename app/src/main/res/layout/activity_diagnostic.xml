@@ -16,6 +16,16 @@
         <Button android:id="@+id/diagnostic_copy" android:layout_width="match_parent"
             android:layout_height="wrap_content" android:text="Copier le diagnostic"
             android:textAllCaps="false"/>
+        <Button android:id="@+id/diagnostic_clear_log" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="Effacer le journal technique"
+            android:textAllCaps="false"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Journal technique local"
+            android:textColor="#6ED2FF" android:textSize="17sp" android:paddingTop="18dp"
+            android:paddingBottom="8dp"/>
+        <TextView android:id="@+id/diagnostic_log" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textColor="#CAD8E9" android:textSize="13sp"
+            android:typeface="monospace" android:textIsSelectable="true" android:lineSpacingExtra="3dp"/>
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="Le diagnostic ne copie jamais le jeton d’installation, l’adresse MCP privée, les cookies ni les mots de passe."
             android:textColor="#8FA8C0" android:paddingTop="14dp"/>
