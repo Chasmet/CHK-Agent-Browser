@@ -33,5 +33,7 @@
         </activity>
         <provider android:name=".ApkProvider" android:authorities="${applicationId}.apks"
             android:exported="false" android:grantUriPermissions="true" />
+        <provider android:name=".BrowserFileProvider" android:authorities="${applicationId}.browserfiles"
+            android:exported="false" android:grantUriPermissions="true" />
     </application>
 </manifest>
