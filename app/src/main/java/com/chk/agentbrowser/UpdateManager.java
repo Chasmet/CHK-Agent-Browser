@@ -111,7 +111,7 @@ public final class UpdateManager {
             context.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+context.getPackageName())));
             return false;
         }
-        Uri uri=Uri.parse("content://com.chk.agentbrowser.apks/"+Uri.encode(file.getName()));
+        Uri uri=Uri.parse("content://"+context.getPackageName()+".apks/"+Uri.encode(file.getName()));
         Intent intent=new Intent(Intent.ACTION_VIEW);
         intent.setDataAndType(uri,"application/vnd.android.package-archive");
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_ACTIVITY_NEW_TASK);
