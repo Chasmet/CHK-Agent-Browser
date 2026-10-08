@@ -40,8 +40,10 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     private final Runnable maintenance=new Runnable(){
         @Override public void run(){
             if(!AgentClient.get(AgentService.this).isEnabled())return;
-            maintainSessionLock();refreshNotification();
-            main.postDelayed(this,60000L);
+            maintainSessionLock();
+            AgentClient.get(AgentService.this).reconnect();
+            refreshNotification();
+            main.postDelayed(this,30000L);
         }
     };
     private void maintainSessionLock(){
@@ -82,7 +84,21 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         sessionLock.setReferenceCounted(false);
         connectivity=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
         networkCallback=new ConnectivityManager.NetworkCallback(){
-            @Override public void onAvailable(Network network){AgentClient.get(AgentService.this).reconnect();}
+            @Override public void onAvailable(Network network){
+                AgentLog.add(AgentService.this,"réseau","connexion disponible");
+                AgentClient.get(AgentService.this).reconnect();
+                refreshNotification();
+            }
+            @Override public void onLost(Network network){
+                AgentLog.add(AgentService.this,"réseau","connexion perdue");
+                refreshNotification();
+            }
+            @Override public void onCapabilitiesChanged(Network network,android.net.NetworkCapabilities caps){
+                String type=caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)?"Wi-Fi":
+                    (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)?"mobile":"autre");
+                AgentLog.add(AgentService.this,"réseau","transport actif : "+type);
+                AgentClient.get(AgentService.this).reconnect();
+            }
         };
         try{connectivity.registerNetworkCallback(new NetworkRequest.Builder()
             .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),networkCallback);}
@@ -100,8 +116,10 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         }
     }
     @Override public int onStartCommand(Intent intent,int flags,int startId) {
+        AgentLog.add(this,"service","démarrage ou reprise du service MCP");
         if(intent!=null&&ACTION_STOP.equals(intent.getAction())) {
             deliberateStop=true;
+            AgentLog.add(this,"service","arrêt demandé par le propriétaire");
             AgentClient.get(this).disable();
             if(background!=null) {
                 AgentClient.get(this).removeBackgroundHandler(background);
@@ -120,6 +138,8 @@ public final class AgentService extends Service implements AgentClient.IncomingL
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
             else startForeground(ID_RUNNING,createOngoingNotification());
         }catch(RuntimeException failure){
+            AgentLog.add(this,"service","échec foreground : "+failure.getClass().getSimpleName());
+            scheduleRecovery();
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -129,6 +149,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
                 background.restore();
                 AgentClient.get(this).setBackgroundHandler(background);
             }catch(RuntimeException failure) {
+                AgentLog.add(this,"webview","moteur autonome indisponible : "+failure.getClass().getSimpleName());
                 // Keep network connectivity even on a device missing WebView.
                 background=null;
             }
@@ -203,6 +224,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         }catch(RuntimeException ignored){}
     }
     @Override public void onTaskRemoved(Intent rootIntent) {
+        AgentLog.add(this,"service","tâche retirée par Android, reprise planifiée");
         super.onTaskRemoved(rootIntent);
         scheduleRecovery();
     }
@@ -219,7 +241,10 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             background.destroy();background=null;
         }
         if(notifications!=null)notifications.cancel(ID_APPROVAL);
-        if(!deliberateStop)scheduleRecovery();
+        if(!deliberateStop){
+            AgentLog.add(this,"service","service détruit par Android, reprise planifiée");
+            scheduleRecovery();
+        }
         instance=null;
         super.onDestroy();
     }
