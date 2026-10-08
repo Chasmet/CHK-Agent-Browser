@@ -130,13 +130,16 @@ public final class AgentClient {
                 String url = response.optString("mcp_url", "");
                 if(!url.startsWith(BASE + "/agentbrowser/mcp/")) throw new Exception("URL MCP inattendue");
                 settings.edit().putString("mcp_url", url).putBoolean("enabled", true).apply();
+                AgentLog.add(app,"mcp","association au relais réussie");
                 ui.post(() -> callback.completed(true, "MCP connecté : contrôle maintenu par notification Android."));
             } catch(Exception e) {
+                AgentLog.add(app,"mcp","association refusée : "+e.getClass().getSimpleName());
                 ui.post(() -> callback.completed(false, "Association impossible : " + e.getMessage()));
             }
         });
     }
     public void disable() {
+        AgentLog.add(app,"mcp","désactivation demandée");
         settings.edit().putBoolean("enabled", false).apply();
         running = false;generation++;
         ui.removeCallbacks(tick);
@@ -197,6 +200,7 @@ public final class AgentClient {
                 lastContact=SystemClock.elapsedRealtime();
             } catch(Exception failure) {
                 networkErrors++;lastError=failure.getMessage()==null?"Réseau indisponible":failure.getMessage();
+                AgentLog.add(app,"réseau","échec relais #"+networkErrors+" : "+failure.getClass().getSimpleName());
             }
             final JSONObject result = reply;
             ui.post(() -> {
@@ -212,6 +216,7 @@ public final class AgentClient {
                         ui.postDelayed(tick,200L);return;
                     }
                     pending = command; receivedAt = SystemClock.elapsedRealtime(); presenting = false;
+                    AgentLog.add(app,"commande","reçue : "+command.optString("action","commande"));
                     settings.edit().putString("last_command_action",command.optString("action","commande"))
                         .putString("last_command_result","en cours").apply();
                     ui.postDelayed(expiry, COMMAND_TIMEOUT_MS);
@@ -253,6 +258,7 @@ public final class AgentClient {
         ui.removeCallbacks(expiry);
         if(incoming != null) incoming.approvalFinished();
         settings.edit().putString("last_command_result",ok?"réussie":"échec : "+limit(message,180)).apply();
+        AgentLog.add(app,"commande",action+" : "+(ok?"réussie":"échec"));
         sendResult(id, action, ok, message);
         if(running) { ui.removeCallbacks(tick); ui.postDelayed(tick, 200L); }
     }
@@ -275,6 +281,7 @@ public final class AgentClient {
         if(saved.isEmpty())return;
         try{
             request("POST","/agentbrowser/api/result",new JSONObject(saved),true);
+            AgentLog.add(app,"mcp","résultat confirmé par le relais");
         }catch(HttpFailure failure){
             if(!RelayPolicy.isTerminalResultStatus(failure.status))throw failure;
             // Expired/unknown commands cannot be acknowledged after relay restart.
