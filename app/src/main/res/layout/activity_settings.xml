@@ -6,16 +6,16 @@
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Connexion Internet du téléphone ; aucun crédit d'API IA." android:textColor="#CAD8E9" android:paddingBottom="22dp" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Mises à jour APK" android:textColor="#6ED2FF" android:textSize="19sp" />
     <TextView android:id="@+id/version" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Version : 1.0.0" android:textColor="#FFFFFF" android:paddingVertical="12dp" />
-    <Button android:id="@+id/check_update" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Vérifier les mises à jour" android:textAllCaps="false" />
-    <Button android:id="@+id/install_update" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Installer APK téléchargé" android:textAllCaps="false" android:visibility="gone" />
+    <Button android:id="@+id/check_update" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Rechercher et télécharger la mise à jour" android:textAllCaps="false" />
+    <Button android:id="@+id/install_update" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Installer la mise à jour sur ce téléphone" android:textAllCaps="false" android:visibility="gone" />
     <TextView android:id="@+id/update_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#CAD8E9" android:paddingVertical="14dp" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Connexion MCP ChatGPT" android:textColor="#6ED2FF" android:textSize="19sp" android:paddingBottom="8dp" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Serveur Render existant · sans clé API payante. Le navigateur doit rester ouvert pour recevoir les commandes. Chaque action demande ton accord." android:textColor="#CAD8E9" android:paddingBottom="10dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Même serveur Render, sans clé API. La connexion continue grâce au service Android et sa notification, même dans ChatGPT. Pour accepter une commande, ouvre le navigateur et valide." android:textColor="#CAD8E9" android:paddingBottom="10dp" />
     <TextView android:id="@+id/mcp_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="MCP désactivé" android:textColor="#FFFFFF" android:paddingBottom="12dp" />
     <Button android:id="@+id/mcp_connect" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Activer / reconnecter MCP" android:textAllCaps="false" />
     <Button android:id="@+id/mcp_copy" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Copier l'adresse MCP pour ChatGPT" android:textAllCaps="false" />
     <Button android:id="@+id/mcp_disable" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Désactiver MCP" android:textAllCaps="false" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Adresse MCP personnelle : ne la partage pas publiquement. Elle donne accès aux demandes d'actions soumises à confirmation sur ton téléphone." android:textColor="#CAD8E9" android:paddingVertical="12dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Une notification indique chaque demande de ChatGPT. Les commandes expirent si tu ne les valides pas rapidement. Ton adresse MCP reste privée." android:textColor="#CAD8E9" android:paddingVertical="12dp" />
     <Button android:id="@+id/clear_history" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Effacer l'historique local" android:textAllCaps="false" />
 </LinearLayout>
 </ScrollView>
