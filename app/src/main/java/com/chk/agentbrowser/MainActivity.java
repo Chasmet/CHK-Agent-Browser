@@ -49,6 +49,11 @@ public class MainActivity extends Activity {
     private TextView bookmark;
     private ValueCallback<Uri[]> fileCallback;
     private AgentClient agentClient;
+    private Uri[] pendingUploadUris;
+    private AgentClient.ResultCallback pendingUploadCallback;
+    private String pendingUploadSelector="";
+    private WebView pendingUploadWeb;
+    private final android.os.Handler transferHandler=new android.os.Handler(android.os.Looper.getMainLooper());
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);setContentView(R.layout.activity_main);
         store=new BrowserStore(this);
@@ -116,7 +121,7 @@ public class MainActivity extends Activity {
         WebSettings s=web.getSettings();
         s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);
         s.setAllowFileAccess(false);s.setAllowContentAccess(false);
-        s.setJavaScriptCanOpenWindowsAutomatically(false);s.setSupportMultipleWindows(false);
+        s.setJavaScriptCanOpenWindowsAutomatically(true);s.setSupportMultipleWindows(true);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setBuiltInZoomControls(true);s.setDisplayZoomControls(false);
         if(Build.VERSION.SDK_INT>=26)s.setSafeBrowsingEnabled(true);
@@ -143,7 +148,17 @@ public class MainActivity extends Activity {
                 if(v==current){progress.setVisibility(percentage>=100?View.GONE:View.VISIBLE);progress.setProgress(percentage);}
             }
             @Override public void onReceivedTitle(WebView v,String title){if(v==current)refreshTabs();}
+            @Override public boolean onCreateWindow(WebView view,boolean isDialog,boolean isUserGesture,android.os.Message resultMsg){
+                if(tabs.size()>=12){toast("Maximum 12 onglets");return false;}
+                WebView popup=new WebView(MainActivity.this);popup.setBackgroundColor(Color.WHITE);configure(popup);
+                tabs.add(popup);select(popup);
+                WebView.WebViewTransport transport=(WebView.WebViewTransport)resultMsg.obj;
+                transport.setWebView(popup);resultMsg.sendToTarget();
+                return true;
+            }
+            @Override public void onCloseWindow(WebView window){if(tabs.contains(window))close(window);}
             @Override public boolean onShowFileChooser(WebView v,ValueCallback<Uri[]> callback,FileChooserParams params){
+                if(deliverPendingUpload(v,callback))return true;
                 if(fileCallback!=null)fileCallback.onReceiveValue(null);
                 fileCallback=callback;
                 try{startActivityForResult(params.createIntent(),FILE_REQUEST);return true;}
@@ -292,11 +307,20 @@ public class MainActivity extends Activity {
                 extra="Saisir dans "+args.optString("selector","")+
                     "\nTexte : "+args.optString("text","");break;
             case "scroll":extra="Faire défiler : "+args.optString("direction","");break;
-            case "preview":extra="Afficher un aperçu de la page dans ChatGPT";break;
+            case "preview":case "screenshot":extra="Capturer un aperçu vérifiable de la page";break;
+            case "select_option":extra="Choisir une option dans : "+args.optString("selector","");break;
+            case "check":extra=(args.optBoolean("checked",true)?"Cocher : ":"Décocher : ")+args.optString("selector","");break;
+            case "wait_for_element":extra="Attendre l'élément : "+args.optString("selector","");break;
+            case "get_form":extra="Analyser les formulaires de la page";break;
+            case "get_page_status":extra="Vérifier l'état réel de la page";break;
+            case "switch_tab":extra="Basculer vers l'onglet demandé";break;
+            case "close_popup":extra="Fermer l'onglet secondaire actuel";break;
+            case "upload_file":extra="Importer des fichiers autorisés dans : "+args.optString("selector","");break;
+            case "download_file":extra="Télécharger le document demandé et confirmer sa réception";break;
             default:callback.finish(false,"Commande MCP inconnue.");return;
         }
         if(agentClient.isAutonomous()){
-            if("preview".equals(action)&&!agentClient.isPreviewAllowed()) {
+            if(("preview".equals(action)||"screenshot".equals(action))&&!agentClient.isPreviewAllowed()) {
                 callback.finish(false,"Active le partage d'aperçus dans les réglages.");
                 return;
             }
@@ -322,7 +346,7 @@ public class MainActivity extends Activity {
         if(current==null){callback.finish(false,"Aucun onglet.");return;}
         try{
             switch(action){
-                case "preview":{
+                case "preview":case "screenshot":{
                     captureVisiblePreview(callback);return;
                 }
                 case "tabs":{
@@ -371,10 +395,7 @@ public class MainActivity extends Activity {
                 }
                 case "click":{
                     String selector=args.optString("selector","");
-                    String js="(function(){try{var el=document.querySelector("+JSONObject.quote(selector)+");"
-                        +"if(!el)return 'Élément introuvable';el.click();return 'Clic effectué';}"
-                        +"catch(e){return 'Erreur de sélection : '+e.message;}})()";
-                    current.evaluateJavascript(js,raw->{
+                    current.evaluateJavascript(BrowserScripts.click(JSONObject.quote(selector)),raw->{
                         String result=fromJavascript(raw);
                         callback.finish("Clic effectué".equals(result),result);
                     });return;
@@ -389,10 +410,135 @@ public class MainActivity extends Activity {
                         callback.finish("Saisie effectuée".equals(result),result);
                     });return;
                 }
+                case "select_option":{
+                    String selector=args.optString("selector","");
+                    String value=args.optString("value","");
+                    String label=args.optString("label","");
+                    int index=args.has("index")?args.optInt("index",-1):-1;
+                    current.evaluateJavascript(BrowserScripts.select(JSONObject.quote(selector),JSONObject.quote(value),JSONObject.quote(label),index),raw->{
+                        String result=fromJavascript(raw);
+                        callback.finish(result.startsWith("Option sélectionnée"),result);
+                    });return;
+                }
+                case "check":{
+                    String selector=args.optString("selector","");
+                    current.evaluateJavascript(BrowserScripts.check(JSONObject.quote(selector),args.optBoolean("checked",true)),raw->{
+                        String result=fromJavascript(raw);
+                        callback.finish(result.startsWith("État"),result);
+                    });return;
+                }
+                case "wait_for_element":{
+                    waitForElement(current,args.optString("selector",""),Math.min(30000,Math.max(500,args.optInt("timeout_ms",10000))),callback);return;
+                }
+                case "get_form":{
+                    current.evaluateJavascript(BrowserScripts.getForm(),raw->callback.finish(true,fromJavascript(raw)));return;
+                }
+                case "get_page_status":{
+                    current.evaluateJavascript(BrowserScripts.pageStatus(),raw->callback.finish(true,fromJavascript(raw)));return;
+                }
+                case "switch_tab":{
+                    int index=args.optInt("index",-1);
+                    String contains=args.optString("url_contains","");
+                    WebView target=null;
+                    if(index>=0&&index<tabs.size())target=tabs.get(index);
+                    if(target==null&&!contains.isEmpty())for(WebView tab:tabs){String u=tab.getUrl();if(u!=null&&u.contains(contains)){target=tab;break;}}
+                    if(target==null){callback.finish(false,"Onglet introuvable.");return;}
+                    select(target);callback.finish(true,"Onglet actif : "+(target.getUrl()==null?"":target.getUrl()));return;
+                }
+                case "close_popup":{
+                    if(tabs.size()<=1){callback.finish(false,"Aucun onglet secondaire à fermer.");return;}
+                    WebView closing=current;close(closing);callback.finish(true,"Fenêtre secondaire fermée.");return;
+                }
+                case "upload_file":{
+                    startMcpUpload(current,args,callback);return;
+                }
+                case "download_file":{
+                    startMcpDownload(current,args,callback);return;
+                }
                 default:callback.finish(false,"Action inconnue");
             }
         }catch(Exception e){callback.finish(false,"Échec de l'action : "+e.getClass().getSimpleName());}
     }
+    private boolean deliverPendingUpload(WebView web,ValueCallback<Uri[]> chooser){
+        if(pendingUploadCallback==null||pendingUploadUris==null||pendingUploadWeb!=web)return false;
+        Uri[] staged=pendingUploadUris;
+        String selector=pendingUploadSelector;
+        AgentClient.ResultCallback result=pendingUploadCallback;
+        pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;pendingUploadSelector="";
+        if(Build.VERSION.SDK_INT>=26){
+            android.content.pm.PackageInfo pkg=WebView.getCurrentWebViewPackage();
+            if(pkg!=null)for(Uri uri:staged)grantUriPermission(pkg.packageName,uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+        chooser.onReceiveValue(staged);
+        transferHandler.postDelayed(()->web.evaluateJavascript(BrowserScripts.fileInfo(JSONObject.quote(selector)),raw->{
+            try{
+                JSONObject info=new JSONObject(fromJavascript(raw));
+                boolean ok=info.optBoolean("ok")&&info.optInt("count")==staged.length;
+                result.finish(ok,ok?"Importation confirmée par la page : "+info.toString():"Le site n'a pas confirmé tous les fichiers : "+info.toString());
+            }catch(Exception e){result.finish(false,"Impossible de confirmer les fichiers reçus par le site.");}
+        }),700L);
+        return true;
+    }
+    private void startMcpUpload(WebView web,JSONObject args,AgentClient.ResultCallback callback){
+        String selector=args.optString("selector","");
+        JSONArray files=args.optJSONArray("files");
+        if(selector.isEmpty()||selector.length()>=350){callback.finish(false,"Sélecteur de fichier invalide.");return;}
+        String expected=args.optString("expected_host","");
+        String host=web.getUrl()==null?null:Uri.parse(web.getUrl()).getHost();
+        if(host==null||(!expected.isEmpty()&&!expected.equalsIgnoreCase(host))){
+            callback.finish(false,"Destination d'importation différente de celle autorisée.");return;
+        }
+        BrowserTransferManager.prepareUploads(this,files,agentClient.deviceTokenForTransfers(),(ok,uris,message)->{
+            if(!ok){callback.finish(false,message);return;}
+            if(pendingUploadCallback!=null){callback.finish(false,"Une autre importation est déjà en cours.");return;}
+            pendingUploadUris=uris;pendingUploadCallback=callback;pendingUploadSelector=selector;pendingUploadWeb=web;
+            web.evaluateJavascript(BrowserScripts.fileClick(JSONObject.quote(selector)),raw->{
+                String result=fromJavascript(raw);
+                if(!"Sélecteur fichier ouvert".equals(result)&&pendingUploadCallback==callback){
+                    pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;pendingUploadSelector="";
+                    callback.finish(false,result);
+                }
+            });
+            transferHandler.postDelayed(()->{
+                if(pendingUploadCallback==callback){
+                    pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;pendingUploadSelector="";
+                    callback.finish(false,"Le site n'a pas ouvert son sélecteur de fichiers.");
+                }
+            },7000L);
+        });
+    }
+    private void startMcpDownload(WebView web,JSONObject args,AgentClient.ResultCallback callback){
+        String expected=args.optString("expected_host","");
+        String host=web.getUrl()==null?null:Uri.parse(web.getUrl()).getHost();
+        if(host==null||(!expected.isEmpty()&&!expected.equalsIgnoreCase(host))){
+            callback.finish(false,"Destination de téléchargement différente de celle autorisée.");return;
+        }
+        String direct=args.optString("url","");
+        if(!direct.isEmpty()){downloadResolved(web,direct,args.optString("mime_type",""),callback);return;}
+        String selector=args.optString("selector","");
+        if(selector.isEmpty()){callback.finish(false,"URL ou sélecteur de téléchargement requis.");return;}
+        web.evaluateJavascript(BrowserScripts.linkUrl(JSONObject.quote(selector)),raw->{
+            String url=fromJavascript(raw);
+            if(url==null||url.isEmpty()){callback.finish(false,"Lien de téléchargement introuvable.");return;}
+            downloadResolved(web,url,args.optString("mime_type",""),callback);
+        });
+    }
+    private void downloadResolved(WebView web,String url,String mime,AgentClient.ResultCallback callback){
+        if(!url.startsWith("https://")){callback.finish(false,"Téléchargement HTTPS uniquement.");return;}
+        BrowserTransferManager.downloadToApp(this,url,web.getSettings().getUserAgentString(),mime,(ok,message)->callback.finish(ok,message));
+    }
+    private void waitForElement(WebView web,String selector,int timeout,AgentClient.ResultCallback callback){
+        if(selector.isEmpty()||selector.length()>=350){callback.finish(false,"Sélecteur invalide.");return;}
+        long start=android.os.SystemClock.elapsedRealtime();
+        Runnable[] poll=new Runnable[1];
+        poll[0]=()->web.evaluateJavascript(BrowserScripts.exists(JSONObject.quote(selector)),raw->{
+            if("true".equals(raw)){callback.finish(true,"Élément disponible.");return;}
+            if(android.os.SystemClock.elapsedRealtime()-start>=timeout){callback.finish(false,"Élément absent après "+timeout+" ms.");return;}
+            transferHandler.postDelayed(poll[0],350L);
+        });
+        poll[0].run();
+    }
+
     private void captureVisiblePreview(AgentClient.ResultCallback callback) {
         if(!agentClient.isPreviewAllowed()){
             callback.finish(false,"Active le partage des captures dans Réglages.");
@@ -454,5 +600,8 @@ public class MainActivity extends Activity {
         for(WebView v:tabs){if(v.getParent() instanceof ViewGroup)((ViewGroup)v.getParent()).removeView(v);v.destroy();}
         tabs.clear();
         if(fileCallback!=null)fileCallback.onReceiveValue(null);
+        if(pendingUploadCallback!=null)pendingUploadCallback.finish(false,"Navigateur fermé pendant l'importation.");
+        pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;
+        transferHandler.removeCallbacksAndMessages(null);
     }
 }
