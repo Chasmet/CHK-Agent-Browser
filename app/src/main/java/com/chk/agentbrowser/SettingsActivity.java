@@ -88,6 +88,8 @@ public final class SettingsActivity extends Activity {
         install=findViewById(R.id.install_update);
         mcpConnect.setOnClickListener(v->connectMcp());
         mcpCopy.setOnClickListener(v->copyMcp());
+        findViewById(R.id.mcp_diagnostic).setOnClickListener(v->
+            startActivity(new Intent(this,DiagnosticActivity.class)));
         mcpDisable.setOnClickListener(v->{
             agent.disable();
             stopService(new Intent(this, AgentService.class));
