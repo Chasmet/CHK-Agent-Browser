@@ -88,7 +88,8 @@ public final class AgentClient {
         screen=null;handler=null;
     }
     private void poll(){
-        if(!running||inFlight||screen==null||handler==null||!isEnabled())return;
+        if(!running||screen==null||handler==null||!isEnabled())return;
+        if(inFlight){ui.postDelayed(nextPoll,1200);return;}
         inFlight=true;
         io.execute(()->{
             JSONObject data=null;
@@ -109,6 +110,8 @@ public final class AgentClient {
         });
     }
     private void sendResult(String id,boolean ok,String value){
+        final String page=handler==null?"":handler.pageUrl();
+        final String title=handler==null?"":handler.pageTitle();
         io.execute(()->{
             try{
                 JSONObject obj=new JSONObject();
@@ -116,12 +119,10 @@ public final class AgentClient {
                 if(ok)obj.put("result",limit(value,11000));
                 else obj.put("error",limit(value,750));
                 request("POST","/agentbrowser/api/result",obj,true);
-                if(handler!=null){
-                    JSONObject heartbeat=new JSONObject();
-                    heartbeat.put("url",limit(handler.pageUrl(),500));
-                    heartbeat.put("title",limit(handler.pageTitle(),150));
-                    request("POST","/agentbrowser/api/heartbeat",heartbeat,true);
-                }
+                JSONObject heartbeat=new JSONObject();
+                heartbeat.put("url",limit(page,500));
+                heartbeat.put("title",limit(title,150));
+                request("POST","/agentbrowser/api/heartbeat",heartbeat,true);
             }catch(Exception ignored){}
         });
     }
