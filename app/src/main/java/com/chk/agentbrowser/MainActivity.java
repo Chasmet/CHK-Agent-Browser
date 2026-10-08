@@ -251,6 +251,13 @@ public class MainActivity extends Activity {
         super.onResume();
         if(agentClient!=null){
             AgentService.ensureRunning(this);
+            if(agentClient.isAutonomous()&&current!=null){
+                String latest=AgentService.latestBackgroundUrl();
+                String open=current.getUrl();
+                if(latest!=null&&latest.startsWith("https://")&&!latest.equals(open)){
+                    current.loadUrl(latest);
+                }
+            }
             agentClient.attach(this,new AgentClient.CommandHandler(){
                 @Override public String pageUrl(){return current==null||current.getUrl()==null?"":current.getUrl();}
                 @Override public String pageTitle(){return current==null||current.getTitle()==null?"":current.getTitle();}
