@@ -26,7 +26,7 @@ import java.util.concurrent.Executors;
 public final class AgentClient {
     public static final String BASE = "https://modeliseur-trellis-mcp.onrender.com";
     private static final String PREF = "browser_mcp_v1";
-    private static final long COMMAND_TIMEOUT_MS = 42000L;
+    private static final long COMMAND_TIMEOUT_MS = 180000L;
     private static AgentClient instance;
     private final Context app;
     private final SharedPreferences settings;
@@ -71,6 +71,13 @@ public final class AgentClient {
     }
     public boolean isEnabled() { return settings.getBoolean("enabled", false); }
     public String mcpUrl() { return settings.getString("mcp_url", ""); }
+    String deviceTokenForTransfers(){ return token(); }
+    public String lastCommandStatus(){
+        String action=settings.getString("last_command_action","");
+        String result=settings.getString("last_command_result","");
+        if(action.isEmpty())return "Aucune commande exécutée";
+        return action+" · "+(result.isEmpty()?"en cours":result);
+    }
     public String connectionStatus(){
         if(!isEnabled())return "MCP désactivé";
         if(!running)return "Service arrêté : ouvre le navigateur pour reprendre";
@@ -174,10 +181,11 @@ public final class AgentClient {
             JSONObject reply = null;
             try {
                 flushResult();
-                if(mustHeartbeat || SystemClock.elapsedRealtime()-lastHeartbeat>=15000L) {
+                if(mustHeartbeat || SystemClock.elapsedRealtime()-lastHeartbeat>=10000L) {
                     JSONObject info = new JSONObject();
                     info.put("url", limit(page, 500)); info.put("title", limit(title, 150));
                     info.put("autonomous",isAutonomous());
+                    info.put("executing_id",settings.getString("executing_id",""));
                     request("POST", "/agentbrowser/api/heartbeat", info, true);
                     lastHeartbeat=SystemClock.elapsedRealtime();
                 }
@@ -203,6 +211,8 @@ public final class AgentClient {
                         ui.postDelayed(tick,200L);return;
                     }
                     pending = command; receivedAt = SystemClock.elapsedRealtime(); presenting = false;
+                    settings.edit().putString("last_command_action",command.optString("action","commande"))
+                        .putString("last_command_result","en cours").apply();
                     ui.postDelayed(expiry, COMMAND_TIMEOUT_MS);
                     if(incoming != null && !isAutonomous()) incoming.waitingForApproval(command.optString("action","Action"));
                     deliverPending();
@@ -241,6 +251,7 @@ public final class AgentClient {
         presenting = false;
         ui.removeCallbacks(expiry);
         if(incoming != null) incoming.approvalFinished();
+        settings.edit().putString("last_command_result",ok?"réussie":"échec : "+limit(message,180)).apply();
         sendResult(id, action, ok, message);
         if(running) { ui.removeCallbacks(tick); ui.postDelayed(tick, 200L); }
     }
@@ -290,7 +301,7 @@ public final class AgentClient {
             c.setConnectTimeout(10000); c.setReadTimeout(10000);
             c.setRequestMethod(method); c.setInstanceFollowRedirects(false);
             c.setRequestProperty("Accept","application/json");
-            c.setRequestProperty("User-Agent","CHK-Agent-Browser/2.0");
+            c.setRequestProperty("User-Agent","CHK-Agent-Browser/2.1");
             if(auth) c.setRequestProperty("Authorization", "Bearer "+token());
             if(body != null) {
                 byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
