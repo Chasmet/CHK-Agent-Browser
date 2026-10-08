@@ -318,6 +318,7 @@ public class MainActivity extends Activity {
             .show();
     }
     private void runAgentCommand(String action,JSONObject args,AgentClient.ResultCallback callback){
+        if(!agentClient.isEnabled()){callback.finish(false,"MCP désactivé par le propriétaire.");return;}
         if(current==null){callback.finish(false,"Aucun onglet.");return;}
         try{
             switch(action){

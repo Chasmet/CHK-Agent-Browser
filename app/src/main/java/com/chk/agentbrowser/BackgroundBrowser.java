@@ -147,7 +147,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         catch(Exception ignored){return "";}
     }
     private void execute(String action,JSONObject args,AgentClient.ResultCallback cb) {
-        if(closed||!AgentClient.get(app).isAutonomous()){
+        if(closed||!AgentClient.get(app).isEnabled()||!AgentClient.get(app).isAutonomous()){
             cb.finish(false,"Session autonome arrêtée par le propriétaire.");return;
         }
         try {
