@@ -20,7 +20,9 @@ jobs:
       - name: SDK Android 34 (runner Ubuntu préinstallé)
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
-          sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" 'platforms;android-34' 'build-tools;34.0.0'
       - name: Installer Gradle 8.6
         uses: gradle/actions/setup-gradle@v4
         with:
