@@ -1,13 +1,13 @@
 name: CHK Agent Browser - APK Android et Releases
 on:
   push:
-    branches: [main]
+    branches: [main, agent/background-mcp-inapp-update]
   workflow_dispatch:
 permissions:
   contents: write
   id-token: write
 concurrency:
-  group: chk-agent-browser-release
+  group: chk-agent-browser-${{ github.ref_name }}
   cancel-in-progress: true
 jobs:
   build:
@@ -35,14 +35,16 @@ jobs:
         run: gradle wrapper --gradle-version 8.6
       - name: Compiler APK debug
         run: ./gradlew --no-daemon assembleDebug lintDebug
-      - name: Conserver seulement 3 jours dans Actions
+      - name: Conserver seulement 1 jour dans Actions
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: CHK-Agent-Browser-debug-${{ github.run_number }}
           path: app/build/outputs/apk/debug/*.apk
-          retention-days: 3
+          retention-days: 1
           if-no-files-found: error
       - name: Charger signature persistante via GitHub OIDC et Render existant
+        if: github.ref == 'refs/heads/main'
         run: python3 signing/prepare_ci.py
       - name: Compiler APK Release signé
         if: github.ref == 'refs/heads/main'
@@ -65,7 +67,7 @@ jobs:
         with:
           name: CHK-Agent-Browser-release-${{ github.run_number }}
           path: CHK-Agent-Browser-*.apk
-          retention-days: 7
+          retention-days: 2
       - name: Publier la nouvelle Release GitHub
         if: github.ref == 'refs/heads/main'
         env:
