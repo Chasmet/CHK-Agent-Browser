@@ -78,6 +78,7 @@ public final class AgentClient {
         if(action.isEmpty())return "Aucune commande exécutée";
         return action+" · "+(result.isEmpty()?"en cours":result);
     }
+    public String lastErrorSummary(){return lastError.isEmpty()?"aucune":lastError;}
     public String connectionStatus(){
         if(!isEnabled())return "MCP désactivé";
         if(!running)return "Service arrêté : ouvre le navigateur pour reprendre";
@@ -259,7 +260,7 @@ public final class AgentClient {
         try {
             JSONObject result = new JSONObject();
             result.put("id",id);result.put("ok",success);
-            if(success)result.put("result",limit(message,"preview".equals(action)?230000:11000));
+            if(success)result.put("result",limit(message,("preview".equals(action)||"screenshot".equals(action))?230000:11000));
             else result.put("error",limit(message,750));
             settings.edit().putString("result_outbox",result.toString())
                 .putString("last_result",result.toString()).putString("last_result_id",id)
