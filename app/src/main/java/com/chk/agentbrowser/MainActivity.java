@@ -251,6 +251,13 @@ public class MainActivity extends Activity {
         super.onResume();
         if(agentClient!=null){
             AgentService.ensureRunning(this);
+            if(agentClient.isAutonomous()&&current!=null){
+                String latest=AgentService.latestBackgroundUrl();
+                String open=current.getUrl();
+                if(latest!=null&&latest.startsWith("https://")&&!latest.equals(open)){
+                    current.loadUrl(latest);
+                }
+            }
             agentClient.attach(this,new AgentClient.CommandHandler(){
                 @Override public String pageUrl(){return current==null||current.getUrl()==null?"":current.getUrl();}
                 @Override public String pageTitle(){return current==null||current.getTitle()==null?"":current.getTitle();}
@@ -261,7 +268,10 @@ public class MainActivity extends Activity {
         }
     }
     @Override protected void onPause(){
-        if(agentClient!=null)agentClient.detach(this);
+        if(agentClient!=null) {
+            if(current!=null)AgentService.syncVisible(this,current.getUrl());
+            agentClient.detach(this);
+        }
         super.onPause();
     }
     private void confirmAgentCommand(JSONObject command,AgentClient.ResultCallback callback){
@@ -282,7 +292,16 @@ public class MainActivity extends Activity {
                 extra="Saisir dans "+args.optString("selector","")+
                     "\nTexte : "+args.optString("text","");break;
             case "scroll":extra="Faire défiler : "+args.optString("direction","");break;
+            case "preview":extra="Afficher un aperçu de la page dans ChatGPT";break;
             default:callback.finish(false,"Commande MCP inconnue.");return;
+        }
+        if(agentClient.isAutonomous()){
+            if("preview".equals(action)&&!agentClient.isPreviewAllowed()) {
+                callback.finish(false,"Active le partage d'aperçus dans les réglages.");
+                return;
+            }
+            runAgentCommand(action,parameters,callback);
+            return;
         }
         String page=current.getUrl()==null?"Aucune page":current.getUrl();
         new AlertDialog.Builder(this)
@@ -298,6 +317,9 @@ public class MainActivity extends Activity {
         if(current==null){callback.finish(false,"Aucun onglet.");return;}
         try{
             switch(action){
+                case "preview":{
+                    captureVisiblePreview(callback);return;
+                }
                 case "tabs":{
                     JSONArray list=new JSONArray();
                     for(WebView web:tabs){
@@ -370,6 +392,47 @@ public class MainActivity extends Activity {
                 default:callback.finish(false,"Action inconnue");
             }
         }catch(Exception e){callback.finish(false,"Échec de l'action : "+e.getClass().getSimpleName());}
+    }
+    private void captureVisiblePreview(AgentClient.ResultCallback callback) {
+        if(!agentClient.isPreviewAllowed()){
+            callback.finish(false,"Active le partage des captures dans Réglages.");
+            return;
+        }
+        if(current==null||current.getWidth()<=0||current.getHeight()<=0){
+            callback.finish(false,"Le navigateur n'est pas encore prêt.");return;
+        }
+        try {
+            int w=current.getWidth(),h=current.getHeight();
+            float scale=Math.min(1f,540f/w);
+            // Limit height to avoid excessive memory use or traffic on cellular networks.
+            scale=Math.min(scale,960f/h);
+            int width=Math.max(1,Math.round(w*scale)),height=Math.max(1,Math.round(h*scale));
+            android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(
+                width,height,android.graphics.Bitmap.Config.RGB_565);
+            android.graphics.Canvas canvas=new android.graphics.Canvas(bitmap);
+            canvas.drawColor(Color.WHITE);
+            canvas.scale(scale,scale);
+            current.draw(canvas);
+            byte[] bytes=null;
+            int quality=52;
+            for(int attempt=0;attempt<4;attempt++){
+                java.io.ByteArrayOutputStream stream=new java.io.ByteArrayOutputStream();
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,quality,stream);
+                bytes=stream.toByteArray();
+                if(bytes.length<=150000)break;
+                quality-=12;
+            }
+            bitmap.recycle();
+            if(bytes==null||bytes.length>150000){
+                callback.finish(false,"Capture trop volumineuse.");return;
+            }
+            JSONObject result=new JSONObject();
+            result.put("url",current.getUrl()==null?"":current.getUrl());
+            result.put("jpeg_base64",android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP));
+            callback.finish(true,result.toString());
+        }catch(Exception e){
+            callback.finish(false,"Capture impossible : "+e.getClass().getSimpleName());
+        }
     }
     private static String fromJavascript(String raw){
         if(raw==null)return "";

@@ -6,6 +6,8 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.provider.Settings;
+import android.widget.Switch;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,12 +25,48 @@ public final class SettingsActivity extends Activity {
     private TextView mcpStatus, status;
     private Button mcpConnect, mcpCopy, mcpDisable, check, install;
     private boolean askedToInstall, awaitingInstallPermission;
+    private Switch autonomousMode, previewMode;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         setContentView(R.layout.activity_settings);
         updates=new UpdateManager(this);
         agent=AgentClient.get(this);
+        autonomousMode=findViewById(R.id.autonomous_mode);
+        previewMode=findViewById(R.id.preview_mode);
+        autonomousMode.setChecked(agent.isAutonomous());
+        previewMode.setChecked(agent.isPreviewAllowed());
+        autonomousMode.setOnCheckedChangeListener((button,enabled)->{
+            if(!enabled){
+                agent.setAutonomous(false);
+                AgentService.refresh(this);
+                showMcp();
+                return;
+            }
+            new AlertDialog.Builder(this)
+                .setTitle("Autoriser le mode autonome ?")
+                .setMessage("ChatGPT pourra ouvrir des sites, lire des pages, cliquer et remplir des formulaires sans validation à chaque étape, même quand tu utilises une autre application. Cela inclut potentiellement des actions sensibles sur des comptes connectés. N'active ce mode que si tu fais confiance au plugin MCP et à ses commandes. Tu pourras le désactiver à tout moment.")
+                .setNegativeButton("Annuler",(dialog,which)->autonomousMode.setChecked(false))
+                .setPositiveButton("Activer le mode autonome",(dialog,which)->{
+                    agent.setAutonomous(true);
+                    AgentService.ensureRunning(this);
+                    AgentService.refresh(this);
+                    showMcp();
+                })
+                .setOnCancelListener(dialog->autonomousMode.setChecked(false))
+                .show();
+        });
+        previewMode.setOnCheckedChangeListener((button,enabled)->{
+            agent.setPreviewAllowed(enabled);
+            showMcp();
+        });
+        findViewById(R.id.battery_settings).setOnClickListener(v->{
+            try {
+                startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+            }catch(Exception e){
+                Toast.makeText(this,"Ouvre Paramètres Android > Applications > Batterie > CHK Agent Browser",Toast.LENGTH_LONG).show();
+            }
+        });
         mcpStatus=findViewById(R.id.mcp_status);
         mcpConnect=findViewById(R.id.mcp_connect);
         mcpCopy=findViewById(R.id.mcp_copy);
@@ -64,7 +102,7 @@ public final class SettingsActivity extends Activity {
     private void showMcp() {
         boolean enabled=agent.isEnabled(), link=!agent.mcpUrl().isEmpty();
         String message=enabled
-            ?"MCP activé. La notification Android maintient la connexion quand tu reviens dans ChatGPT."
+            ?"MCP activé. Mode autonome : "+(agent.isAutonomous()?"ACTIF":"DÉSACTIVÉ")+". Service en arrière-plan : activé quand Android le permet."
             :"MCP désactivé.";
         if(enabled && Build.VERSION.SDK_INT>=33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) {

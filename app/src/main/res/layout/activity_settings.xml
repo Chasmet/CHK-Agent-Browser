@@ -10,10 +10,30 @@
     <Button android:id="@+id/install_update" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Installer la mise à jour sur ce téléphone" android:textAllCaps="false" android:visibility="gone" />
     <TextView android:id="@+id/update_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#CAD8E9" android:paddingVertical="14dp" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Connexion MCP ChatGPT" android:textColor="#6ED2FF" android:textSize="19sp" android:paddingBottom="8dp" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Même serveur Render, sans clé API. La connexion continue grâce au service Android et sa notification, même dans ChatGPT. Pour accepter une commande, ouvre le navigateur et valide." android:textColor="#CAD8E9" android:paddingBottom="10dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Même serveur Render, sans clé API. La connexion continue grâce au service Android et sa notification, même dans ChatGPT. Active le mode autonome ci-dessous pour supprimer les confirmations répétées." android:textColor="#CAD8E9" android:paddingBottom="10dp" />
     <TextView android:id="@+id/mcp_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="MCP désactivé" android:textColor="#FFFFFF" android:paddingBottom="12dp" />
     <Button android:id="@+id/mcp_connect" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Activer / reconnecter MCP" android:textAllCaps="false" />
     <Button android:id="@+id/mcp_copy" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Copier l'adresse MCP pour ChatGPT" android:textAllCaps="false" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Autonomie et autorisations" android:textColor="#6ED2FF" android:textSize="19sp" android:paddingTop="20dp" android:paddingBottom="8dp" />
+    <Switch android:id="@+id/autonomous_mode" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Mode autonome : agir sans demander à chaque étape"
+        android:textColor="#FFFFFF" android:paddingVertical="12dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="À activer volontairement. ChatGPT pourra naviguer, cliquer et remplir des formulaires dans la WebView, y compris sur des sites connectés. Tu peux couper ce mode ici ou arrêter le MCP dans la notification. Les champs de mot de passe restent bloqués."
+        android:textColor="#CAD8E9" android:paddingBottom="12dp" />
+    <Switch android:id="@+id/preview_mode" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Autoriser les aperçus visuels de la page dans ChatGPT"
+        android:textColor="#FFFFFF" android:paddingVertical="12dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Envoie une capture JPEG uniquement à la demande du plugin MCP. Les captures peuvent contenir des données privées de pages connectées. Ce n'est pas une WebView interactive intégrée à ChatGPT."
+        android:textColor="#CAD8E9" android:paddingBottom="12dp" />
+    <Button android:id="@+id/battery_settings" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Réglages Android : batterie sans restriction"
+        android:textAllCaps="false" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Un service Android améliore la connexion écran verrouillé, sans garantir une connexion permanente. Téléphone complètement éteint = aucune connexion possible."
+        android:textColor="#CAD8E9" android:paddingVertical="10dp" />
     <Button android:id="@+id/mcp_disable" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Désactiver MCP" android:textAllCaps="false" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Une notification indique chaque demande de ChatGPT. Les commandes expirent si tu ne les valides pas rapidement. Ton adresse MCP reste privée." android:textColor="#CAD8E9" android:paddingVertical="12dp" />
     <Button android:id="@+id/clear_history" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Effacer l'historique local" android:textAllCaps="false" />
