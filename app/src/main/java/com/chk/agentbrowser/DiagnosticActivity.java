@@ -67,6 +67,14 @@ public final class DiagnosticActivity extends Activity {
     private String networkState(){
         try{
             ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+            if(Build.VERSION.SDK_INT<23){
+                android.net.NetworkInfo info=cm.getActiveNetworkInfo();
+                if(info==null||!info.isConnected())return "hors ligne";
+                if(info.getType()==ConnectivityManager.TYPE_WIFI)return "Wi-Fi";
+                if(info.getType()==ConnectivityManager.TYPE_MOBILE)return "réseau mobile";
+                if(info.getType()==ConnectivityManager.TYPE_ETHERNET)return "Ethernet";
+                return "autre réseau";
+            }
             Network network=cm.getActiveNetwork();
             if(network==null)return "hors ligne";
             NetworkCapabilities cap=cm.getNetworkCapabilities(network);
