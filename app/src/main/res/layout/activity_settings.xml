@@ -14,6 +14,7 @@
     <TextView android:id="@+id/mcp_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="MCP désactivé" android:textColor="#FFFFFF" android:paddingBottom="12dp" />
     <Button android:id="@+id/mcp_connect" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Activer / reconnecter MCP" android:textAllCaps="false" />
     <Button android:id="@+id/mcp_copy" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Copier l'adresse MCP pour ChatGPT" android:textAllCaps="false" />
+    <Button android:id="@+id/mcp_diagnostic" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Diagnostic connexion et commandes" android:textAllCaps="false" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
         android:text="Autonomie et autorisations" android:textColor="#6ED2FF" android:textSize="19sp" android:paddingTop="20dp" android:paddingBottom="8dp" />
     <Switch android:id="@+id/autonomous_mode" android:layout_width="match_parent" android:layout_height="wrap_content"
