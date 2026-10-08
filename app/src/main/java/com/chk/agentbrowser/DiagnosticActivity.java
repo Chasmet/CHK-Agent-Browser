@@ -17,7 +17,7 @@ import android.widget.Toast;
 /** Local diagnostic screen. Never displays tokens, cookies or the private MCP URL. */
 public final class DiagnosticActivity extends Activity {
     private AgentClient agent;
-    private TextView report;
+    private TextView report,logView;
     private final Handler refresh=new Handler();
     private final Runnable tick=new Runnable(){
         @Override public void run(){render();refresh.postDelayed(this,1500L);}
@@ -28,6 +28,7 @@ public final class DiagnosticActivity extends Activity {
         setContentView(R.layout.activity_diagnostic);
         agent=AgentClient.get(this);
         report=findViewById(R.id.diagnostic_report);
+        logView=findViewById(R.id.diagnostic_log);
         findViewById(R.id.diagnostic_reconnect).setOnClickListener(v->{
             AgentService.ensureRunning(this);
             agent.reconnect();
@@ -35,9 +36,15 @@ public final class DiagnosticActivity extends Activity {
             render();
         });
         findViewById(R.id.diagnostic_copy).setOnClickListener(v->{
+            String value=buildReport()+"\n\nJOURNAL TECHNIQUE\n"+AgentLog.dump(this);
             ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE))
-                .setPrimaryClip(ClipData.newPlainText("Diagnostic CHK Agent Browser",buildReport()));
+                .setPrimaryClip(ClipData.newPlainText("Diagnostic CHK Agent Browser",value));
             Toast.makeText(this,"Diagnostic copié sans jeton ni cookie",Toast.LENGTH_LONG).show();
+        });
+        findViewById(R.id.diagnostic_clear_log).setOnClickListener(v->{
+            AgentLog.clear(this);
+            render();
+            Toast.makeText(this,"Journal technique effacé",Toast.LENGTH_SHORT).show();
         });
     }
 
@@ -86,7 +93,10 @@ public final class DiagnosticActivity extends Activity {
         }catch(Exception e){return "indéterminé";}
     }
 
-    private void render(){if(report!=null)report.setText(buildReport());}
+    private void render(){
+        if(report!=null)report.setText(buildReport());
+        if(logView!=null)logView.setText(AgentLog.dump(this));
+    }
     @Override protected void onResume(){super.onResume();refresh.removeCallbacks(tick);refresh.post(tick);}
     @Override protected void onPause(){refresh.removeCallbacks(tick);super.onPause();}
 }
