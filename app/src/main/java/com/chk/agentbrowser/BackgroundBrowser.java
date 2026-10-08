@@ -64,9 +64,11 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 Uri link=request.getUrl();return link==null||!isPublicHttps(link);
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap favicon){
+                applyCookiePolicy(view,url);
                 if(view==current)loading=true;
             }
             @Override public void onPageFinished(WebView view,String url){
+                applyCookiePolicy(view,url);
                 if(view==current){
                     loading=false;
                     saveLast(url);
@@ -90,6 +92,19 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             android.view.View.MeasureSpec.makeMeasureSpec(960,android.view.View.MeasureSpec.EXACTLY));
         web.layout(0,0,540,960);
         return web;
+    }
+
+    private void applyCookiePolicy(WebView web,String url){
+        boolean allow=false;
+        try{
+            String host=Uri.parse(url==null?"":url).getHost();
+            if(host!=null){
+                host=host.toLowerCase(java.util.Locale.ROOT);
+                allow=host.equals("google.com")||host.endsWith(".google.com")
+                    ||host.endsWith(".googleusercontent.com")||host.endsWith(".gstatic.com");
+            }
+        }catch(Exception ignored){}
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web,allow);
     }
 
     private void saveLast(String url){
