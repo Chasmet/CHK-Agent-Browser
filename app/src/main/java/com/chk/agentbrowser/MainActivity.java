@@ -310,6 +310,10 @@ public class MainActivity extends Activity {
                 "\n\nVérifie l'action avant de l'autoriser. Aucun clic ou saisie n'est automatique.")
             .setNegativeButton("Refuser",(d,w)->callback.finish(false,"Action refusée sur le téléphone."))
             .setPositiveButton("Autoriser",(d,w)->runAgentCommand(action,parameters,callback))
+            .setNeutralButton("Autoriser le travail autonome",(d,w)->{
+                agentClient.setAutonomous(true);AgentService.refresh(this);
+                runAgentCommand(action,parameters,callback);
+            })
             .setOnCancelListener(d->callback.finish(false,"Action annulée sur le téléphone."))
             .show();
     }
@@ -337,7 +341,8 @@ public class MainActivity extends Activity {
                         String content=fromJavascript(raw);
                         try{
                             JSONObject out=new JSONObject();
-                            out.put("url",page==null?"":page);out.put("title",title==null?"":title);
+                            out.put("url",page==null?"":page.substring(0,Math.min(500,page.length())));
+                            out.put("title",title==null?"":title.substring(0,Math.min(150,title.length())));
                             JSONObject details=new JSONObject(content);
                             out.put("text",details.optString("text"));
                             out.put("elements",details.optJSONArray("elements"));

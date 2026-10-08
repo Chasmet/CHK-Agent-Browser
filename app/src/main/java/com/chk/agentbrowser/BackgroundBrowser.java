@@ -164,8 +164,10 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                     web.evaluateJavascript(BrowserScripts.readPage(),raw->{
                         try{
                             JSONObject page=new JSONObject();
-                            page.put("url",web.getUrl()==null?"":web.getUrl());
-                            page.put("title",web.getTitle()==null?"":web.getTitle());
+                            String url=web.getUrl()==null?"":web.getUrl();
+                            page.put("url",url.substring(0,Math.min(500,url.length())));
+                            String title=web.getTitle()==null?"":web.getTitle();
+                            page.put("title",title.substring(0,Math.min(150,title.length())));
                             JSONObject details=new JSONObject(jsResult(raw));
                             page.put("text",details.optString("text"));
                             page.put("elements",details.optJSONArray("elements"));

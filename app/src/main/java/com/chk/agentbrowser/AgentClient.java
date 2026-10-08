@@ -162,7 +162,7 @@ public final class AgentClient {
     }
     private void poll() {
         if(!running || !isEnabled()) return;
-        if(inFlight) { ui.postDelayed(tick, 1200L); return; }
+        if(inFlight) { ui.removeCallbacks(tick);ui.postDelayed(tick, 1200L); return; }
         inFlight = true;
         final int requestGeneration=generation;
         final boolean mustHeartbeat = pending != null;
@@ -204,6 +204,7 @@ public final class AgentClient {
                     if(incoming != null && !isAutonomous()) incoming.waitingForApproval(command.optString("action","Action"));
                     deliverPending();
                 }
+                ui.removeCallbacks(tick);
                 ui.postDelayed(tick, RelayPolicy.pollDelay(networkErrors,pending!=null));
             });
         });
