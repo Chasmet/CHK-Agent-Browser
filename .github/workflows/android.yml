@@ -1,7 +1,7 @@
 name: CHK Agent Browser - APK Android et Releases
 on:
   push:
-    branches: [main, agent/background-mcp-inapp-update]
+    branches: [main, agent/persistent-autopilot-preview]
   workflow_dispatch:
 permissions:
   contents: write
