@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  id-token: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,51 +39,32 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 3
           if-no-files-found: error
-      # Configurer une seule fois ces secrets dans GitHub Actions :
-      # CHK_KEYSTORE_BASE64, CHK_KEYSTORE_PASSWORD, CHK_KEY_ALIAS, CHK_KEY_PASSWORD
-      # Ils restent sur GitHub Actions et ne sont jamais embarqués dans l'APK.
-      - name: Charger la clé de signature persistante
-        env:
-          SIGNING_BASE64: ${{ secrets.CHK_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.CHK_KEYSTORE_PASSWORD }}
-          ALIAS: ${{ secrets.CHK_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.CHK_KEY_PASSWORD }}
-        run: |
-          if [ -n "$SIGNING_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
-            printf '%s' "$SIGNING_BASE64" | base64 --decode > "$RUNNER_TEMP/chk-release.jks"
-            echo "CHK_KEYSTORE_FILE=$RUNNER_TEMP/chk-release.jks" >> "$GITHUB_ENV"
-            echo "CHK_KEYSTORE_PASSWORD=$STORE_PASSWORD" >> "$GITHUB_ENV"
-            echo "CHK_KEY_ALIAS=$ALIAS" >> "$GITHUB_ENV"
-            echo "CHK_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
-            echo "HAS_SIGNING=true" >> "$GITHUB_ENV"
-          else
-            echo "HAS_SIGNING=false" >> "$GITHUB_ENV"
-            echo "APK Release impossible avant la configuration de signature stable."
-          fi
+      - name: Charger signature persistante via GitHub OIDC et Render existant
+        run: python3 signing/prepare_ci.py
       - name: Compiler APK Release signé
-        if: env.HAS_SIGNING == 'true'
+        if: github.ref == 'refs/heads/main'
         env:
           RELEASE_VERSION: 1.0.${{ github.run_number }}
           RELEASE_CODE: ${{ github.run_number }}
         run: ./gradlew --no-daemon assembleRelease
       - name: Vérifier la signature Release
-        if: env.HAS_SIGNING == 'true'
+        if: github.ref == 'refs/heads/main'
         run: |
           "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
       - name: Renommer l'APK Release
-        if: env.HAS_SIGNING == 'true'
+        if: github.ref == 'refs/heads/main'
         env:
           RELEASE_VERSION: 1.0.${{ github.run_number }}
         run: cp app/build/outputs/apk/release/app-release.apk "CHK-Agent-Browser-${RELEASE_VERSION}.apk"
       - name: Sauvegarder Release dans Artifacts
-        if: env.HAS_SIGNING == 'true'
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: CHK-Agent-Browser-release-${{ github.run_number }}
           path: CHK-Agent-Browser-*.apk
           retention-days: 7
       - name: Publier la nouvelle Release GitHub
-        if: env.HAS_SIGNING == 'true' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: 1.0.${{ github.run_number }}
