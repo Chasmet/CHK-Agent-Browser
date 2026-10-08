@@ -6,6 +6,9 @@ on:
 permissions:
   contents: write
   id-token: write
+concurrency:
+  group: chk-agent-browser-release
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
