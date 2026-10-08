@@ -12,7 +12,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 public class ApkProvider extends ContentProvider {
     private File apk(Uri uri)throws FileNotFoundException{
-        if(!"com.chk.agentbrowser.apks".equals(uri.getAuthority())||uri.getPathSegments().size()!=1)
+        if(!(getContext().getPackageName()+".apks").equals(uri.getAuthority())||uri.getPathSegments().size()!=1)
             throw new FileNotFoundException("URI invalide");
         String name=uri.getLastPathSegment();
         if(name==null||!name.matches("CHK-Agent-Browser-[a-zA-Z0-9._-]+\\.apk"))
