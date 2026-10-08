@@ -333,12 +333,14 @@ public class MainActivity extends Activity {
                 case "read_page":{
                     final WebView web=current;
                     final String page=web.getUrl(),title=web.getTitle();
-                    web.evaluateJavascript("(document.body && document.body.innerText || '').slice(0,10000)",raw->{
+                    web.evaluateJavascript(BrowserScripts.readPage(),raw->{
                         String content=fromJavascript(raw);
                         try{
                             JSONObject out=new JSONObject();
                             out.put("url",page==null?"":page);out.put("title",title==null?"":title);
-                            out.put("text",content);
+                            JSONObject details=new JSONObject(content);
+                            out.put("text",details.optString("text"));
+                            out.put("elements",details.optJSONArray("elements"));
                             callback.finish(true,out.toString());
                         }catch(Exception ex){callback.finish(false,"Lecture impossible");}
                     });return;
@@ -374,16 +376,8 @@ public class MainActivity extends Activity {
                 case "type":{
                     String selector=args.optString("selector","");
                     String content=args.optString("text","");
-                    if(content.length()>500){callback.finish(false,"Texte trop long");return;}
-                    String js="(function(){try{var el=document.querySelector("+JSONObject.quote(selector)+");"
-                        +"if(!el)return 'Champ introuvable';"
-                        +"if(!('value' in el))return 'Champ non saisissable';"
-                        +"if(['password','file','hidden'].indexOf((el.type||'').toLowerCase())>=0)"
-                        +"return 'Champ sensible bloqué';"
-                        +"el.focus();el.value="+JSONObject.quote(content)+";"
-                        +"el.dispatchEvent(new Event('input',{bubbles:true}));"
-                        +"el.dispatchEvent(new Event('change',{bubbles:true}));"
-                        +"return 'Saisie effectuée';}catch(e){return 'Erreur de saisie : '+e.message;}})()";
+                    if(content.length()>8000){callback.finish(false,"Texte trop long");return;}
+                    String js=BrowserScripts.type(JSONObject.quote(selector),JSONObject.quote(content));
                     current.evaluateJavascript(js,raw->{
                         String result=fromJavascript(raw);
                         callback.finish("Saisie effectuée".equals(result),result);

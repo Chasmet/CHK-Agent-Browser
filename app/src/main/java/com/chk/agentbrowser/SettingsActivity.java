@@ -11,6 +11,9 @@ import android.widget.Switch;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.os.Handler;
+import android.net.Uri;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -26,6 +29,10 @@ public final class SettingsActivity extends Activity {
     private Button mcpConnect, mcpCopy, mcpDisable, check, install;
     private boolean askedToInstall, awaitingInstallPermission;
     private Switch autonomousMode, previewMode;
+    private final Handler refresh=new Handler();
+    private final Runnable statusTick=new Runnable(){
+        @Override public void run(){showMcp();refresh.postDelayed(this,2000L);}
+    };
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -62,7 +69,12 @@ public final class SettingsActivity extends Activity {
         });
         findViewById(R.id.battery_settings).setOnClickListener(v->{
             try {
-                startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                PowerManager power=(PowerManager)getSystemService(POWER_SERVICE);
+                if(Build.VERSION.SDK_INT>=23&&!power.isIgnoringBatteryOptimizations(getPackageName()))
+                    startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:"+getPackageName())));
+                else startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:"+getPackageName())));
             }catch(Exception e){
                 Toast.makeText(this,"Ouvre Paramètres Android > Applications > Batterie > CHK Agent Browser",Toast.LENGTH_LONG).show();
             }
@@ -99,6 +111,11 @@ public final class SettingsActivity extends Activity {
         status.setText("GitHub Releases publiques : mises à jour directement sur ce téléphone.");
         showMcp();showInstall();
     }
+    @Override protected void onResume(){
+        super.onResume();AgentService.ensureRunning(this);
+        refresh.removeCallbacks(statusTick);refresh.post(statusTick);
+    }
+    @Override protected void onPause(){refresh.removeCallbacks(statusTick);super.onPause();}
     private void showMcp() {
         boolean enabled=agent.isEnabled(), link=!agent.mcpUrl().isEmpty();
         String message=enabled
@@ -107,6 +124,14 @@ public final class SettingsActivity extends Activity {
         if(enabled && Build.VERSION.SDK_INT>=33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) {
             message += "\nAutorise les notifications pour voir les demandes de confirmation.";
+        }
+        if(enabled){
+            message+="\n"+agent.connectionStatus();
+            if(Build.VERSION.SDK_INT>=23){
+                PowerManager power=(PowerManager)getSystemService(POWER_SERVICE);
+                message+="\nBatterie : "+(power.isIgnoringBatteryOptimizations(getPackageName())
+                    ?"connexion protégée de la veille Android":"restriction active — utiliser le bouton Batterie");
+            }
         }
         mcpStatus.setText(message);
         mcpCopy.setEnabled(enabled&&link);

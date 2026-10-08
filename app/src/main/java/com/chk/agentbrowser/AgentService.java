@@ -11,6 +11,11 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
+import android.os.Handler;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkRequest;
 import android.os.SystemClock;
 
 /**
@@ -28,6 +33,23 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     private NotificationManager notifications;
     private BackgroundBrowser background;
     private boolean deliberateStop=false;
+    private PowerManager.WakeLock sessionLock;
+    private ConnectivityManager connectivity;
+    private ConnectivityManager.NetworkCallback networkCallback;
+    private final Handler main=new Handler(android.os.Looper.getMainLooper());
+    private final Runnable maintenance=new Runnable(){
+        @Override public void run(){
+            if(!AgentClient.get(AgentService.this).isEnabled())return;
+            maintainSessionLock();refreshNotification();
+            main.postDelayed(this,60000L);
+        }
+    };
+    private void maintainSessionLock(){
+        if(sessionLock==null)return;
+        if(sessionLock.isHeld())sessionLock.release();
+        // Bounded and renewed only while the user-enabled foreground session runs.
+        if(AgentClient.get(this).isEnabled())sessionLock.acquire(120000L);
+    }
 
     public static void ensureRunning(Context context) {
         if(!AgentClient.get(context).isEnabled())return;
@@ -55,6 +77,16 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     @Override public void onCreate() {
         super.onCreate();
         instance=this;
+        PowerManager power=(PowerManager)getSystemService(POWER_SERVICE);
+        sessionLock=power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"CHKAgentBrowser:McpSession");
+        sessionLock.setReferenceCounted(false);
+        connectivity=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+        networkCallback=new ConnectivityManager.NetworkCallback(){
+            @Override public void onAvailable(Network network){AgentClient.get(AgentService.this).reconnect();}
+        };
+        try{connectivity.registerNetworkCallback(new NetworkRequest.Builder()
+            .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),networkCallback);}
+        catch(RuntimeException ignored){networkCallback=null;}
         notifications=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         if(Build.VERSION.SDK_INT>=26){
             NotificationChannel running=new NotificationChannel(CHANNEL_RUNNING,
@@ -83,9 +115,9 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             stopSelf();return START_NOT_STICKY;
         }
         try {
-            if(Build.VERSION.SDK_INT>=29)
+            if(Build.VERSION.SDK_INT>=34)
                 startForeground(ID_RUNNING,createOngoingNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
             else startForeground(ID_RUNNING,createOngoingNotification());
         }catch(RuntimeException failure){
             stopSelf();
@@ -101,6 +133,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
                 background=null;
             }
         }
+        main.removeCallbacks(maintenance);main.post(maintenance);
         AgentClient.get(this).startServiceMode(this);
         return START_STICKY;
     }
@@ -123,7 +156,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         return builder(CHANNEL_RUNNING)
             .setSmallIcon(R.drawable.ic_browser)
             .setContentTitle("CHK Agent Browser — MCP actif")
-            .setContentText(auto?"Mode autonome actif · toucher pour ouvrir":"Contrôle avec confirmation · toucher pour ouvrir")
+            .setContentText((auto?"Autonome · ":"Confirmation · ")+AgentClient.get(this).connectionStatus())
             .setContentIntent(openBrowser(31))
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
@@ -175,6 +208,11 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     }
     @Override public IBinder onBind(Intent intent){return null;}
     @Override public void onDestroy() {
+        main.removeCallbacksAndMessages(null);
+        if(sessionLock!=null&&sessionLock.isHeld())sessionLock.release();
+        if(connectivity!=null&&networkCallback!=null){
+            try{connectivity.unregisterNetworkCallback(networkCallback);}catch(RuntimeException ignored){}
+        }
         AgentClient.get(this).stopServiceMode();
         if(background!=null){
             AgentClient.get(this).removeBackgroundHandler(background);

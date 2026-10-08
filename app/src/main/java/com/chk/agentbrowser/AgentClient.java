@@ -20,7 +20,7 @@ import java.util.concurrent.Executors;
 
 /**
  * The MCP poller belongs to AgentService, never to an Activity.
- * WebView commands always run on a visible Activity after owner confirmation.
+ * Autonomous consent is persisted; commands run on the service or visible browser.
  * The local installation token and user's MCP URL are preserved during APK updates.
  */
 public final class AgentClient {
@@ -42,6 +42,9 @@ public final class AgentClient {
     private long receivedAt;
     private boolean presenting;
     private int networkErrors;
+    private int generation;
+    private volatile long lastContact;
+    private volatile String lastError = "";
     private final Runnable tick = this::poll;
     private final Runnable expiry = () -> finishPending(false, "Commande expirée. Vérifie la connexion et le mode autonome.");
 
@@ -67,6 +70,20 @@ public final class AgentClient {
     }
     public boolean isEnabled() { return settings.getBoolean("enabled", false); }
     public String mcpUrl() { return settings.getString("mcp_url", ""); }
+    public String connectionStatus(){
+        if(!isEnabled())return "MCP désactivé";
+        if(!running)return "Service arrêté : ouvre le navigateur pour reprendre";
+        if(!lastError.isEmpty())return "Reconnexion automatique · " + lastError;
+        if(lastContact==0)return "Connexion au relais en cours…";
+        return "Relais connecté · dernier contact il y a " +
+            ((SystemClock.elapsedRealtime()-lastContact)/1000) + " s";
+    }
+    public void reconnect(){
+        ui.post(()->{
+            if(!running||!isEnabled())return;
+            ui.removeCallbacks(tick);ui.post(tick);
+        });
+    }
     public boolean isAutonomous(){return settings.getBoolean("autonomous_mode",false);}
     public void setAutonomous(boolean allow){
         settings.edit().putBoolean("autonomous_mode",allow).apply();
@@ -112,7 +129,7 @@ public final class AgentClient {
     }
     public void disable() {
         settings.edit().putBoolean("enabled", false).apply();
-        running = false;
+        running = false;generation++;
         ui.removeCallbacks(tick);
         finishPending(false, "MCP désactivé par le propriétaire.");
     }
@@ -126,7 +143,7 @@ public final class AgentClient {
         deliverPending();
     }
     public void stopServiceMode() {
-        running = false;
+        running = false;generation++;
         ui.removeCallbacks(tick);
         incoming = null;
         finishPending(false, "Service MCP arrêté.");
@@ -139,7 +156,7 @@ public final class AgentClient {
     public void detach(Activity activity) {
         if(screen == activity) {
             screen = null; handler = null;
-            presenting = false;
+            // An executing command retains ownership until its callback/timeout.
             deliverPending();
         }
     }
@@ -147,6 +164,7 @@ public final class AgentClient {
         if(!running || !isEnabled()) return;
         if(inFlight) { ui.postDelayed(tick, 1200L); return; }
         inFlight = true;
+        final int requestGeneration=generation;
         final boolean mustHeartbeat = pending != null;
         final CommandHandler currentHandler=activeHandler();
         final String page=currentHandler==null?"":currentHandler.pageUrl();
@@ -154,27 +172,39 @@ public final class AgentClient {
         io.execute(() -> {
             JSONObject reply = null;
             try {
+                flushResult();
                 if(mustHeartbeat) {
                     JSONObject info = new JSONObject();
                     info.put("url", limit(page, 500)); info.put("title", limit(title, 150));
+                    info.put("autonomous",isAutonomous());
                     request("POST", "/agentbrowser/api/heartbeat", info, true);
                 } else {
                     reply = request("GET", "/agentbrowser/api/poll", null, true);
                 }
-                networkErrors = 0;
-            } catch(Exception ignored) { networkErrors++; }
+                networkErrors = 0;lastError="";
+                lastContact=SystemClock.elapsedRealtime();
+            } catch(Exception failure) {
+                networkErrors++;lastError=failure.getMessage()==null?"Réseau indisponible":failure.getMessage();
+            }
             final JSONObject result = reply;
             ui.post(() -> {
                 inFlight = false;
-                if(!running) return;
+                if(!running||requestGeneration!=generation) {
+                    if(running){ui.removeCallbacks(tick);ui.post(tick);}return;
+                }
                 JSONObject command = result == null ? null : result.optJSONObject("command");
                 if(command != null && pending == null && command.has("id")) {
+                    String id=command.optString("id");
+                    if(id.equals(settings.getString("last_result_id",""))) {
+                        settings.edit().putString("result_outbox",settings.getString("last_result","" )).commit();
+                        ui.postDelayed(tick,200L);return;
+                    }
                     pending = command; receivedAt = SystemClock.elapsedRealtime(); presenting = false;
                     ui.postDelayed(expiry, COMMAND_TIMEOUT_MS);
                     if(incoming != null && !isAutonomous()) incoming.waitingForApproval(command.optString("action","Action"));
                     deliverPending();
                 }
-                ui.postDelayed(tick, networkErrors > 3 ? 7500L : (pending == null ? 3000L : 10000L));
+                ui.postDelayed(tick, RelayPolicy.pollDelay(networkErrors,pending!=null));
             });
         });
     }
@@ -188,6 +218,13 @@ public final class AgentClient {
         presenting = true;
         final String originalId = pending.optString("id", "");
         final JSONObject command = pending;
+        if(originalId.equals(settings.getString("executing_id",""))) {
+            finishPending(false,"Exécution interrompue : résultat inconnu. Vérifie la page avant une nouvelle action.");
+            return;
+        }
+        if(!settings.edit().putString("executing_id",originalId).commit()) {
+            finishPending(false,"Impossible de mémoriser la commande : aucune action exécutée.");return;
+        }
         receiver.onCommand(command, (approved, text) -> ui.post(() -> {
             if(pending != null && originalId.equals(pending.optString("id"))) finishPending(approved, text);
         }));
@@ -204,15 +241,28 @@ public final class AgentClient {
         if(running) { ui.removeCallbacks(tick); ui.postDelayed(tick, 200L); }
     }
     private void sendResult(String id, String action, boolean success, String message) {
-        io.execute(() -> {
-            try {
-                JSONObject result = new JSONObject();
-                result.put("id", id); result.put("ok", success);
-                if(success) result.put("result", limit(message, "preview".equals(action)?230000:11000));
-                else result.put("error", limit(message, 750));
-                request("POST", "/agentbrowser/api/result", result, true);
-            } catch(Exception ignored) {}
-        });
+        try {
+            JSONObject result = new JSONObject();
+            result.put("id",id);result.put("ok",success);
+            if(success)result.put("result",limit(message,"preview".equals(action)?230000:11000));
+            else result.put("error",limit(message,750));
+            settings.edit().putString("result_outbox",result.toString())
+                .putString("last_result",result.toString()).putString("last_result_id",id)
+                .remove("executing_id").commit();
+            io.execute(()->{try{flushResult();}catch(Exception ignored){
+                lastError="Résultat en attente d'envoi : reconnexion automatique";
+            }});
+        }catch(Exception ignored){lastError="Impossible de préparer le résultat";}
+    }
+    private void flushResult() throws Exception {
+        String saved=settings.getString("result_outbox","");
+        if(saved.isEmpty())return;
+        request("POST","/agentbrowser/api/result",new JSONObject(saved),true);
+        // Never discard a newer result written by the UI during this request.
+        synchronized(settings) {
+            if(saved.equals(settings.getString("result_outbox","")))
+                settings.edit().remove("result_outbox").commit();
+        }
     }
     private static String limit(String text, int max) {
         if(text == null) return "";

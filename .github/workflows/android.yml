@@ -1,7 +1,7 @@
 name: CHK Agent Browser - APK Android et Releases
 on:
   push:
-    branches: [main, agent/persistent-autopilot-preview]
+    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience]
   workflow_dispatch:
 permissions:
   contents: write
@@ -33,6 +33,8 @@ jobs:
           gradle-version: '8.6'
       - name: Générer le wrapper Gradle
         run: gradle wrapper --gradle-version 8.6
+      - name: Vérifier les scripts navigateur et la reconnexion
+        run: bash validation/check.sh
       - name: Compiler APK debug
         run: ./gradlew --no-daemon assembleDebug lintDebug
       - name: Conserver seulement 1 jour dans Actions

@@ -29,13 +29,13 @@
         android:text="Envoie une capture JPEG uniquement à la demande du plugin MCP. Les captures peuvent contenir des données privées de pages connectées. Ce n'est pas une WebView interactive intégrée à ChatGPT."
         android:textColor="#CAD8E9" android:paddingBottom="12dp" />
     <Button android:id="@+id/battery_settings" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="Réglages Android : batterie sans restriction"
+        android:text="Protéger la connexion écran éteint"
         android:textAllCaps="false" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="Un service Android améliore la connexion écran verrouillé, sans garantir une connexion permanente. Téléphone complètement éteint = aucune connexion possible."
+        android:text="Le service maintient la session écran éteint et se reconnecte au retour du réseau. Autorise la protection Batterie ci-dessus. Sur Honor/Huawei, autorise aussi le lancement et l’exécution en arrière-plan dans les réglages système. Ce mode utilise davantage de batterie. Téléphone complètement éteint : reprise après redémarrage, aucune connexion pendant l’arrêt."
         android:textColor="#CAD8E9" android:paddingVertical="10dp" />
     <Button android:id="@+id/mcp_disable" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Désactiver MCP" android:textAllCaps="false" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Une notification indique chaque demande de ChatGPT. Les commandes expirent si tu ne les valides pas rapidement. Ton adresse MCP reste privée." android:textColor="#CAD8E9" android:paddingVertical="12dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Le mode autonome mémorise ton accord pour tous les travaux du connecteur, après redémarrage et mise à jour. En mode manuel, chaque commande demande une validation. Ton adresse MCP reste privée." android:textColor="#CAD8E9" android:paddingVertical="12dp" />
     <Button android:id="@+id/clear_history" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Effacer l'historique local" android:textAllCaps="false" />
 </LinearLayout>
 </ScrollView>

@@ -147,6 +147,9 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         catch(Exception ignored){return "";}
     }
     private void execute(String action,JSONObject args,AgentClient.ResultCallback cb) {
+        if(closed||!AgentClient.get(app).isAutonomous()){
+            cb.finish(false,"Session autonome arrêtée par le propriétaire.");return;
+        }
         try {
             switch(action) {
                 case "tabs":{
@@ -158,12 +161,14 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                     cb.finish(true,tabs.toString());return;
                 }
                 case "read_page":{
-                    web.evaluateJavascript("(document.body && document.body.innerText || '').slice(0,10000)",raw->{
+                    web.evaluateJavascript(BrowserScripts.readPage(),raw->{
                         try{
                             JSONObject page=new JSONObject();
                             page.put("url",web.getUrl()==null?"":web.getUrl());
                             page.put("title",web.getTitle()==null?"":web.getTitle());
-                            page.put("text",jsResult(raw));
+                            JSONObject details=new JSONObject(jsResult(raw));
+                            page.put("text",details.optString("text"));
+                            page.put("elements",details.optJSONArray("elements"));
                             cb.finish(true,page.toString());
                         }catch(Exception ignored){cb.finish(false,"Lecture de page impossible.");}
                     });return;
@@ -188,18 +193,10 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 case "type":{
                     String selector=args.optString("selector","");
                     String value=args.optString("text","");
-                    if(selector.isEmpty()||selector.length()>=350||value.length()>500) {
+                    if(selector.isEmpty()||selector.length()>=350||value.length()>8000) {
                         cb.finish(false,"Champ ou texte invalide.");return;
                     }
-                    String javascript="(function(){try{var el=document.querySelector("+JSONObject.quote(selector)+");"
-                        +"if(!el)return 'Champ introuvable';"
-                        +"if(!('value' in el))return 'Champ non saisissable';"
-                        +"if(['password','file','hidden'].indexOf((el.type||'').toLowerCase())>=0)"
-                        +"return 'Champ sensible bloqué';"
-                        +"el.focus();el.value="+JSONObject.quote(value)+";"
-                        +"el.dispatchEvent(new Event('input',{bubbles:true}));"
-                        +"el.dispatchEvent(new Event('change',{bubbles:true}));"
-                        +"return 'Saisie effectuée';}catch(e){return 'Erreur : '+e.message;}})()";
+                    String javascript=BrowserScripts.type(JSONObject.quote(selector),JSONObject.quote(value));
                     web.evaluateJavascript(javascript,raw->{
                         String text=jsResult(raw);
                         cb.finish("Saisie effectuée".equals(text),text);
