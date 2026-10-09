@@ -68,7 +68,7 @@ public final class VideoEditorActivity extends Activity {
         HorizontalScrollView scroll=new HorizontalScrollView(this);
         scroll.setFillViewport(false);
         controls.addView(scroll,new LinearLayout.LayoutParams(-1,MobileUi.dp(this,186)));
-        timeline=MobileUi.column(this);scroll.addView(timeline);
+        timeline=new LinearLayout(this);timeline.setOrientation(LinearLayout.HORIZONTAL);scroll.addView(timeline);
         TextView destination=button("Nom du fichier final");
         destination.setOnClickListener(v->editOutput());
         TextView save=button("Sauvegarder le montage");
@@ -114,15 +114,17 @@ public final class VideoEditorActivity extends Activity {
             JSONObject c=scenes.optJSONObject(i);if(c==null)continue;
             long duration=c.optLong("duration_ms",10000);ms+=duration;
             final int at=i;
-            LinearLayout line=new LinearLayout(this);line.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout line=MobileUi.column(this);line.setGravity(Gravity.CENTER_VERTICAL);
             TextView name=MobileUi.action(this,(i+1)+" · "+basename(c.optString("path"))+
                 "\n"+String.format(Locale.ROOT,"%.1fs",duration/1000.0)+" · "+
                 c.optString("filter","aucun"));
             name.setMaxLines(2);
-            line.addView(name,new LinearLayout.LayoutParams(MobileUi.dp(this,180),MobileUi.dp(this,64)));
+            line.addView(name,new LinearLayout.LayoutParams(MobileUi.dp(this,185),MobileUi.dp(this,70)));
             name.setOnClickListener(v->showClipMenu(at));
-            TextView up=small("←");up.setOnClickListener(v->moveClip(at,-1));line.addView(up);
-            TextView down=small("→");down.setOnClickListener(v->moveClip(at,1));line.addView(down);
+            LinearLayout movements=new LinearLayout(this);
+            TextView up=small("←");up.setOnClickListener(v->moveClip(at,-1));movements.addView(up);
+            TextView down=small("→");down.setOnClickListener(v->moveClip(at,1));movements.addView(down);
+            line.addView(movements);
             timeline.addView(line);
         }
         summary.setText("Projet : "+project.optString("name")+" · "+scenes.length()+
