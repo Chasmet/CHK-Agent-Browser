@@ -11,6 +11,9 @@
     <application android:label="CHK Agent Browser" android:icon="@drawable/ic_browser"
         android:theme="@style/AppTheme" android:usesCleartextTraffic="false"
         android:allowBackup="true" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules">
+        <service android:name=".VideoExportService" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-initiated local video composition and MP4 export with cancellable progress" />
+        </service>
         <service android:name=".AgentService" android:exported="false"
             android:stopWithTask="false" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

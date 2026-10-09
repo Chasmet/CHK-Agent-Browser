@@ -1,258 +1,124 @@
 package com.chk.agentbrowser;
 
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.Intent;
+import android.app.*;
+import android.content.*;
+import android.database.Cursor;
 import android.graphics.Bitmap;
-import android.media.MediaMetadataRetriever;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.view.Gravity;
+import android.os.*;
+import android.provider.OpenableColumns;
+import android.view.*;
 import android.widget.*;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import java.util.Locale;
-import java.util.ArrayList;
+import androidx.media3.common.Player;
+import androidx.media3.transformer.CompositionPlayer;
+import androidx.media3.transformer.Composition;
+import org.json.*;
+import java.util.*;
 
-/** Mobile-first timeline editor with native preview and offline Media3 export. */
+/** Thumb-friendly studio: live composition preview, tracks, real edits and local MP4 export. */
+@androidx.annotation.OptIn(markerClass={androidx.media3.common.util.UnstableApi.class,androidx.media3.common.util.ExperimentalApi.class})
 public final class VideoEditorActivity extends Activity {
     private final VideoEditorEngine engine=VideoEditorEngine.get();
-    private final Handler handler=new Handler(Looper.getMainLooper());
-    private LinearLayout timeline,controls;
-    private TextView summary,renderStatus;
-    private VideoView preview;
+    private final Handler ui=new Handler(Looper.getMainLooper());
+    private final ArrayDeque<String> undo=new ArrayDeque<>(),redo=new ArrayDeque<>();
     private JSONObject project;
-    private boolean alive;
+    private LinearLayout timeline,audioTrack,tools;
+    private TextView title,clock,status,play,format;
+    private SeekBar seek;
+    private SurfaceView surface;
+    private CompositionPlayer player;
+    private boolean alive,scrubbing,saving;
+    private int selected,previewGeneration,revision;
+    private String importKind="video";
     private final Runnable ticker=new Runnable(){public void run(){
         if(!alive)return;
-        JSONObject s=engine.status();
-        renderStatus.setText("Export : "+s.optString("state")+" · "+s.optInt("progress_percent")+" % "+
-            s.optString("error",""));
-        handler.postDelayed(this,1300);
+        if(player!=null&&!scrubbing){long pos=player.getCurrentPosition();seek.setProgress((int)pos);clock.setText(time(pos)+" / "+time(total()));play.setText(player.isPlaying()?"Ⅱ":"▶");}
+        JSONObject s=engine.status();String state=s.optString("state");
+        status.setText("running".equals(state)?"Export MP4 · "+s.optInt("progress_percent")+" %":"preparing".equals(state)?"Préparation du rendu…":"completed".equals(state)?"Export terminé · toucher pour lire / partager":"failed".equals(state)?"Export impossible : "+s.optString("error"):"Montage local · sauvegarde automatique");
+        ui.postDelayed(this,350);
     }};
-    @Override public void onCreate(Bundle state){
-        super.onCreate(state);
-        getWindow().setStatusBarColor(0xff0d1423);
-        getWindow().setNavigationBarColor(0xff0d1423);
-        LinearLayout root=MobileUi.column(this);
-        root.setBackgroundColor(0xff0d1423);
-        setContentView(root);
-        TextView title=MobileUi.text(this,"🎬 Studio vidéo CHK",22,MobileUi.TEXT);
-        root.addView(title);
-        TextView hint=MobileUi.text(this,"Timeline · filtres · découpes · audio original · export MP4 local",13,MobileUi.MUTED);
-        root.addView(hint);
-        ScrollView sc=new ScrollView(this);
-        root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));
-        controls=MobileUi.column(this);
-        sc.addView(controls);
-        preview=new VideoView(this);
-        LinearLayout.LayoutParams pv=new LinearLayout.LayoutParams(-1,MobileUi.dp(this,270));
-        pv.setMargins(MobileUi.dp(this,12),0,MobileUi.dp(this,12),MobileUi.dp(this,6));
-        controls.addView(preview,pv);
-        preview.setBackgroundColor(0xff000000);
-        preview.setOnPreparedListener(mp->{mp.setLooping(true);preview.start();});
-        TextView preset=button("Charger automatiquement Alpha Omega (6 Grok + 6 WAV)");
-        preset.setOnClickListener(v->{
-            engine.command(this,"video_editor_preset_alpha_omega",new JSONObject(),(ok,res)->
-                runOnUiThread(()->{
-                    if(ok){readProject();toast("Projet Alpha Omega chargé");}
-                    else new AlertDialog.Builder(this).setTitle("Projet impossible").setMessage(res).setPositiveButton("OK",null).show();
-                }));
-        });
-        TextView addVideo=button("＋ Ajouter une vidéo depuis Fichiers");
-        addVideo.setOnClickListener(v->chooseFile("video"));
-        TextView addAudio=button("＋ Ajouter un WAV / MP3 depuis Fichiers");
-        addAudio.setOnClickListener(v->chooseFile("audio"));
-        summary=MobileUi.text(this,"Chargement…",14,MobileUi.MUTED);controls.addView(summary);
-        HorizontalScrollView scroll=new HorizontalScrollView(this);
-        scroll.setFillViewport(false);
-        controls.addView(scroll,new LinearLayout.LayoutParams(-1,MobileUi.dp(this,186)));
-        timeline=new LinearLayout(this);timeline.setOrientation(LinearLayout.HORIZONTAL);scroll.addView(timeline);
-        TextView destination=button("Nom du fichier final");
-        destination.setOnClickListener(v->editOutput());
-        TextView save=button("Sauvegarder le montage");
-        save.setOnClickListener(v->saveProject());
-        TextView export=button("Exporter MP4 avec les effets et l'audio original");
-        export.setOnClickListener(v->new AlertDialog.Builder(this)
-            .setTitle("Exporter le montage")
-            .setMessage("Création locale du MP4. Le rendu prend plusieurs minutes et consomme de la batterie. Garder le téléphone branché.")
-            .setNegativeButton("Annuler",null)
-            .setPositiveButton("Exporter",(d,w)->engine.command(this,"video_editor_export",new JSONObject(),(ok,result)->
-                runOnUiThread(()->toast(ok?"Export lancé":result)))).show());
-        TextView cancel=button("Interrompre l'export");
-        cancel.setOnClickListener(v->engine.command(this,"video_editor_cancel",new JSONObject(),(ok,result)->
-                runOnUiThread(()->toast("Export interrompu"))));
-        renderStatus=MobileUi.text(this,"",14,MobileUi.MUTED);controls.addView(renderStatus);
-        TextView close=button("Retour au navigateur");
-        close.setOnClickListener(v->finish());
-        alive=true;
-        readProject();
-        handler.post(ticker);
+    @Override public void onCreate(Bundle state){super.onCreate(state);alive=true;
+        getWindow().setStatusBarColor(0xff111111);getWindow().setNavigationBarColor(0xff111111);
+        LinearLayout root=MobileUi.column(this);root.setBackgroundColor(0xff111111);setContentView(root);
+        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);root.addView(header,new LinearLayout.LayoutParams(-1,dp(56)));
+        TextView close=chip("×");header.addView(close);close.setOnClickListener(v->finish());
+        title=MobileUi.text(this,"Studio",16,MobileUi.TEXT);title.setMaxLines(1);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));title.setOnClickListener(v->projectMenu());
+        TextView export=chip("Exporter");export.setTextColor(0xff061a18);export.setBackground(MobileUi.bg(this,0xff21d4c6));header.addView(export);export.setOnClickListener(v->export());
+        FrameLayout canvas=new FrameLayout(this);canvas.setBackgroundColor(0xff000000);root.addView(canvas,new LinearLayout.LayoutParams(-1,0,1));surface=new SurfaceView(this);canvas.addView(surface,new FrameLayout.LayoutParams(-1,-1));
+        TextView empty=MobileUi.text(this,"Ajoute une vidéo pour commencer",15,MobileUi.MUTED);empty.setGravity(Gravity.CENTER);empty.setTag("empty");canvas.addView(empty,new FrameLayout.LayoutParams(-1,-1));
+        player=new CompositionPlayer.Builder(this).build();player.setVideoSurfaceView(surface);
+        player.addListener(new Player.Listener(){@Override public void onPlayerError(androidx.media3.common.PlaybackException error){toast("Aperçu indisponible : "+error.getErrorCodeName());}});
+        LinearLayout playback=new LinearLayout(this);playback.setGravity(Gravity.CENTER_VERTICAL);root.addView(playback);
+        clock=MobileUi.text(this,"00:00 / 00:00",12,MobileUi.MUTED);playback.addView(clock,new LinearLayout.LayoutParams(0,-2,1));
+        play=chip("▶");playback.addView(play);play.setOnClickListener(v->{if(player.isPlaying())player.pause();else{if(player.getPlaybackState()==Player.STATE_ENDED)player.seekTo(0);player.play();}});
+        TextView un=chip("↶");un.setContentDescription("Annuler la dernière modification");playback.addView(un);un.setOnClickListener(v->history(false));
+        TextView re=chip("↷");re.setContentDescription("Rétablir la modification");playback.addView(re);re.setOnClickListener(v->history(true));
+        seek=new SeekBar(this);root.addView(seek,new LinearLayout.LayoutParams(-1,dp(36)));seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar b,int value,boolean user){if(user){player.seekTo(value);clock.setText(time(value)+" / "+time(total()));}}public void onStartTrackingTouch(SeekBar b){scrubbing=true;player.pause();}public void onStopTrackingTouch(SeekBar b){scrubbing=false;}});
+        HorizontalScrollView tracks=new HorizontalScrollView(this);root.addView(tracks,new LinearLayout.LayoutParams(-1,dp(148)));LinearLayout lanes=MobileUi.column(this);tracks.addView(lanes);timeline=new LinearLayout(this);audioTrack=new LinearLayout(this);lanes.addView(timeline);lanes.addView(audioTrack);
+        LinearLayout row=new LinearLayout(this);root.addView(row);
+        TextView add=chip("＋ Vidéo");row.addView(add,new LinearLayout.LayoutParams(0,dp(48),1));add.setOnClickListener(v->addMenu("video"));
+        TextView sound=chip("♫ Audio");row.addView(sound,new LinearLayout.LayoutParams(0,dp(48),1));sound.setOnClickListener(v->addMenu("audio"));
+        format=chip("Format");row.addView(format,new LinearLayout.LayoutParams(0,dp(48),1));format.setOnClickListener(v->ratioMenu());
+        HorizontalScrollView strip=new HorizontalScrollView(this);root.addView(strip,new LinearLayout.LayoutParams(-1,dp(70)));tools=new LinearLayout(this);strip.addView(tools);
+        tool("✂","Diviser",()->split());tool("↔","Découper",()->trim(false,selected));tool("◐","Filtres",()->filter());tool("Aa","Texte",()->caption());tool("◷","Vitesse",()->speed());tool("♫","Son",()->mute());tool("↻","Rotation",()->rotation());tool("⇄","Déplacer",()->move());tool("▣","Dupliquer",()->duplicate());tool("×","Supprimer",()->delete(false,selected));
+        status=MobileUi.text(this,"Chargement…",12,MobileUi.MUTED);status.setMaxLines(2);root.addView(status,new LinearLayout.LayoutParams(-1,dp(48)));status.setOnClickListener(v->outputMenu());
+        engine.command(this,"video_editor_project_read",new JSONObject(),(ok,res)->runOnUiThread(()->{try{if(ok){project=new JSONObject(res);revision=project.optInt("revision",0);draw();preview();String launch=getIntent().getStringExtra("add_path");if(launch!=null)addFile("video",launch);}else toast(res);}catch(Exception e){toast(e.getMessage());}}));ui.post(ticker);
     }
-    private TextView button(String label){
-        TextView item=MobileUi.action(this,label);
-        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
-        p.setMargins(MobileUi.dp(this,12),MobileUi.dp(this,4),MobileUi.dp(this,12),MobileUi.dp(this,4));
-        controls.addView(item,p);
-        return item;
-    }
-    private void toast(String value){Toast.makeText(this,value,Toast.LENGTH_LONG).show();}
-    private void readProject(){
-        engine.command(this,"video_editor_project_read",new JSONObject(),(ok,result)->runOnUiThread(()->{
-            try{if(ok){project=new JSONObject(result);drawTimeline();}}
-            catch(Exception ex){toast(ex.getMessage());}
-        }));
-    }
-    private JSONArray clips(){return project.optJSONArray("clips")==null?new JSONArray():project.optJSONArray("clips");}
-    private JSONArray audio(){return project.optJSONArray("audio")==null?new JSONArray():project.optJSONArray("audio");}
-    private void drawTimeline(){
-        if(project==null||timeline==null)return;
-        timeline.removeAllViews();
-        long ms=0;JSONArray scenes=clips();
-        for(int i=0;i<scenes.length();i++){
-            JSONObject c=scenes.optJSONObject(i);if(c==null)continue;
-            long duration=c.optLong("duration_ms",10000);ms+=duration;
-            final int at=i;
-            LinearLayout line=MobileUi.column(this);line.setGravity(Gravity.CENTER_VERTICAL);
-            TextView name=MobileUi.action(this,(i+1)+" · "+basename(c.optString("path"))+
-                "\n"+String.format(Locale.ROOT,"%.1fs",duration/1000.0)+" · "+
-                c.optString("filter","aucun"));
-            name.setMaxLines(2);
-            line.addView(name,new LinearLayout.LayoutParams(MobileUi.dp(this,185),MobileUi.dp(this,70)));
-            name.setOnClickListener(v->showClipMenu(at));
-            LinearLayout movements=new LinearLayout(this);
-            TextView up=small("←");up.setOnClickListener(v->moveClip(at,-1));movements.addView(up);
-            TextView down=small("→");down.setOnClickListener(v->moveClip(at,1));movements.addView(down);
-            line.addView(movements);
-            timeline.addView(line);
+    private int dp(int n){return MobileUi.dp(this,n);}
+    private TextView chip(String text){TextView v=MobileUi.text(this,text,15,MobileUi.TEXT);v.setMinHeight(dp(48));v.setMinWidth(dp(48));v.setGravity(Gravity.CENTER);v.setFocusable(true);return v;}
+    private void tool(String glyph,String label,Runnable action){TextView v=chip(glyph+"\n"+label);v.setTextSize(12);tools.addView(v,new LinearLayout.LayoutParams(dp(76),dp(68)));v.setOnClickListener(w->{if(editable())action.run();});}
+    private void toast(String text){if(alive)Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
+    private JSONArray clips(){return project==null?new JSONArray():project.optJSONArray("clips");}
+    private JSONArray audio(){if(project==null)return new JSONArray();JSONArray a=project.optJSONArray("audio");return a==null?new JSONArray():a;}
+    private JSONObject clip(){return clips().optJSONObject(selected);}
+    private long length(JSONObject c){return Math.round(c.optLong("duration_ms",10000)/c.optDouble("speed",1));}
+    private long total(){long sum=0;for(int i=0;i<clips().length();i++)sum+=length(clips().optJSONObject(i));return sum;}
+    private long start(int index){long sum=0;for(int i=0;i<index;i++)sum+=length(clips().optJSONObject(i));return sum;}
+    private String time(long ms){return String.format(Locale.ROOT,"%02d:%02d",ms/60000,(ms/1000)%60);}
+    private String name(String path){return path.substring(path.lastIndexOf('/')+1);}
+    private boolean editable(){if(project==null||saving){toast("Sauvegarde en cours…");return false;}String s=engine.status().optString("state");if(s.equals("running")||s.equals("preparing")){toast("Attends la fin de l’export ou annule-le");return false;}if(clip()==null){toast("Ajoute puis sélectionne une vidéo");return false;}return true;}
+    private void remember(){undo.addLast(project.toString());while(undo.size()>30)undo.removeFirst();redo.clear();}
+    private void draw(){if(!alive||project==null)return;title.setText(project.optString("name","Studio"));format.setText(project.optString("aspect_ratio","source").replace("source","Original"));seek.setMax((int)total());timeline.removeAllViews();audioTrack.removeAllViews();
+        selected=Math.max(0,Math.min(selected,clips().length()-1));
+        for(int i=0;i<clips().length();i++){
+            final int index=i;JSONObject c=clips().optJSONObject(i);LinearLayout card=MobileUi.column(this);card.setPadding(dp(3),dp(3),dp(3),dp(3));card.setBackground(MobileUi.bg(this,i==selected?0xff21d4c6:0xff282828));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(106),dp(98));p.setMargins(dp(3),dp(2),dp(3),dp(2));timeline.addView(card,p);
+            ImageView thumb=new ImageView(this);thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);thumb.setContentDescription("Plan "+(i+1)+" · "+name(c.optString("path")));card.addView(thumb,new LinearLayout.LayoutParams(-1,dp(58)));TextView label=MobileUi.text(this,(i+1)+" · "+time(length(c)),12,i==selected?0xff111111:MobileUi.TEXT);label.setPadding(dp(4),0,dp(4),0);card.addView(label);card.setOnClickListener(v->{selected=index;draw();player.seekTo(start(index));});
+            String path=c.optString("path");long at=c.optLong("start_ms");WorkspaceCommands.IO.execute(()->{try{Bitmap b=MediaInspection.thumbnail(new WorkspaceStore(this).file(path),at,180);ui.post(()->{if(alive&&thumb.getParent()!=null)thumb.setImageBitmap(b);else b.recycle();});}catch(Exception ignored){}});
         }
-        summary.setText("Projet : "+project.optString("name")+" · "+scenes.length()+
-            " vidéos · "+audio().length()+" audios · "+String.format(Locale.ROOT,"%.1f",ms/1000.0)+" s");
-        if(scenes.length()>0&&preview.getTag()==null)play(scenes.optJSONObject(0).optString("path"));
+        TextView plus=chip("＋");timeline.addView(plus,new LinearLayout.LayoutParams(dp(56),dp(98)));plus.setOnClickListener(v->addMenu("video"));
+        if(audio().length()==0){TextView v=MobileUi.text(this,project.optBoolean("mute_original",false)?"♫ Son original coupé":"♫ Son original conservé",12,MobileUi.MUTED);audioTrack.addView(v);v.setOnClickListener(w->mute());}
+        for(int i=0;i<audio().length();i++){final int at=i;JSONObject c=audio().optJSONObject(i);TextView item=chip("♫ "+name(c.optString("path")));item.setTextSize(11);item.setMaxLines(1);item.setBackground(MobileUi.bg(this,0xff1b4542));audioTrack.addView(item,new LinearLayout.LayoutParams(dp(140),dp(42)));item.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Piste audio").setItems(new String[]{"Découper","Supprimer"},(d,n)->{if(n==0)trim(true,at);else delete(true,at);}).show());}
+        ((ViewGroup)surface.getParent()).findViewWithTag("empty").setVisibility(clips().length()==0?View.VISIBLE:View.GONE);
     }
-    private TextView small(String label){
-        TextView v=MobileUi.action(this,label);
-        v.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(MobileUi.dp(this,46),MobileUi.dp(this,52));
-        p.setMargins(MobileUi.dp(this,4),0,MobileUi.dp(this,4),0);v.setLayoutParams(p);
-        return v;
+    private void save(){saving=true;String fallback=undo.peekLast();JSONObject snapshot;try{snapshot=new JSONObject(project.toString());}catch(Exception e){return;}
+        engine.command(this,"video_editor_project_save",new JSONObjectSafe("project",snapshot).withRevision(revision),(ok,res)->ui.post(()->{saving=false;if(!alive)return;if(ok){try{revision=new JSONObject(res).getJSONObject("project").optInt("revision");project.put("revision",revision);}catch(Exception ignored){}draw();preview();}else{toast(res);try{if(fallback!=null)project=new JSONObject(fallback);}catch(Exception ignored){}draw();}}));
     }
-    private String basename(String path){int k=path.lastIndexOf('/');return k<0?path:path.substring(k+1);}
-    private void play(String path){
-        try{
-            WorkspaceStore store=new WorkspaceStore(this);
-            preview.stopPlayback();
-            preview.setVideoPath(store.file(path).getAbsolutePath());
-            preview.setTag(path);
-            preview.seekTo(0);
-        }catch(Exception ex){toast(ex.getMessage());}
-    }
-    private void moveClip(int at,int delta){
-        JSONArray arr=clips();int dest=at+delta;if(dest<0||dest>=arr.length())return;
-        Object temp=arr.opt(at),other=arr.opt(dest);
-        try{arr.put(at,other);arr.put(dest,temp);project.put("clips",arr);saveThenRefresh();}
-        catch(Exception ex){toast(ex.getMessage());}
-    }
-    private void showClipMenu(int index){
-        JSONObject clip=clips().optJSONObject(index);if(clip==null)return;
-        play(clip.optString("path"));
-        String[] opts={"Lire la vidéo","Filtre : aucun","Filtre : cinéma","Filtre : noir et blanc",
-           "Filtre : froid","Filtre : chaud","Filtre : contraste","Filtre : nuit","Filtre : vintage",
-           "Découper la durée","Fondu au noir (0,18 s)","Sans fondu","Supprimer le plan"};
-        String[] keys={"aucun","cinema","noir","froid","chaud","contraste","nuit","vintage"};
-        new AlertDialog.Builder(this).setTitle("Plan "+(index+1)).setItems(opts,(dialog,choice)->{
-            try{
-                if(choice==0)play(clip.getString("path"));
-                else if(choice>=1&&choice<=8){clip.put("filter",keys[choice-1]);saveThenRefresh();}
-                else if(choice==9)editDuration(index);
-                else if(choice==10){clip.put("fade_ms",180);saveThenRefresh();}
-                else if(choice==11){clip.put("fade_ms",0);saveThenRefresh();}
-                else if(choice==12){
-                    JSONArray kept=new JSONArray();
-                    for(int i=0;i<clips().length();i++)if(i!=index)kept.put(clips().get(i));
-                    project.put("clips",kept);preview.setTag(null);saveThenRefresh();
-                }
-            }catch(Exception ex){toast(ex.getMessage());}
-        }).show();
-    }
-    private void editDuration(int index){
-        JSONObject clip=clips().optJSONObject(index);if(clip==null)return;
-        EditText entry=new EditText(this);
-        entry.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        entry.setText(String.format(Locale.ROOT,"%.1f",clip.optLong("duration_ms",10000)/1000.0));
-        new AlertDialog.Builder(this).setTitle("Durée en secondes").setView(entry)
-            .setNegativeButton("Annuler",null)
-            .setPositiveButton("Appliquer",(d,w)->{
-                try{
-                    long ms=Math.round(Double.parseDouble(entry.getText().toString().replace(',','.'))*1000);
-                    clip.put("duration_ms",ms);saveThenRefresh();
-                }catch(Exception ex){toast("Durée invalide");}
-            }).show();
-    }
-    private void editOutput(){
-        if(project==null)return;
-        EditText entry=new EditText(this);entry.setText(project.optString("output"));
-        new AlertDialog.Builder(this).setTitle("Chemin de sortie dans Fichiers").setView(entry)
-            .setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w)->{
-                try{project.put("output",entry.getText().toString().trim());saveThenRefresh();}
-                catch(Exception ex){toast(ex.getMessage());}
-            }).show();
-    }
-    private void saveThenRefresh(){saveProject();drawTimeline();}
-    private void saveProject(){
-        if(project==null)return;
-        try{
-            engine.command(this,"video_editor_project_save",
-               new JSONObject().put("project",project),(ok,result)->runOnUiThread(()->{
-                   if(!ok)toast(result);
-               }));
-        }catch(Exception ex){toast(ex.getMessage());}
-    }
-    private void chooseFile(String kind){chooseFolder(kind,"");}
-    private void chooseFolder(String kind,String folder){
-        new Thread(()->{
-            try{
-                WorkspaceStore store=new WorkspaceStore(this);
-                JSONObject results=store.list(folder,"",0);
-                JSONArray rows=results.getJSONArray("items");
-                ArrayList<String> names=new ArrayList<>(),paths=new ArrayList<>();
-                if(!folder.isEmpty()){names.add("‹ Dossier parent");paths.add("..");}
-                for(int i=0;i<rows.length();i++){
-                    JSONObject row=rows.getJSONObject(i);String p=row.getString("path");
-                    if(row.getBoolean("directory")){names.add("📁 "+row.getString("name"));paths.add(p);}
-                    else if(kind.equals("video")?p.endsWith(".mp4"):
-                         (p.endsWith(".wav")||p.endsWith(".mp3")||p.endsWith(".m4a"))){
-                         names.add(row.getString("name"));paths.add(p);
-                    }
-                }
-                runOnUiThread(()->new AlertDialog.Builder(this)
-                    .setTitle("Fichiers / "+folder).setItems(names.toArray(new String[0]),(d,which)->{
-                        String p=paths.get(which);
-                        if(p.equals("..")){int cut=folder.lastIndexOf('/');chooseFolder(kind,cut<0?"":folder.substring(0,cut));}
-                        else{
-                            try{
-                                WorkspaceStore s=new WorkspaceStore(this);
-                                if(s.file(p).isDirectory())chooseFolder(kind,p);
-                                else addFile(kind,p);
-                            }catch(Exception ex){toast(ex.getMessage());}
-                        }
-                    }).setNegativeButton("Fermer",null).show());
-            }catch(Exception ex){runOnUiThread(()->toast(ex.getMessage()));}
-        }).start();
-    }
-    private void addFile(String kind,String path){
-        if(project==null)return;
-        try{
-            JSONArray target=kind.equals("video")?clips():audio();
-            JSONObject c=new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",10000);
-            if(kind.equals("video"))c.put("filter","aucun").put("fade_ms",0);
-            target.put(c);project.put(kind.equals("video")?"clips":"audio",target);
-            saveThenRefresh();
-        }catch(Exception ex){toast(ex.getMessage());}
-    }
-    @Override protected void onDestroy(){
-        alive=false;handler.removeCallbacks(ticker);
-        preview.stopPlayback();super.onDestroy();
-    }
+    private void preview(){if(clips().length()==0){player.stop();return;}int generation=++previewGeneration;long position=player.getCurrentPosition();boolean playing=player.isPlaying();String snapshot=project.toString();WorkspaceCommands.IO.execute(()->{try{Composition composition=engine.composition(this,new JSONObject(snapshot));ui.post(()->{if(!alive||generation!=previewGeneration)return;try{player.setComposition(composition,Math.min(position,Math.max(0,total()-1)));player.prepare();player.setPlayWhenReady(playing);}catch(Exception e){toast("Aperçu : "+e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
+    private void history(boolean forward){if(saving||project==null)return;ArrayDeque<String> from=forward?redo:undo,to=forward?undo:redo;if(from.isEmpty())return;try{to.addLast(project.toString());project=new JSONObject(from.removeLast());save();}catch(Exception e){toast(e.getMessage());}}
+    private void put(JSONObject object,String key,Object value){try{remember();object.put(key,value);save();}catch(Exception e){toast(e.getMessage());}}
+    private void split(){if(clip()==null)return;JSONObject c=clip();long cut=Math.round((player.getCurrentPosition()-start(selected))*c.optDouble("speed",1)),duration=c.optLong("duration_ms");if(cut<500||duration-cut<500){toast("Place le curseur au milieu du plan (minimum 0,5 s par partie)");return;}
+        try{remember();JSONObject second=new JSONObject(c.toString());second.put("start_ms",c.optLong("start_ms")+cut).put("duration_ms",duration-cut);c.put("duration_ms",cut);JSONArray out=new JSONArray();for(int i=0;i<clips().length();i++){out.put(clips().get(i));if(i==selected)out.put(second);}project.put("clips",out);save();}catch(Exception e){toast(e.getMessage());}}
+    private void trim(boolean sound,int index){JSONObject c=(sound?audio():clips()).optJSONObject(index);if(c==null)return;LinearLayout box=MobileUi.column(this);EditText start=new EditText(this),end=new EditText(this);for(EditText e:new EditText[]{start,end}){e.setInputType(8194);box.addView(e);}start.setHint("Début (secondes)");end.setHint("Fin (secondes)");start.setText(""+c.optLong("start_ms")/1000.0);end.setText(""+(c.optLong("start_ms")+c.optLong("duration_ms"))/1000.0);
+        new AlertDialog.Builder(this).setTitle("Découper · "+name(c.optString("path"))).setView(box).setNegativeButton("Annuler",null).setPositiveButton("Appliquer",(d,n)->{try{long a=Math.round(Double.parseDouble(start.getText().toString().replace(',','.'))*1000),b=Math.round(Double.parseDouble(end.getText().toString().replace(',','.'))*1000);remember();c.put("start_ms",a).put("duration_ms",b-a);save();}catch(Exception e){toast("Bornes invalides");}}).show();}
+    private void filter(){String[] labels={"Original","Noir et blanc","Cinéma","Chaud","Froid","Contraste","Nuit","Vintage","Fondu noir 0,18 s","Retirer le fondu"};String[] keys={"aucun","noir","cinema","chaud","froid","contraste","nuit","vintage"};new AlertDialog.Builder(this).setTitle("Filtres du plan").setItems(labels,(d,n)->{if(n<8)put(clip(),"filter",keys[n]);else put(clip(),"fade_ms",n==8?180:0);}).show();}
+    private void caption(){if(clip()==null)return;prompt("Texte du plan",clip().optString("text",""),text->put(clip(),"text",text));}
+    private void speed(){new AlertDialog.Builder(this).setTitle("Vitesse du plan").setItems(new String[]{"0,25×","0,5×","1×","1,5×","2×","4×"},(d,n)->put(clip(),"speed",new double[]{.25,.5,1,1.5,2,4}[n])).show();}
+    private void rotation(){new AlertDialog.Builder(this).setTitle("Rotation du plan").setItems(new String[]{"0°","90°","180°","−90°"},(d,n)->put(clip(),"rotation",new int[]{0,90,180,-90}[n])).show();}
+    private void mute(){if(project==null)return;new AlertDialog.Builder(this).setTitle("Son").setItems(new String[]{"Conserver le son des vidéos","Couper le son des vidéos","Couper ce plan","Rétablir ce plan"},(d,n)->{if(n<2)put(project,"mute_original",n==1);else if(clip()!=null)put(clip(),"mute",n==2);}).show();}
+    private void move(){new AlertDialog.Builder(this).setTitle("Déplacer le plan").setItems(new String[]{"Vers la gauche","Vers la droite"},(d,n)->{int to=selected+(n==0?-1:1);if(to<0||to>=clips().length())return;try{remember();Object a=clips().get(selected),b=clips().get(to);clips().put(selected,b);clips().put(to,a);selected=to;save();}catch(Exception ignored){}}).show();}
+    private void duplicate(){try{remember();clips().put(new JSONObject(clip().toString()));save();}catch(Exception e){toast(e.getMessage());}}
+    private void delete(boolean sound,int index){if(project==null||saving)return;try{remember();JSONArray src=sound?audio():clips(),out=new JSONArray();for(int i=0;i<src.length();i++)if(i!=index)out.put(src.get(i));project.put(sound?"audio":"clips",out);if(!sound&&out.length()==0)project.put("audio",new JSONArray());save();}catch(Exception e){toast(e.getMessage());}}
+    private void ratioMenu(){if(project==null)return;String[] ratios={"source","9:16","16:9","1:1","4:3","3:4","4:5","2:1","2.35:1","custom"};new AlertDialog.Builder(this).setTitle("Format du montage").setItems(new String[]{"Original","9:16 · Téléphone","16:9 · Paysage","1:1 · Carré","4:3","3:4","4:5","2:1","2,35:1 · Cinéma","Ratio personnalisé"},(d,n)->{if(n==9)prompt("Largeur:hauteur","9:16",r->setRatio(r));else setRatio(ratios[n]);}).show();}
+    private void setRatio(String ratio){new AlertDialog.Builder(this).setTitle("Adapter l’image").setItems(new String[]{"Tout conserver (bandes noires)","Remplir (recadrage centré)"},(d,n)->{try{remember();project.put("aspect_ratio",ratio).put("aspect_mode",n==0?"fit":"crop");save();}catch(Exception ignored){}}).show();}
+    private void export(){if(project==null||saving){toast("Attends la sauvegarde");return;}new AlertDialog.Builder(this).setTitle("Qualité MP4 · H.264 / AAC").setItems(new String[]{"480p · Léger","720p · Standard","1080p · Haute définition"},(d,n)->{try{project.put("resolution",new int[]{480,720,1080}[n]);engine.command(this,"video_editor_project_save",new JSONObjectSafe("project",project).withRevision(revision),(ok,res)->{if(!ok){ui.post(()->toast(res));return;}try{revision=new JSONObject(res).getJSONObject("project").optInt("revision");project.put("revision",revision);}catch(Exception ignored){}engine.command(this,"video_editor_export",new JSONObject(),(success,result)->ui.post(()->{if(!success)new AlertDialog.Builder(this).setTitle("Export impossible").setMessage(result).setPositiveButton("OK",null).show();}));});}catch(Exception e){toast(e.getMessage());}}).show();}
+    private void outputMenu(){String s=engine.status().optString("state");if(s.equals("running")||s.equals("preparing")){new AlertDialog.Builder(this).setTitle("Export en cours").setMessage("Le rendu continue avec une notification sur le téléphone. Tu peux quitter cet écran.").setNegativeButton("Continuer",null).setPositiveButton("Annuler l’export",(d,n)->engine.command(this,"video_editor_cancel",new JSONObject(),(ok,res)->{})).show();return;}if(!s.equals("completed"))return;String output=engine.status().optString("output");new AlertDialog.Builder(this).setTitle("MP4 prêt").setItems(new String[]{"Lire","Partager","Vérifier les pistes et la durée"},(d,n)->{try{WorkspaceStore store=new WorkspaceStore(this);if(n==0)startActivity(new Intent(this,MediaPreviewActivity.class).putExtra("path",output));else if(n==1)startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("video/mp4").putExtra(Intent.EXTRA_STREAM,store.uri(output)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"Partager le montage"));else engine.command(this,"video_editor_verify_output",new JSONObject(),(ok,res)->ui.post(()->new AlertDialog.Builder(this).setTitle("Vérification").setMessage(res).setPositiveButton("OK",null).show()));}catch(Exception e){toast(e.getMessage());}}).show();}
+    private interface TextResult{void done(String text);}
+    private void prompt(String label,String initial,TextResult result){EditText e=new EditText(this);e.setText(initial);new AlertDialog.Builder(this).setTitle(label).setView(e).setNegativeButton("Annuler",null).setPositiveButton("Appliquer",(d,n)->result.done(e.getText().toString().trim())).show();}
+    private void projectMenu(){if(project==null)return;new AlertDialog.Builder(this).setTitle("Projet").setItems(new String[]{"Renommer","Destination MP4","Nouveau montage","Sauvegarder une copie du projet","Ouvrir un projet JSON","Charger Alpha Omega"},(d,n)->{switch(n){case 0:prompt("Nom",project.optString("name"),t->put(project,"name",t));break;case 1:prompt("Destination dans Fichiers",project.optString("output"),t->put(project,"output",t));break;case 2:new AlertDialog.Builder(this).setTitle("Commencer un nouveau montage ?").setMessage("Conserve une copie avant de remplacer le projet actuel.").setNegativeButton("Annuler",null).setPositiveButton("Nouveau",(x,y)->{try{remember();project=new JSONObject().put("name","Nouveau montage").put("output","Montage-"+System.currentTimeMillis()+".mp4").put("clips",new JSONArray()).put("audio",new JSONArray());save();}catch(Exception ignored){}}).show();break;case 3:WorkspaceCommands.IO.execute(()->{try{new WorkspaceStore(this).writeText("Projet-"+System.currentTimeMillis()+".json",project.toString(2),false);ui.post(()->toast("Projet enregistré dans Fichiers"));}catch(Exception e){ui.post(()->toast(e.getMessage()));}});break;case 4:chooseFolder("project","",0);break;case 5:engine.command(this,"video_editor_preset_alpha_omega",new JSONObject(),(ok,res)->ui.post(()->{if(ok)engine.command(this,"video_editor_project_read",new JSONObject(),(yes,r)->ui.post(()->{try{project=new JSONObject(r);revision=project.optInt("revision");draw();preview();}catch(Exception ignored){}}));else toast(res);}));break;}}).show();}
+    private void addMenu(String kind){if(project==null||saving)return;importKind=kind;new AlertDialog.Builder(this).setTitle("Ajouter "+(kind.equals("video")?"une vidéo":"un audio")).setItems(new String[]{"Depuis le téléphone","Depuis Fichiers CHK"},(d,n)->{if(n==0)startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(kind+"/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true),810);else chooseFolder(kind,"",0);}).show();}
+    private void chooseFolder(String kind,String folder,int page){WorkspaceCommands.IO.execute(()->{try{WorkspaceStore store=new WorkspaceStore(this);JSONObject batch=store.list(folder,"",page);JSONArray rows=batch.getJSONArray("items");ArrayList<String> names=new ArrayList<>(),paths=new ArrayList<>();if(!folder.isEmpty()){names.add("‹ Parent");paths.add("..");}for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);String p=row.getString("path");if(row.getBoolean("directory")||kind.equals("project")&&p.endsWith(".json")||row.getString("mime_type").startsWith(kind+"/")){names.add((row.getBoolean("directory")?"▱ ":"")+row.getString("name"));paths.add(p);}}if(batch.optInt("next_offset",-1)>=0){names.add("Suite ›");paths.add("#next");}ui.post(()->{if(!alive)return;new AlertDialog.Builder(this).setTitle("Fichiers / "+folder).setItems(names.toArray(new String[0]),(d,n)->{String p=paths.get(n);if(p.equals(".."))chooseFolder(kind,folder.contains("/")?folder.substring(0,folder.lastIndexOf('/')):"",0);else if(p.equals("#next"))chooseFolder(kind,folder,page+50);else{try{if(store.file(p).isDirectory())chooseFolder(kind,p,0);else addFile(kind,p);}catch(Exception e){toast(e.getMessage());}}}).setNegativeButton("Fermer",null).show();});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
+    private void addFile(String kind,String path){WorkspaceCommands.IO.execute(()->{try{if(kind.equals("project")){String json=new WorkspaceStore(this).readText(path,0).getString("text");ui.post(()->{try{remember();project=new JSONObject(json);save();}catch(Exception e){toast(e.getMessage());}});return;}JSONObject metadata=MediaInspection.info(this,path);long duration=metadata.optLong("duration_ms",0);if(duration<500)throw new Exception("Durée du média indisponible ou trop courte");ui.post(()->{try{remember();JSONObject c=new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",Math.min(duration,600000));if(kind.equals("video"))clips().put(c);else{long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().getJSONObject(i).optLong("duration_ms");if(remaining<500){toast("Ajoute une vidéo ou raccourcis l’audio précédent");return;}c.put("duration_ms",Math.min(duration,remaining));JSONArray a=audio();a.put(c);project.put("audio",a);}selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
+    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request!=810||result!=RESULT_OK||data==null)return;String kind=importKind;ArrayList<android.net.Uri> uris=new ArrayList<>();if(data.getClipData()!=null)for(int i=0;i<Math.min(20,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)uris.add(data.getData());WorkspaceCommands.IO.execute(()->{for(android.net.Uri uri:uris)try{String filename="Media-"+System.nanoTime();try(Cursor cursor=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(cursor!=null&&cursor.moveToFirst())filename=cursor.getString(0);}WorkspaceStore store=new WorkspaceStore(this);if(store.file(filename).exists())filename=System.currentTimeMillis()+"-"+filename;store.importUri(uri,filename);addFile(kind,filename);}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
+    @Override protected void onPause(){if(player!=null)player.pause();super.onPause();}
+    @Override protected void onDestroy(){alive=false;previewGeneration++;ui.removeCallbacksAndMessages(null);if(player!=null)player.release();super.onDestroy();}
+    private static final class JSONObjectSafe extends JSONObject{JSONObjectSafe(String key,Object value){try{put(key,value);}catch(Exception ignored){}}JSONObjectSafe withRevision(int revision){try{put("expected_revision",revision);}catch(Exception ignored){}return this;}}
 }

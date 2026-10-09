@@ -56,7 +56,7 @@ public final class VideoEditorEngine {
     private volatile String state="idle", error="",lastOutput="";
     private volatile int percent;
     private Transformer transformer;
-    private File activeOutput;
+    private File activeOutput, finalOutput;
     private Context app;
 
     private VideoEditorEngine(){}
@@ -76,12 +76,21 @@ public final class VideoEditorEngine {
             return;
         }
         if("video_editor_export".equals(action)){
-            MAIN.post(()->startExport(application,args.optBoolean("replace",false),cb));return;
+            MAIN.post(()->{
+                if("running".equals(state)||"preparing".equals(state)){cb.completed(false,"Un export est déjà actif");return;}
+                state="preparing";error="";percent=0;
+                DISK.execute(()->{try{
+                    JSONObject project=load(application);validate(application,project);
+                    if(project.getJSONArray("clips").length()==0)throw new IllegalArgumentException("Ajoute une vidéo avant d’exporter");
+                    Composition composition=composition(application,project);
+                    MAIN.post(()->{if(!"preparing".equals(state)){cb.completed(false,"Export annulé");return;}startExport(application,project,composition,args.optBoolean("replace",false),cb);});
+                }catch(Exception ex){state="failed";error=ex.getMessage();cb.completed(false,error);}});
+            });return;
         }
         if("video_editor_cancel".equals(action)){
             MAIN.post(()->{
-                if(transformer!=null && "running".equals(state)){
-                    transformer.cancel();transformer=null;state="cancelled";
+                if("running".equals(state)||"preparing".equals(state)){
+                    if(transformer!=null)transformer.cancel();transformer=null;state="cancelled";
                     if(activeOutput!=null)activeOutput.delete();
                 }
                 cb.completed(true,status().toString());
@@ -93,14 +102,16 @@ public final class VideoEditorEngine {
                 if("video_editor_status".equals(action))data=status();
                 else if("video_editor_project_read".equals(action))data=load(application);
                 else if("video_editor_project_save".equals(action)){
-                    if("running".equals(state))throw new IllegalStateException("Export actif");
+                    if("running".equals(state)||"preparing".equals(state))throw new IllegalStateException("Export actif");
                     JSONObject project=args.getJSONObject("project");
-                    validate(application,project);
+                    JSONObject current=load(application);
+                    if(args.has("expected_revision")&&args.getInt("expected_revision")!=current.optInt("revision",0))throw new IllegalStateException("Le projet a changé ailleurs. Rouvre Studio avant de modifier.");
+                    validate(application,project);project.put("revision",current.optInt("revision",0)+1);
                     persist(application,project);
                     data=new JSONObject().put("saved",true).put("project",project);
                 }else if("video_editor_preset_alpha_omega".equals(action)){
-                    if("running".equals(state))throw new IllegalStateException("Export actif");
-                    JSONObject project=alphaOmega(application);
+                    if("running".equals(state)||"preparing".equals(state))throw new IllegalStateException("Export actif");
+                    JSONObject project=alphaOmega(application);project.put("revision",load(application).optInt("revision",0)+1);
                     persist(application,project);
                     data=new JSONObject().put("saved",true).put("project",project);
                 }else throw new IllegalArgumentException("Commande vidéo inconnue");
@@ -112,7 +123,7 @@ public final class VideoEditorEngine {
         JSONObject o=new JSONObject();
         try{o.put("state",state).put("progress_percent",percent)
            .put("error",error).put("output",lastOutput)
-           .put("editing_local",true).put("engine","androidx.media3.transformer");
+           .put("background_protected",VideoExportService.active()||(app!=null&&AgentClient.get(app).isEnabled())).put("editing_local",true).put("engine","androidx.media3.transformer");
            if("running".equals(state)&&transformer!=null&&Looper.myLooper()==Looper.getMainLooper()){
                ProgressHolder h=new ProgressHolder();
                int result=transformer.getProgress(h);
@@ -136,7 +147,7 @@ public final class VideoEditorEngine {
         for(int i=0;i<videoCount;i++){
             JSONObject item=videos.optJSONObject(i);
             if(item==null){sourcesPresent=false;continue;}
-            expectedMs+=item.optLong("duration_ms",10000);
+            expectedMs+=Math.round(item.optLong("duration_ms",10000)/item.optDouble("speed",1));
             try{sourcesPresent &= requireSource(store,item.optString("path"),"video").isFile();}
             catch(Exception ignored){sourcesPresent=false;}
         }
@@ -150,7 +161,7 @@ public final class VideoEditorEngine {
             .put("expected_duration_ms",expectedMs)
             .put("project_video_count",videoCount).put("project_audio_count",audioCount)
             .put("sources_present",sourcesPresent).put("valid",false);
-        if(!file.isFile()||file.length()<10000)
+        if(!file.isFile()||file.length()<1000)
             return result.put("reason","Fichier MP4 absent ou incomplet");
         MediaMetadataRetriever retriever=new MediaMetadataRetriever();
         try{
@@ -163,8 +174,8 @@ public final class VideoEditorEngine {
             long durationMs=duration==null?-1:Long.parseLong(duration);
             boolean picture="yes".equalsIgnoreCase(hasVideo),sound="yes".equalsIgnoreCase(hasAudio);
             boolean correctDuration=expectedMs>0&&durationMs>=0&&Math.abs(durationMs-expectedMs)<=500;
-            boolean correctAspect=!"9:16".equals(project.optString("aspect_ratio","source"))
-                || ("720".equals(width)&&"1280".equals(height));
+            float ratio=ratio(project.optString("aspect_ratio","source"));
+            boolean correctAspect=ratio==0 || (width!=null&&height!=null&&Math.abs(Float.parseFloat(width)/Float.parseFloat(height)-ratio)<0.015f);
             boolean valid=picture&&(!(audioCount>0)||sound)&&correctDuration&&sourcesPresent&&correctAspect;
             result.put("duration_ms",durationMs).put("has_video",picture)
                 .put("has_audio",sound).put("width_px",width).put("height_px",height)
@@ -179,7 +190,7 @@ public final class VideoEditorEngine {
     public JSONObject load(Context context)throws Exception{
         File f=new File(context.getFilesDir(),SAVE);
         if(!f.isFile())return new JSONObject().put("name","Nouveau montage")
-                .put("output",DEFAULT_OUTPUT).put("clips",new JSONArray()).put("audio",new JSONArray());
+                .put("output","Montage-"+System.currentTimeMillis()+".mp4").put("aspect_ratio","source").put("clips",new JSONArray()).put("audio",new JSONArray());
         if(f.length()>200000)throw new IllegalStateException("Projet trop grand");
         byte[] bytes=new byte[(int)f.length()];
         try(FileInputStream in=new FileInputStream(f)){
@@ -200,12 +211,13 @@ public final class VideoEditorEngine {
         if(path==null||path.length()>700||path.isEmpty())throw new IllegalArgumentException("Chemin source invalide");
         File f=store.file(path);
         if(!f.isFile()||!f.canRead()||f.length()==0)throw new IllegalArgumentException("Fichier absent: "+path);
-        if("video".equals(type)&&!path.toLowerCase(Locale.ROOT).endsWith(".mp4"))
-            throw new IllegalArgumentException("Vidéo MP4 requise: "+path);
-        if("audio".equals(type)&&!(path.toLowerCase(Locale.ROOT).endsWith(".wav")||
-                path.toLowerCase(Locale.ROOT).endsWith(".mp3")||
-                path.toLowerCase(Locale.ROOT).endsWith(".m4a")))
-            throw new IllegalArgumentException("Audio WAV/MP3/M4A requis: "+path);
+        android.media.MediaExtractor extractor=new android.media.MediaExtractor();
+        boolean found=false;
+        try{extractor.setDataSource(f.getAbsolutePath());for(int i=0;i<extractor.getTrackCount();i++){
+            String mime=extractor.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME);
+            if(mime!=null&&mime.startsWith(type+"/"))found=true;
+        }}finally{extractor.release();}
+        if(!found)throw new IllegalArgumentException("Aucune piste "+type+" lisible : "+path);
         return f;
     }
     public JSONObject alphaOmega(Context app)throws Exception{
@@ -232,13 +244,15 @@ public final class VideoEditorEngine {
         if(p.toString().length()>64000)throw new IllegalArgumentException("Projet trop volumineux");
         String aspect=p.optString("aspect_ratio","source");
         String layout=p.optString("aspect_mode","crop");
-        if(!"source".equals(aspect)&&!"9:16".equals(aspect))
-            throw new IllegalArgumentException("Format vidéo inconnu: "+aspect);
+        ratio(aspect);
+        int height=p.optInt("resolution",720);
+        if(height!=480&&height!=720&&height!=1080)throw new IllegalArgumentException("Résolution 480, 720 ou 1080 requise");
+        if(p.optString("name","").length()>120)throw new IllegalArgumentException("Nom trop long");
         if(!"crop".equals(layout)&&!"fit".equals(layout))
             throw new IllegalArgumentException("Recadrage inconnu: "+layout);
         WorkspaceStore store=new WorkspaceStore(context);
         JSONArray clips=p.getJSONArray("clips"),sounds=p.optJSONArray("audio");
-        if(clips.length()==0||clips.length()>40)throw new IllegalArgumentException("1 à 40 vidéos requises");
+        if(clips.length()>40)throw new IllegalArgumentException("40 vidéos maximum");
         long videoDuration=0,audioDuration=0;
         for(int i=0;i<clips.length();i++){
             JSONObject c=clips.getJSONObject(i);
@@ -253,7 +267,12 @@ public final class VideoEditorEngine {
                     &&!filter.equals("nuit"))throw new IllegalArgumentException("Filtre inconnu: "+filter);
             long fade=c.optLong("fade_ms",0);
             if(fade<0||fade>Math.min(1500,duration/3))throw new IllegalArgumentException("Effet de fondu invalide");
-            videoDuration+=duration;
+            double speed=c.optDouble("speed",1);
+            if((Double.isNaN(speed)||Double.isInfinite(speed))||speed<0.25||speed>4)throw new IllegalArgumentException("Vitesse entre 0,25 et 4 requise");
+            double rotation=c.optDouble("rotation",0);
+            if((Double.isNaN(rotation)||Double.isInfinite(rotation))||rotation<-180||rotation>180)throw new IllegalArgumentException("Rotation entre -180 et 180 requise");
+            if(c.optString("text","").length()>500)throw new IllegalArgumentException("Texte limité à 500 caractères");
+            videoDuration+=Math.round(duration/speed);
         }
         if(sounds!=null){
             if(sounds.length()>40)throw new IllegalArgumentException("Trop de pistes audio");
@@ -265,8 +284,7 @@ public final class VideoEditorEngine {
                 checkMediaDuration(f,start+duration);
                 audioDuration+=duration;
             }
-            if(sounds.length()>0&&Math.abs(audioDuration-videoDuration)>1000)
-                throw new IllegalArgumentException("Durées image / audio différentes de plus de 1 seconde");
+            if(sounds.length()>0&&audioDuration>videoDuration+1000)throw new IllegalArgumentException("Audio plus long que la vidéo : raccourcis la piste");
         }
         if(videoDuration>20*60*1000)throw new IllegalArgumentException("Montage limité à 20 minutes");
         String output=p.optString("output","");
@@ -314,72 +332,78 @@ public final class VideoEditorEngine {
         }
         return effects;
     }
-    private void startExport(Context context,boolean replace,Done callback){
-        if("running".equals(state)){callback.completed(false,"Un rendu est déjà en cours");return;}
+    /** Ratios are independent from container and codec support. */
+    public static float ratio(String value){
+        if("source".equals(value))return 0;
+        String[] parts=value.split(":");
+        try{if(parts.length!=2)throw new Exception();float w=Float.parseFloat(parts[0]),h=Float.parseFloat(parts[1]);
+            float r=w/h;if((Float.isNaN(r)||Float.isInfinite(r))||w<=0||h<=0||r<0.2f||r>5)throw new Exception();return r;
+        }catch(Exception ex){throw new IllegalArgumentException("Ratio largeur:hauteur requis (entre 1:5 et 5:1)");}
+    }
+    /** Used by export and the live CompositionPlayer so previews include real effects. */
+    public Composition composition(Context context,JSONObject project)throws Exception{
+        WorkspaceStore store=new WorkspaceStore(context);
+        JSONArray clips=project.getJSONArray("clips"),audios=project.optJSONArray("audio");
+        List<EditedMediaItem> videos=new ArrayList<>(),sounds=new ArrayList<>();
+        boolean external=audios!=null&&audios.length()>0;
+        boolean original=!project.optBoolean("mute_original",external);
+        for(int i=0;i<clips.length();i++){
+            JSONObject c=clips.getJSONObject(i);long len=c.optLong("duration_ms",10000);
+            List<androidx.media3.common.Effect> fx=effects(c.optString("filter","aucun"),len,c.optLong("fade_ms",0));
+            if(c.optDouble("rotation",0)!=0)fx.add(new androidx.media3.effect.ScaleAndRotateTransformation.Builder().setRotationDegrees((float)c.optDouble("rotation")).build());
+            String caption=c.optString("text","");
+            if(!caption.isEmpty()){
+                android.text.SpannableString text=new android.text.SpannableString(caption);
+                text.setSpan(new android.text.style.ForegroundColorSpan(android.graphics.Color.WHITE),0,text.length(),0);
+                text.setSpan(new android.text.style.AbsoluteSizeSpan(32),0,text.length(),0);
+                androidx.media3.effect.StaticOverlaySettings settings=new androidx.media3.effect.StaticOverlaySettings.Builder().setBackgroundFrameAnchor(0,-0.75f).build();
+                fx.add(new androidx.media3.effect.OverlayEffect(Collections.singletonList(androidx.media3.effect.TextOverlay.createStaticTextOverlay(text,settings))));
+            }
+            final float speed=(float)c.optDouble("speed",1);
+            videos.add(new EditedMediaItem.Builder(media(store.file(c.getString("path")),c.optLong("start_ms",0),len))
+                .setRemoveAudio(!original||c.optBoolean("mute",false))
+                .setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return speed;}public long getNextSpeedChangeTimeUs(long timeUs){return androidx.media3.common.C.TIME_UNSET;}})
+                .setEffects(new Effects(Collections.emptyList(),fx)).build());
+        }
+        if(external)for(int i=0;i<audios.length();i++){
+            JSONObject a=audios.getJSONObject(i);
+            sounds.add(new EditedMediaItem.Builder(media(store.file(a.getString("path")),a.optLong("start_ms",0),a.optLong("duration_ms",10000))).setRemoveVideo(true).build());
+        }
+        EditedMediaItemSequence sequence=original?EditedMediaItemSequence.withAudioAndVideoFrom(videos):EditedMediaItemSequence.withVideoFrom(videos);
+        Composition.Builder builder=sounds.isEmpty()?new Composition.Builder(sequence):new Composition.Builder(sequence,EditedMediaItemSequence.withAudioFrom(sounds));
+        float aspect=ratio(project.optString("aspect_ratio","source"));
+        if(aspect>0){
+            int height=project.optInt("resolution",720),width=Math.max(2,Math.round(height*aspect/2)*2);
+            if("9:16".equals(project.optString("aspect_ratio"))&&!project.has("resolution")){width=720;height=1280;}
+            int layout="fit".equals(project.optString("aspect_mode","fit"))?Presentation.LAYOUT_SCALE_TO_FIT:Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP;
+            builder.setEffects(new Effects(Collections.emptyList(),Collections.singletonList(Presentation.createForWidthAndHeight(width,height,layout))));
+        }
+        return builder.build();
+    }
+    private void startExport(Context context,JSONObject project,Composition composition,boolean replace,Done callback){
         try{
-            JSONObject project=load(context);
-            validate(context,project);
-            WorkspaceStore store=new WorkspaceStore(context);
-            String output=project.getString("output");
-            File file=store.file(output);
-            if(file.exists()){
-                if(!replace)throw new IllegalArgumentException("Le MP4 existe déjà; replace=true nécessaire");
-                if(!file.delete())throw new IllegalStateException("Impossible de remplacer l'ancien rendu");
-            }
-            JSONArray clips=project.getJSONArray("clips"),audios=project.optJSONArray("audio");
-            List<EditedMediaItem> videos=new ArrayList<>(),sounds=new ArrayList<>();
-            for(int i=0;i<clips.length();i++){
-                JSONObject c=clips.getJSONObject(i);
-                long start=c.optLong("start_ms",0),len=c.optLong("duration_ms",10000);
-                List<androidx.media3.common.Effect> videoEffects=effects(
-                    c.optString("filter","aucun"),len,c.optLong("fade_ms",0));
-                videos.add(new EditedMediaItem.Builder(media(store.file(c.getString("path")),start,len))
-                    .setRemoveAudio(true)
-                    .setEffects(new Effects(Collections.emptyList(),videoEffects))
-                    .build());
-            }
-            if(audios!=null)for(int i=0;i<audios.length();i++){
-                JSONObject a=audios.getJSONObject(i);
-                sounds.add(new EditedMediaItem.Builder(media(store.file(a.getString("path")),
-                        a.optLong("start_ms",0),a.optLong("duration_ms",10000)))
-                        .setRemoveVideo(true).build());
-            }
-            EditedMediaItemSequence videoSequence=EditedMediaItemSequence.withVideoFrom(videos);
-            // Apply final presentation to the ENTIRE composition. With multiple
-            // sequences, per-item effects may not establish the final output frame.
-            Composition.Builder compositionBuilder=sounds.isEmpty()
-                    ?new Composition.Builder(videoSequence)
-                    :new Composition.Builder(videoSequence,EditedMediaItemSequence.withAudioFrom(sounds));
-            if("9:16".equals(project.optString("aspect_ratio","source"))){
-                int layout="fit".equals(project.optString("aspect_mode","crop"))
-                    ? Presentation.LAYOUT_SCALE_TO_FIT
-                    : Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP;
-                compositionBuilder.setEffects(new Effects(
-                    Collections.emptyList(),Collections.singletonList(
-                        Presentation.createForWidthAndHeight(720,1280,layout))));
-            }
-            Composition composition=compositionBuilder.build();
-            app=context;activeOutput=file;lastOutput=output;error="";percent=0;state="running";
-            transformer=new Transformer.Builder(context).setVideoMimeType(MimeTypes.VIDEO_H264)
+            WorkspaceStore store=new WorkspaceStore(context);String output=project.getString("output");
+            File destination=store.file(output);
+            if(destination.exists()&&!replace)throw new IllegalArgumentException("Le MP4 existe déjà; replace=true nécessaire");
+            // Render beside the destination and preserve the previous completed file on failure.
+            File partial=new File(destination.getParentFile(),".render-"+java.util.UUID.randomUUID()+".mp4");
+            app=context;activeOutput=partial;finalOutput=destination;lastOutput=output;error="";percent=0;state="running";
+            transformer=new Transformer.Builder(context).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                .addListener(new Transformer.Listener(){
                  @Override public void onCompleted(Composition c,ExportResult result){
                     if(!"running".equals(state))return;
-                    if(activeOutput==null||!activeOutput.isFile()||activeOutput.length()<10000){
-                        state="failed";error="MP4 exporté mais invalide ou vide";
+                    if(activeOutput==null||!activeOutput.isFile()||activeOutput.length()<1000||(!replace&&finalOutput.exists())||!activeOutput.renameTo(finalOutput)){
+                        state="failed";error="Impossible de finaliser le MP4";if(activeOutput!=null)activeOutput.delete();
                     }else{state="completed";percent=100;}
                     transformer=null;
                  }
                  @Override public void onError(Composition c,ExportResult result,ExportException e){
                     state="failed";error=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage();
-                    if(activeOutput!=null)activeOutput.delete();
-                    transformer=null;
+                    if(activeOutput!=null)activeOutput.delete();transformer=null;
                  }
                }).build();
-            transformer.start(composition,file.getAbsolutePath());
-            callback.completed(true,new JSONObject().put("state",state).put("output",output).toString());
-        }catch(Exception e){
-            state="failed";error=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage();
-            callback.completed(false,error);
-        }
+            if(!VideoExportService.start(context)&&!AgentClient.get(context).isEnabled())throw new IllegalStateException("Ouvre Studio sur le téléphone pour démarrer un export protégé");
+            transformer.start(composition,partial.getAbsolutePath());callback.completed(true,status().toString());
+        }catch(Exception e){state="failed";error=e.getMessage();callback.completed(false,error);}
     }
 }

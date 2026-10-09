@@ -13,7 +13,7 @@ public final class WorkspaceCommands {
     public static final ExecutorService IO=Executors.newSingleThreadExecutor();
     public static final Handler UI=new Handler(Looper.getMainLooper());
     private WorkspaceCommands(){}
-    public static boolean handles(String action){return action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status")||action.startsWith("video_editor_");}
+    public static boolean handles(String action){return action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status")||action.startsWith("video_editor_")||action.startsWith("media_");}
     public static void run(Context context,String action,JSONObject args,AgentClient.ResultCallback cb){
         Context app=context.getApplicationContext();
         if(action.startsWith("video_editor_")){
@@ -36,7 +36,12 @@ public final class WorkspaceCommands {
         IO.execute(()->{try{
             WorkspaceStore s=new WorkspaceStore(app);String path=args.optString("path","");Object result;
             switch(action){
-                case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;
+                case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("video_editor",true).put("media_inspection",true).put("workspace_version",2).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;
+                case "media_info":result=MediaInspection.info(app,path);break;
+                case "media_frame":result=MediaInspection.frame(app,path,args.optLong("time_ms",0));break;
+                case "media_codecs":result=MediaInspection.codecs();break;
+                case "files_catalog":result=WorkspaceCatalog.query(app,args.optString("folder",""),args.optString("category","all"),args.optString("query",""),args.optString("sort","name"),args.optInt("offset",0));break;
+                case "files_copy":result=WorkspaceCatalog.copy(app,path,args.getString("destination"));break;
                 case "files_list":result=s.list(path,args.optString("query",""),args.optInt("offset",0));break;
                 case "files_mkdir":s.mkdir(path);result=new JSONObject().put("path",path);break;
                 case "files_write_text":result=s.writeText(path,args.getString("text"),args.optBoolean("overwrite",false));break;

@@ -1,7 +1,7 @@
 name: CHK Agent Browser - APK Android et Releases
 on:
   push:
-    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009]
+    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009, agent/mobile-studio-20261009]
   workflow_dispatch:
 permissions:
   contents: write
@@ -39,7 +39,7 @@ jobs:
         run: ./gradlew --no-daemon assembleDebug lintDebug
       - name: Autoriser KVM pour les tests Android
         run: sudo chmod 666 /dev/kvm
-      - name: Tester Fichiers, Notes, stockage et navigation sur Android
+      - name: Tester navigateur, Fichiers, Notes et véritable export vidéo sur Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30

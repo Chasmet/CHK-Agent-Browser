@@ -1,28 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#0D1423">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="52dp" android:gravity="center_vertical" android:paddingHorizontal="12dp">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#202124" android:focusableInTouchMode="true">
+    <LinearLayout android:id="@+id/space_header" android:layout_width="match_parent" android:layout_height="52dp" android:gravity="center_vertical" android:paddingHorizontal="12dp">
         <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:gravity="center_vertical">
             <TextView android:id="@+id/space_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="CHK Browser" android:textColor="#F1F5FF" android:textSize="18sp" android:textStyle="bold" />
             <TextView android:id="@+id/connection_badge" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Ton espace de travail" android:textColor="#94A8C1" android:textSize="11sp" android:singleLine="true" />
         </LinearLayout>
         <TextView android:id="@+id/new_tab" style="@style/NavButton" android:text="＋" android:contentDescription="Nouvel onglet" />
-        <TextView android:id="@+id/tab_count" style="@style/NavButton" android:text="1" android:textSize="16sp" android:contentDescription="Voir les onglets" />
-        <TextView android:id="@+id/menu" style="@style/NavButton" android:text="⋮" android:contentDescription="Menu du navigateur" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/address_bar" android:layout_width="match_parent" android:layout_height="56dp" android:gravity="center_vertical" android:paddingHorizontal="4dp" android:background="#202124">
+        <TextView android:id="@+id/back" android:layout_width="40dp" android:layout_height="48dp" android:gravity="center" android:text="⌂" android:textColor="#F1F5FF" android:textSize="24sp" android:contentDescription="Accueil du navigateur" />
+        <EditText android:id="@+id/address" android:layout_width="0dp" android:layout_height="46dp" android:layout_weight="1" android:background="@drawable/field_bg" android:singleLine="true" android:inputType="textUri" android:imeOptions="actionGo" android:selectAllOnFocus="true" android:hint="Rechercher sur Google" android:textColor="#FFFFFF" android:textColorHint="#BDC1C6" android:paddingHorizontal="12dp" android:textSize="14sp" />
+        <TextView android:id="@+id/voice_search" android:layout_width="40dp" android:layout_height="48dp" android:gravity="center" android:text="♩" android:textColor="#F1F5FF" android:textSize="22sp" android:contentDescription="Recherche vocale" />
+        <TextView android:id="@+id/tab_count" android:layout_width="40dp" android:layout_height="48dp" android:gravity="center" android:text="1" android:textColor="#F1F5FF" android:textSize="16sp" android:contentDescription="Voir les onglets" />
+        <TextView android:id="@+id/menu" android:layout_width="40dp" android:layout_height="48dp" android:gravity="center" android:text="⋮" android:textColor="#F1F5FF" android:textSize="24sp" android:contentDescription="Menu" />
+        <TextView android:id="@+id/go" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
     </LinearLayout>
     <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="3dp" android:max="100" android:progressTint="#69E2C6" android:visibility="gone" />
     <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
         <FrameLayout android:id="@+id/web_container" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#FFFFFF" />
+        <FrameLayout android:id="@+id/start_page" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone" android:background="#202124" />
+        <FrameLayout android:id="@+id/search_suggestions" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone" android:background="#202124" />
         <FrameLayout android:id="@+id/workspace_container" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone" android:background="#0D1423" />
     </FrameLayout>
-    <LinearLayout android:id="@+id/address_bar" android:layout_width="match_parent" android:layout_height="56dp" android:gravity="center_vertical" android:paddingHorizontal="6dp" android:background="#111E30">
-        <TextView android:id="@+id/back" style="@style/NavButton" android:text="‹" android:contentDescription="Page précédente" />
-        <EditText android:id="@+id/address" android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1" android:background="@drawable/field_bg" android:singleLine="true" android:inputType="textUri" android:imeOptions="actionGo" android:selectAllOnFocus="true" android:hint="Rechercher ou saisir une adresse" android:textColor="#FFFFFF" android:textColorHint="#A4B5CA" android:paddingHorizontal="12dp" android:textSize="14sp" />
-        <TextView android:id="@+id/go" style="@style/NavButton" android:text="➜" android:contentDescription="Ouvrir l’adresse" />
-    </LinearLayout>
     <LinearLayout android:id="@+id/space_nav" android:layout_width="match_parent" android:layout_height="64dp" android:gravity="center_vertical" android:background="#111E30" android:paddingHorizontal="8dp">
         <TextView android:id="@+id/nav_browser" style="@style/BottomButton" android:text="Navigateur" android:drawableTop="@drawable/ic_nav_browser" android:drawablePadding="3dp" android:contentDescription="Espace Navigateur" />
         <TextView android:id="@+id/nav_files" style="@style/BottomButton" android:text="Fichiers" android:drawableTop="@drawable/ic_nav_files" android:drawablePadding="3dp" android:contentDescription="Espace Fichiers" />
-        <TextView android:id="@+id/nav_video" style="@style/BottomButton" android:text="Studio vidéo" android:drawableTop="@drawable/ic_nav_files" android:drawablePadding="3dp" android:contentDescription="Éditeur vidéo" />
+        <TextView android:id="@+id/nav_video" style="@style/BottomButton" android:text="Studio" android:drawableTop="@drawable/ic_nav_video" android:drawablePadding="3dp" android:contentDescription="Éditeur vidéo" />
         <TextView android:id="@+id/nav_notes" style="@style/BottomButton" android:text="Notes" android:drawableTop="@drawable/ic_nav_notes" android:drawablePadding="3dp" android:contentDescription="Espace Notes" />
     </LinearLayout>
 </LinearLayout>

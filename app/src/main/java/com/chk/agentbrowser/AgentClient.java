@@ -190,7 +190,7 @@ public final class AgentClient {
                     JSONObject info = new JSONObject();
                     info.put("url", limit(page, 500)); info.put("title", limit(title, 150));
                     info.put("autonomous",isAutonomous());
-                    info.put("workspace_version",1);
+                    info.put("workspace_version",2);
                     info.put("session_source",currentHandler==null?"none":currentHandler.sessionSource());
                     info.put("executing_id",settings.getString("executing_id",""));
                     request("POST", "/agentbrowser/api/heartbeat", info, true);

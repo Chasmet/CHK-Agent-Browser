@@ -48,6 +48,7 @@ public class MainActivity extends Activity {
     private WorkspacePanel workspace;
     private String activeSpace="browser";
     private boolean focusMode;
+    private BrowserHome home;
     private View fullScreenVideo;
     private WebChromeClient.CustomViewCallback fullScreenCallback;
     private final Runnable connectionTick=new Runnable(){public void run(){if(!isFinishing()){((TextView)findViewById(R.id.connection_badge)).setText(agentClient.isEnabled()?(agentClient.isAutonomous()?"● Agent actif · autonome":"● Agent actif · manuel"):"Ton espace de travail");transferHandler.postDelayed(this,3000);}}};
@@ -64,7 +65,9 @@ public class MainActivity extends Activity {
         agentClient=AgentClient.get(this);
         container=findViewById(R.id.web_container);
         address=findViewById(R.id.address);progress=findViewById(R.id.progress);
-        findViewById(R.id.back).setOnClickListener(v->{if(current!=null&&current.canGoBack())current.goBack();});
+        home=new BrowserHome(this,address,store,url->navigate(url));
+        findViewById(R.id.back).setOnClickListener(v->navigate(HOME));
+        findViewById(R.id.voice_search).setOnClickListener(v->{try{startActivityForResult(new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT,"Rechercher sur Google"),812);}catch(Exception e){toast("Recherche vocale indisponible sur ce téléphone");}});
         findViewById(R.id.go).setOnClickListener(v->navigate(address.getText().toString()));
         findViewById(R.id.new_tab).setOnClickListener(v->{showSpace("browser");newTab(HOME);});
         address.setOnEditorActionListener((v,id,event)->{
@@ -79,6 +82,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.nav_video).setOnClickListener(v->startActivity(new Intent(this,VideoEditorActivity.class)));
         findViewById(R.id.menu).setOnClickListener(v->browserMenu());
         findViewById(R.id.tab_count).setOnClickListener(v->tabOverview());
+        findViewById(R.id.tab_count).setOnLongClickListener(v->{newTab(HOME);return true;});
         restoreTabs(state);
         showSpace(state==null?"browser":state.getString("space","browser"));
         String launch=getIntent().getStringExtra("open_url");if(launch!=null)navigate(launch);
@@ -149,12 +153,12 @@ public class MainActivity extends Activity {
                 toast("Lien non autorisé");return true;
             }
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap favicon){
-                applyCookiePolicy(v,url);
+                applyCookiePolicy(v,url);if(v==current&&home!=null)home.page(url);
             }
             @Override public void onPageFinished(WebView v,String url){
                 applyCookiePolicy(v,url);
                 if(url!=null)store.add("history",v.getTitle(),url);
-                if(v==current){if(!address.hasFocus())address.setText(url);refreshTabs();saveTabs();}
+                if(v==current){if(home!=null)home.page(url);if(!address.hasFocus())address.setText(home!=null&&home.isHome(url)?"":url);refreshTabs();saveTabs();}
             }
         });
         web.setOnLongClickListener(v->{WebView.HitTestResult hit=web.getHitTestResult();if(hit==null||hit.getExtra()==null||!(hit.getType()==WebView.HitTestResult.SRC_ANCHOR_TYPE||hit.getType()==WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE))return false;String link=hit.getExtra();if(!link.startsWith("https://"))return false;new AlertDialog.Builder(this).setTitle("Lien").setMessage(link).setItems(new String[]{"Ouvrir dans un nouvel onglet","Copier le lien","Partager"},(d,i)->{if(i==0)newTab(link);else if(i==1){((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Lien",link));toast("Lien copié");}else startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,link),"Partager le lien"));}).show();return true;});
@@ -226,6 +230,7 @@ public class MainActivity extends Activity {
         if(web.getParent() instanceof ViewGroup)((ViewGroup)web.getParent()).removeView(web);
         container.addView(web,new FrameLayout.LayoutParams(-1,-1));
         address.setText(web.getUrl()==null?"":web.getUrl());
+        if(home!=null)home.page(web.getUrl());
         progress.setVisibility(View.GONE);refreshTabs();
     }
     private void close(WebView web){
@@ -618,6 +623,8 @@ public class MainActivity extends Activity {
     private void hideFullScreenVideo(){if(fullScreenVideo==null)return;((ViewGroup)getWindow().getDecorView()).removeView(fullScreenVideo);fullScreenVideo=null;getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);WebChromeClient.CustomViewCallback cb=fullScreenCallback;fullScreenCallback=null;if(cb!=null)cb.onCustomViewHidden();}
     private void showSpace(String space){
         boolean browser=space.equals("browser");
+        findViewById(R.id.space_header).setVisibility(browser?View.GONE:View.VISIBLE);
+        if(home!=null)home.space(browser,current==null?HOME:current.getUrl());
         findViewById(R.id.web_container).setVisibility(browser?View.VISIBLE:View.GONE);
         findViewById(R.id.workspace_container).setVisibility(browser?View.GONE:View.VISIBLE);
         findViewById(R.id.address_bar).setVisibility(browser?View.VISIBLE:View.GONE);
@@ -631,10 +638,10 @@ public class MainActivity extends Activity {
     }
     private void browserMenu(){
         if(!activeSpace.equals("browser")){new AlertDialog.Builder(this).setTitle("Espace de travail").setItems(new String[]{"Réglages","Revenir au navigateur"},(d,i)->{if(i==0)startActivity(new Intent(this,SettingsActivity.class));else showSpace("browser");}).show();return;}
-        new AlertDialog.Builder(this).setTitle("Actions de la page").setItems(new String[]{"Actualiser","Page suivante",store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris","Favoris et historique","Rechercher dans la page","Partager le lien","Enregistrer la page dans Notes","Lire / copier le texte","Taille du texte","Mode lecture plein écran","Réglages"},(d,i)->{
+        new AlertDialog.Builder(this).setTitle("Actions de la page").setItems(new String[]{"Actualiser","Page suivante",store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris","Favoris et historique","Rechercher dans la page","Partager le lien","Enregistrer la page dans Notes","Lire / copier le texte","Taille du texte","Mode lecture plein écran","Réglages","Nouvel onglet"},(d,i)->{
             switch(i){case 0:if(current!=null)current.reload();break;case 1:if(current!=null&&current.canGoForward())current.goForward();break;case 2:toggleBookmark();break;case 3:library();break;case 4:findInPage();break;
                 case 5:if(current!=null)startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,current.getUrl()),"Partager la page"));break;
-                case 6:savePageNote();break;case 7:readPage();break;case 8:textSize();break;case 9:setFocusMode(true);break;case 10:startActivity(new Intent(this,SettingsActivity.class));break;}
+                case 6:savePageNote();break;case 7:readPage();break;case 8:textSize();break;case 9:setFocusMode(true);break;case 10:startActivity(new Intent(this,SettingsActivity.class));break;case 11:newTab(HOME);break;}
         }).setNegativeButton("Fermer",null).show();
     }
     private void textSize(){new AlertDialog.Builder(this).setTitle("Taille du texte des pages").setItems(new String[]{"100 % · Standard","115 % · Confort","130 % · Grand","150 % · Très grand"},(d,i)->{int zoom=new int[]{100,115,130,150}[i];getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putInt("text_zoom",zoom).apply();for(WebView web:tabs)web.getSettings().setTextZoom(zoom);}).show();}
@@ -664,12 +671,14 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==812&&result==RESULT_OK&&data!=null){java.util.ArrayList<String> words=data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS);if(words!=null&&!words.isEmpty())navigate(words.get(0));return;}
         if(workspace!=null&&workspace.result(request,result,data))return;
         if(request==FILE_REQUEST&&fileCallback!=null){
             fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));fileCallback=null;
         }
     }
     @Override public void onBackPressed(){
+        if(home!=null&&home.closeSuggestions()){address.clearFocus();((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(),0);return;}
         if(fullScreenVideo!=null){hideFullScreenVideo();return;}
         if(focusMode){setFocusMode(false);return;}
         if(!activeSpace.equals("browser")){if(workspace.back())return;showSpace("browser");return;}
@@ -677,7 +686,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onDestroy(){
         super.onDestroy();
-        if(workspace!=null)workspace.destroy();hideFullScreenVideo();
+        if(home!=null)home.destroy();if(workspace!=null)workspace.destroy();hideFullScreenVideo();
         for(WebView v:tabs){if(v.getParent() instanceof ViewGroup)((ViewGroup)v.getParent()).removeView(v);v.destroy();}
         tabs.clear();
         if(fileCallback!=null)fileCallback.onReceiveValue(null);
