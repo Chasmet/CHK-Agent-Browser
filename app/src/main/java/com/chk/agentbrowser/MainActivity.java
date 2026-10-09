@@ -318,6 +318,7 @@ public class MainActivity extends Activity {
             case "read_page":extra="Lire le texte actuellement visible dans la page";break;
             case "tabs":extra="Lister les onglets et leurs adresses";break;
             case "open_url":extra="Ouvrir : "+args.optString("url","");break;
+            case "click_verified":extra="Cliquer une seule fois et vérifier le résultat";break;
             case "click":extra="Cliquer sur : "+args.optString("selector","");break;
             case "type":
                 extra="Saisir dans "+args.optString("selector","")+
@@ -408,6 +409,10 @@ public class MainActivity extends Activity {
                     if("up".equals(args.optString("direction")))offset=-offset;
                     current.scrollBy(0,offset);
                     callback.finish(true,"Défilement effectué.");return;
+                }
+                case "click_verified":{
+                    VerifiedClick.run(current,args,transferHandler,callback);
+                    return;
                 }
                 case "click":{
                     String selector=args.optString("selector","");
