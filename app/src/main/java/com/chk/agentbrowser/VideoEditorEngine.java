@@ -263,7 +263,7 @@ public final class VideoEditorEngine {
             JSONObject c=clips.getJSONObject(i);
             File f=requireSource(store,c.getString("path"),"video");
             long clipStart=c.optLong("start_ms",0),duration=c.optLong("duration_ms",10000);
-            if(clipStart<0||duration<500||duration>600000)throw new IllegalArgumentException("Découpe vidéo invalide");
+            if(clipStart<0||duration<500||duration>1200000)throw new IllegalArgumentException("Découpe vidéo invalide");
             checkMediaDuration(f,clipStart+duration);
             String filter=c.optString("filter","aucun");
             if(!filter.equals("aucun")&&!filter.equals("noir")&&!filter.equals("vintage")
@@ -285,7 +285,7 @@ public final class VideoEditorEngine {
                 JSONObject a=sounds.getJSONObject(i);
                 File f=requireSource(store,a.getString("path"),"audio");
                 long start=a.optLong("start_ms",0),duration=a.optLong("duration_ms",10000);
-                if(start<0||duration<500||duration>600000)throw new IllegalArgumentException("Découpe audio invalide");
+                if(start<0||duration<500||duration>1200000)throw new IllegalArgumentException("Découpe audio invalide");
                 checkMediaDuration(f,start+duration);
                 audioDuration+=duration;
             }
@@ -395,7 +395,7 @@ public final class VideoEditorEngine {
         try{
             WorkspaceStore store=new WorkspaceStore(context);String output=project.getString("output");
             File destination=store.file(output);
-            if(destination.exists()&&!replace)throw new IllegalArgumentException("Le MP4 existe déjà; replace=true nécessaire");
+            if(destination.exists()&&!replace)throw new IllegalArgumentException("Une vidéo porte déjà ce nom. Choisis Remplacer ou Nouvelle copie dans Studio.");
             // Render beside the destination and preserve the previous completed file on failure.
             File partial=new File(destination.getParentFile(),".render-"+java.util.UUID.randomUUID()+".mp4");
             app=context;activeOutput=partial;finalOutput=destination;lastOutput=output;error="";percent=0;state="running";

@@ -13,6 +13,8 @@ public final class BrowserScripts {
             +"function deepFind(sel){var rs=roots();for(var i=0;i<rs.length;i++){try{var e=rs[i].querySelector(sel);if(e)return e;}catch(x){}}return null;}";
     }
 
+    private static String highlight(){return "function mark(el){try{var r=el.getBoundingClientRect(),dot=document.createElement('div');dot.setAttribute('data-chk-pointer','true');dot.style.cssText='position:fixed;pointer-events:none!important;z-index:2147483647;border:3px solid #21d4c6;border-radius:50%;width:34px;height:34px;box-shadow:0 0 0 7px #21d4c633;';dot.style.left=(Math.max(20,Math.min(innerWidth-20,r.left+r.width/2))-17)+'px';dot.style.top=(Math.max(20,Math.min(innerHeight-20,r.top+r.height/2))-17)+'px';document.documentElement.appendChild(dot);setTimeout(function(){dot.remove();},900);}catch(ignore){}}";}
+
     public static String readPage() {
         return "(function(){"+finder()
             + "var out={text:(document.body&&document.body.innerText||'').slice(0,5000),elements:[],forms:0,ready:document.readyState,document_url:(typeof location!=='undefined'?location.href:''),visibility:(document.visibilityState||'unknown')};"
@@ -51,9 +53,9 @@ public final class BrowserScripts {
     }
 
     public static String type(String selectorLiteral,String textLiteral) {
-        return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");"
+        return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");"
             + "if(!el)return 'Champ introuvable';if(['password','file','hidden'].indexOf((el.type||'').toLowerCase())>=0)return 'Champ sensible bloqué';"
-            + "if(el.disabled||el.readOnly)return 'Champ non modifiable';el.focus();"
+            + "if(el.disabled||el.readOnly)return 'Champ non modifiable';if(el.scrollIntoView)el.scrollIntoView({block:'center'});mark(el);el.focus();"
             + "if(el.isContentEditable){el.textContent="+textLiteral+";}else{if(!('value' in el))return 'Champ non saisissable';"
             + "var proto=Object.getPrototypeOf(el),setter=null;while(proto&&!setter){var desc=Object.getOwnPropertyDescriptor(proto,'value');setter=desc&&desc.set;proto=Object.getPrototypeOf(proto);}"
             + "if(setter)setter.call(el,"+textLiteral+");else el.value="+textLiteral+";}"
@@ -62,13 +64,13 @@ public final class BrowserScripts {
     }
 
     public static String click(String selectorLiteral) {
-        return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Élément introuvable';"
-            +"if(el.disabled)return 'Élément désactivé';el.scrollIntoView({block:'center',inline:'center'});el.click();return 'Clic effectué';"
+        return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Élément introuvable';"
+            +"if(el.disabled)return 'Élément désactivé';el.scrollIntoView({block:'center',inline:'center'});mark(el);el.click();return 'Clic effectué';"
             +"}catch(e){return 'Erreur : '+e.message;}})()";
     }
 
     public static String select(String selectorLiteral,String valueLiteral,String labelLiteral,int index) {
-        return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Menu introuvable';"
+        return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Menu introuvable';"
             +"if((el.tagName||'').toLowerCase()!=='select')return 'Élément non sélectionnable';var opt=null;"
             +"var value="+valueLiteral+",label="+labelLiteral+",idx="+index+";"
             +"if(value)opt=Array.from(el.options).find(function(o){return o.value===value;});"
@@ -80,7 +82,7 @@ public final class BrowserScripts {
     }
 
     public static String check(String selectorLiteral,boolean checked) {
-        return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Option introuvable';"
+        return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Option introuvable';"
             +"var t=(el.type||'').toLowerCase();if(t!=='checkbox'&&t!=='radio'&&el.getAttribute('role')!=='checkbox'&&el.getAttribute('role')!=='radio')return 'Élément non cochable';"
             +"var wanted="+checked+";if('checked' in el){if(!!el.checked!==wanted)el.click();return (!!el.checked===wanted)?'État confirmé':'État non confirmé';}"
             +"var now=el.getAttribute('aria-checked')==='true';if(now!==wanted)el.click();return 'État demandé';"
@@ -92,7 +94,7 @@ public final class BrowserScripts {
     }
 
     public static String fileClick(String selectorLiteral) {
-        return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Champ fichier introuvable';"
+        return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Champ fichier introuvable';"
             +"if((el.type||'').toLowerCase()!=='file')return 'Le sélecteur ne cible pas input[type=file]';if(el.disabled)return 'Champ fichier désactivé';"
             +"el.click();return 'Sélecteur fichier ouvert';}catch(e){return 'Erreur : '+e.message;}})()";
     }
@@ -121,7 +123,7 @@ public final class BrowserScripts {
     }
 
     public static String linkUrl(String selectorLiteral) {
-        return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");if(!el)return '';var u=el.href||el.getAttribute('data-href')||'';"
+        return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");if(!el)return '';var u=el.href||el.getAttribute('data-href')||'';"
             +"if(!u&&el.closest){var a=el.closest('a');if(a)u=a.href||'';}return u;}catch(e){return '';}})()";
     }
 }

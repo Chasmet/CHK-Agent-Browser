@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
         container=findViewById(R.id.web_container);
         address=findViewById(R.id.address);progress=findViewById(R.id.progress);
         home=new BrowserHome(this,address,store,url->navigate(url));
-        findViewById(R.id.back).setOnClickListener(v->navigate(HOME));
+        findViewById(R.id.back).setOnClickListener(v->{home.newStart();navigate(HOME);});
         findViewById(R.id.voice_search).setOnClickListener(v->{try{startActivityForResult(new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT,"Rechercher sur Google"),812);}catch(Exception e){toast("Recherche vocale indisponible sur ce téléphone");}});
         findViewById(R.id.go).setOnClickListener(v->navigate(address.getText().toString()));
         findViewById(R.id.new_tab).setOnClickListener(v->{showSpace("browser");newTab(HOME);});
@@ -126,6 +126,7 @@ public class MainActivity extends Activity {
     }
     private void newTab(String url){
         if(tabs.size()>=12){toast("Maximum 12 onglets : ferme un onglet pour en ouvrir un autre");return;}
+        if(home!=null&&HOME.equals(url))home.newStart();
         WebView web=new WebView(this);web.setBackgroundColor(Color.WHITE);configure(web);
         tabs.add(web);select(web);web.loadUrl(url);
     }
@@ -370,12 +371,15 @@ public class MainActivity extends Activity {
             .setOnCancelListener(d->callback.finish(false,"Action annulée sur le téléphone."))
             .show();
     }
-    private void runAgentCommand(String action,JSONObject args,AgentClient.ResultCallback callback){
+    private void runAgentCommand(String action,JSONObject args,AgentClient.ResultCallback originalCallback){
+        final AgentClient.ResultCallback callback=(ok,result)->{transferHandler.post(()->finishAgentAction(ok));originalCallback.finish(ok,result);};
         if(!agentClient.isEnabled()){callback.finish(false,"MCP désactivé par le propriétaire.");return;}
         if(WorkspaceCommands.handles(action)){
             WorkspaceCommands.run(this,action,args,(ok,result)->{if(workspace!=null&&!activeSpace.equals("browser"))workspace.refresh();callback.finish(ok,result);});return;
         }
         showSpace("browser");
+        if(home!=null)home.revealWeb();
+        showAgentAction(action);
         if(current==null){callback.finish(false,"Aucun onglet.");return;}
         try{
             switch(action){
@@ -426,8 +430,8 @@ public class MainActivity extends Activity {
                 case "scroll":{
                     int offset=(int)(current.getHeight()*0.7f);
                     if("up".equals(args.optString("direction")))offset=-offset;
-                    current.scrollBy(0,offset);
-                    callback.finish(true,"Défilement effectué.");return;
+                    final WebView target=current;final int from=target.getScrollY(),to=Math.max(0,from+offset);
+                    android.animation.ValueAnimator animation=android.animation.ValueAnimator.ofInt(from,to);animation.setDuration(280);animation.addUpdateListener(v->target.scrollTo(target.getScrollX(),(int)v.getAnimatedValue()));animation.addListener(new android.animation.AnimatorListenerAdapter(){@Override public void onAnimationEnd(android.animation.Animator a){callback.finish(true,"Défilement effectué.");}});animation.start();return;
                 }
                 case "click_verified":{
                     VerifiedClick.run(current,args,transferHandler,callback);
@@ -621,9 +625,16 @@ public class MainActivity extends Activity {
         }
     }
     private void hideFullScreenVideo(){if(fullScreenVideo==null)return;((ViewGroup)getWindow().getDecorView()).removeView(fullScreenVideo);fullScreenVideo=null;getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);WebChromeClient.CustomViewCallback cb=fullScreenCallback;fullScreenCallback=null;if(cb!=null)cb.onCustomViewHidden();}
+    private int agentActionGeneration;
+    private void showAgentAction(String action){
+        agentActionGeneration++;TextView banner=findViewById(R.id.agent_action);String label;
+        switch(action){case "open_url":label="Navigation";break;case "click":case "click_verified":label="Clic sur la page";break;case "type":label="Saisie dans un formulaire";break;case "scroll":label="Défilement";break;case "read_page":label="Lecture de la page";break;case "upload_file":label="Importation du fichier";break;case "download_file":label="Téléchargement";break;default:label="Vérification de la page";}
+        banner.setText("●  ChatGPT · "+label);banner.setVisibility(View.VISIBLE);banner.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Navigation visible").setMessage("Les actions du connecteur s’exécutent dans cet onglet. Tu peux arrêter le connecteur depuis Réglages.").setNegativeButton("Fermer",null).setPositiveButton("Réglages",(d,n)->startActivity(new Intent(this,SettingsActivity.class))).show());
+    }
+    private void finishAgentAction(boolean ok){int ticket=agentActionGeneration;TextView banner=findViewById(R.id.agent_action);if(banner.getVisibility()!=View.VISIBLE)return;banner.setText(ok?"✓  ChatGPT · action effectuée":"!  ChatGPT · action à vérifier");transferHandler.postDelayed(()->{if(ticket==agentActionGeneration)banner.setVisibility(View.GONE);},2200);}
     private void showSpace(String space){
         boolean browser=space.equals("browser");
-        findViewById(R.id.space_header).setVisibility(browser?View.GONE:View.VISIBLE);
+        findViewById(R.id.space_header).setVisibility(View.GONE);
         if(home!=null)home.space(browser,current==null?HOME:current.getUrl());
         findViewById(R.id.web_container).setVisibility(browser?View.VISIBLE:View.GONE);
         findViewById(R.id.workspace_container).setVisibility(browser?View.GONE:View.VISIBLE);
@@ -631,8 +642,11 @@ public class MainActivity extends Activity {
         findViewById(R.id.new_tab).setVisibility(browser?View.VISIBLE:View.GONE);
         findViewById(R.id.tab_count).setVisibility(browser?View.VISIBLE:View.GONE);
         ((TextView)findViewById(R.id.space_title)).setText(browser?"CHK Browser":space.equals("files")?"Fichiers":"Notes");
-        String[] spaces={"browser","files","notes"};int[] ids={R.id.nav_browser,R.id.nav_files,R.id.nav_notes};
-        for(int i=0;i<ids.length;i++){TextView v=findViewById(ids[i]);boolean selected=space.equals(spaces[i]);v.setTextColor(selected?MobileUi.ACCENT:MobileUi.MUTED);v.setBackground(selected?MobileUi.bg(this,MobileUi.CARD):null);v.setSelected(selected);v.setFocusable(true);}
+        boolean light=space.equals("files");findViewById(R.id.space_nav).setBackgroundColor(light?0xfff4f6fb:0xff202124);
+        getWindow().setStatusBarColor(0xff17181c);getWindow().setNavigationBarColor(light?0xfff4f6fb:0xff202124);
+        if(Build.VERSION.SDK_INT>=26){int flags=getWindow().getDecorView().getSystemUiVisibility();getWindow().getDecorView().setSystemUiVisibility(light?flags|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:flags&~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);}
+        String[] spaces={"browser","files","video","notes"},icons={"globe","folder","video","document"};int[] ids={R.id.nav_browser,R.id.nav_files,R.id.nav_video,R.id.nav_notes};
+        for(int i=0;i<ids.length;i++){TextView v=findViewById(ids[i]);boolean selected=space.equals(spaces[i]);int color=selected?(light?0xff2468cb:0xffc5bfff):(light?0xff687080:0xffbfc2cd);v.setTextSize(11);v.setTextColor(color);v.setCompoundDrawablesWithIntrinsicBounds(null,UiIcons.icon(this,icons[i],color,23),null,null);v.setBackground(selected?MobileUi.bg(this,light?0xffdceaff:0xff393548):null);v.setSelected(selected);v.setFocusable(true);}
         if(!browser&&workspace!=null&&!space.equals(activeSpace))workspace.show(space);
         activeSpace=space;
     }
