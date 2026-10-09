@@ -11,6 +11,7 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.effect.Contrast;
 import androidx.media3.effect.HslAdjustment;
+import androidx.media3.effect.Presentation;
 import androidx.media3.effect.RgbAdjustment;
 import androidx.media3.effect.RgbFilter;
 import androidx.media3.effect.RgbMatrix;
@@ -45,6 +46,8 @@ import java.util.concurrent.Executors;
 @androidx.annotation.OptIn(markerClass = UnstableApi.class)
 public final class VideoEditorEngine {
     private static final String SAVE = "video_editor_project.json";
+    private static final String ALPHA_OMEGA_OFFICIAL_OUTPUT =
+        "musique/chknoirshadow/clip-grok-videos/ALPHA_OMEGA_CLIP_OFFICIEL_9x16.mp4";
     private static final String DEFAULT_OUTPUT =
         "musique/chknoirshadow/clip-grok-videos/ALPHA_OMEGA_CLIP_FINAL_GROK.mp4";
     private static final ExecutorService DISK=Executors.newSingleThreadExecutor();
@@ -160,10 +163,13 @@ public final class VideoEditorEngine {
             long durationMs=duration==null?-1:Long.parseLong(duration);
             boolean picture="yes".equalsIgnoreCase(hasVideo),sound="yes".equalsIgnoreCase(hasAudio);
             boolean correctDuration=expectedMs>0&&durationMs>=0&&Math.abs(durationMs-expectedMs)<=500;
-            boolean valid=picture&&(! (audioCount>0)||sound)&&correctDuration&&sourcesPresent;
+            boolean correctAspect=!"9:16".equals(project.optString("aspect_ratio","source"))
+                || ("720".equals(width)&&"1280".equals(height));
+            boolean valid=picture&&(!(audioCount>0)||sound)&&correctDuration&&sourcesPresent&&correctAspect;
             result.put("duration_ms",durationMs).put("has_video",picture)
                 .put("has_audio",sound).put("width_px",width).put("height_px",height)
-                .put("duration_matches_project",correctDuration).put("valid",valid);
+                .put("duration_matches_project",correctDuration)
+                .put("aspect_ratio_matches_project",correctAspect).put("valid",valid);
             if(!valid)result.put("reason","Contrôler la durée, les pistes et les sources du projet");
             return result;
         }catch(Exception ex){
@@ -217,11 +223,19 @@ public final class VideoEditorEngine {
             sounds.put(new JSONObject().put("path",a).put("start_ms",0).put("duration_ms",10000));
         }
         JSONObject p=new JSONObject().put("name","ALPHA OMEGA · Clip Grok 60s")
-                .put("output",DEFAULT_OUTPUT).put("clips",clips).put("audio",sounds);
+                .put("output",ALPHA_OMEGA_OFFICIAL_OUTPUT)
+                .put("aspect_ratio","9:16").put("aspect_mode","crop")
+                .put("clips",clips).put("audio",sounds);
         validate(app,p);return p;
     }
     public void validate(Context context,JSONObject p)throws Exception{
         if(p.toString().length()>64000)throw new IllegalArgumentException("Projet trop volumineux");
+        String aspect=p.optString("aspect_ratio","source");
+        String layout=p.optString("aspect_mode","crop");
+        if(!"source".equals(aspect)&&!"9:16".equals(aspect))
+            throw new IllegalArgumentException("Format vidéo inconnu: "+aspect);
+        if(!"crop".equals(layout)&&!"fit".equals(layout))
+            throw new IllegalArgumentException("Recadrage inconnu: "+layout);
         WorkspaceStore store=new WorkspaceStore(context);
         JSONArray clips=p.getJSONArray("clips"),sounds=p.optJSONArray("audio");
         if(clips.length()==0||clips.length()>40)throw new IllegalArgumentException("1 à 40 vidéos requises");
@@ -317,10 +331,17 @@ public final class VideoEditorEngine {
             for(int i=0;i<clips.length();i++){
                 JSONObject c=clips.getJSONObject(i);
                 long start=c.optLong("start_ms",0),len=c.optLong("duration_ms",10000);
+                List<androidx.media3.common.Effect> videoEffects=effects(
+                    c.optString("filter","aucun"),len,c.optLong("fade_ms",0));
+                if("9:16".equals(project.optString("aspect_ratio","source"))){
+                    int layout="fit".equals(project.optString("aspect_mode","crop"))
+                        ? Presentation.LAYOUT_SCALE_TO_FIT
+                        : Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP;
+                    videoEffects.add(Presentation.createForWidthAndHeight(720,1280,layout));
+                }
                 videos.add(new EditedMediaItem.Builder(media(store.file(c.getString("path")),start,len))
                     .setRemoveAudio(true)
-                    .setEffects(new Effects(Collections.emptyList(),
-                       effects(c.optString("filter","aucun"),len,c.optLong("fade_ms",0))))
+                    .setEffects(new Effects(Collections.emptyList(),videoEffects))
                     .build());
             }
             if(audios!=null)for(int i=0;i<audios.length();i++){
