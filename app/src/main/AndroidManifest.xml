@@ -27,6 +27,7 @@
                 <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
             </intent-filter>
         </receiver>
+        <activity android:name=".VideoEditorActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".MediaPreviewActivity" android:exported="false" />
         <activity android:name=".NoteEditorActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".DiagnosticActivity" android:exported="false" />
