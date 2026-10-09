@@ -292,6 +292,7 @@ public class MainActivity extends Activity {
             agentClient.attach(this,new AgentClient.CommandHandler(){
                 @Override public String pageUrl(){return current==null||current.getUrl()==null?"":current.getUrl();}
                 @Override public String pageTitle(){return current==null||current.getTitle()==null?"":current.getTitle();}
+                @Override public String sessionSource(){return "visible";}
                 @Override public void onCommand(JSONObject command,AgentClient.ResultCallback callback){
                     confirmAgentCommand(command,callback);
                 }
@@ -388,6 +389,9 @@ public class MainActivity extends Activity {
                             JSONObject details=new JSONObject(content);
                             out.put("text",details.optString("text"));
                             out.put("elements",details.optJSONArray("elements"));
+                            out.put("document_url",details.optString("document_url"));
+                            out.put("session_source","visible");
+                            out.put("visibility",details.optString("visibility"));
                             callback.finish(true,out.toString());
                         }catch(Exception ex){callback.finish(false,"Lecture impossible");}
                     });return;
