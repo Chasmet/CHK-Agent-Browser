@@ -6,6 +6,7 @@ android {
         applicationId 'com.chk.agentbrowser'
         minSdk 21
         targetSdk 34
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         versionCode = Integer.parseInt(System.getenv('RELEASE_CODE') ?: '1')
         versionName = (System.getenv('RELEASE_VERSION') ?: '1.0.0')
     }
@@ -28,4 +29,9 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
     lint { abortOnError true }
+}
+
+dependencies {
+    androidTestImplementation "androidx.test:runner:1.5.2"
+    androidTestImplementation "androidx.test.ext:junit:1.1.5"
 }

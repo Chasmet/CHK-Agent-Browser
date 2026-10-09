@@ -1,22 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#0D1423" android:fillViewport="true">
 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="RÉGLAGES" android:textSize="25sp" android:textStyle="bold" android:textColor="#FFFFFF" android:paddingBottom="15dp" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Navigation locale" android:textColor="#6ED2FF" android:textSize="17sp" android:paddingBottom="8dp" />
+    <Button android:id="@+id/settings_back" android:layout_width="match_parent" android:layout_height="48dp" android:text="‹ Revenir à mon espace" android:textAllCaps="false" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Réglages" android:textSize="25sp" android:textStyle="bold" android:textColor="#FFFFFF" android:paddingBottom="15dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Navigation locale" android:textColor="#69E2C6" android:textSize="17sp" android:paddingBottom="8dp" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Connexion Internet du téléphone ; aucun crédit d'API IA." android:textColor="#CAD8E9" android:paddingBottom="22dp" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Mises à jour APK" android:textColor="#6ED2FF" android:textSize="19sp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Mise à jour automatique" android:textColor="#69E2C6" android:textSize="19sp" />
     <TextView android:id="@+id/version" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Version : 1.0.0" android:textColor="#FFFFFF" android:paddingVertical="12dp" />
+    <Switch android:id="@+id/auto_update" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:text="Mise à jour automatique" android:textColor="#F1F5FF" />
     <Button android:id="@+id/check_update" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Rechercher et télécharger la mise à jour" android:textAllCaps="false" />
     <Button android:id="@+id/install_update" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Installer la mise à jour sur ce téléphone" android:textAllCaps="false" android:visibility="gone" />
     <TextView android:id="@+id/update_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#CAD8E9" android:paddingVertical="14dp" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Connexion MCP ChatGPT" android:textColor="#6ED2FF" android:textSize="19sp" android:paddingBottom="8dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Connexion MCP ChatGPT" android:textColor="#69E2C6" android:textSize="19sp" android:paddingBottom="8dp" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Même serveur Render, sans clé API. La connexion continue grâce au service Android et sa notification, même dans ChatGPT. Active le mode autonome ci-dessous pour supprimer les confirmations répétées." android:textColor="#CAD8E9" android:paddingBottom="10dp" />
     <TextView android:id="@+id/mcp_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="MCP désactivé" android:textColor="#FFFFFF" android:paddingBottom="12dp" />
     <Button android:id="@+id/mcp_connect" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Activer / reconnecter MCP" android:textAllCaps="false" />
     <Button android:id="@+id/mcp_copy" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Copier l'adresse MCP pour ChatGPT" android:textAllCaps="false" />
     <Button android:id="@+id/mcp_diagnostic" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Diagnostic connexion et commandes" android:textAllCaps="false" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="Autonomie et autorisations" android:textColor="#6ED2FF" android:textSize="19sp" android:paddingTop="20dp" android:paddingBottom="8dp" />
+        android:text="Autonomie et autorisations" android:textColor="#69E2C6" android:textSize="19sp" android:paddingTop="20dp" android:paddingBottom="8dp" />
     <Switch android:id="@+id/autonomous_mode" android:layout_width="match_parent" android:layout_height="wrap_content"
         android:text="Mode autonome : agir sans demander à chaque étape"
         android:textColor="#FFFFFF" android:paddingVertical="12dp" />

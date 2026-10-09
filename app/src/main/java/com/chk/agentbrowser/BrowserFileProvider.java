@@ -16,7 +16,12 @@ import java.net.URLConnection;
 public final class BrowserFileProvider extends ContentProvider {
     private File resolve(Uri uri) throws FileNotFoundException {
         if(getContext()==null || !(getContext().getPackageName()+".browserfiles").equals(uri.getAuthority())
-            || uri.getPathSegments().size()!=1) throw new FileNotFoundException("URI invalide");
+            || uri.getPathSegments().isEmpty()) throw new FileNotFoundException("URI invalide");
+        if("workspace".equals(uri.getPathSegments().get(0))){
+            String path=android.text.TextUtils.join("/",uri.getPathSegments().subList(1,uri.getPathSegments().size()));
+            try{File f=new WorkspaceStore(getContext()).file(path);if(!f.isFile())throw new FileNotFoundException("Fichier introuvable");return f;}catch(Exception e){throw new FileNotFoundException("Chemin invalide");}
+        }
+        if(uri.getPathSegments().size()!=1)throw new FileNotFoundException("URI invalide");
         String name=uri.getLastPathSegment();
         if(name==null || !name.matches("[A-Za-z0-9._-]{1,180}")) throw new FileNotFoundException("Nom interdit");
         File root=new File(getContext().getCacheDir(),"agent_uploads");

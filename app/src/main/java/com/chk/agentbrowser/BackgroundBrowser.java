@@ -55,6 +55,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         s.setAllowFileAccess(false);s.setAllowContentAccess(false);
         s.setJavaScriptCanOpenWindowsAutomatically(true);s.setSupportMultipleWindows(true);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        s.setUseWideViewPort(true);s.setLoadWithOverviewMode(true);
         s.setLoadsImagesAutomatically(true);s.setBlockNetworkImage(false);
         if(Build.VERSION.SDK_INT>=26)s.setSafeBrowsingEnabled(true);
         CookieManager.getInstance().setAcceptCookie(true);
@@ -164,6 +165,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         String action=command.optString("action","");
         JSONObject args=command.optJSONObject("args");if(args==null)args=new JSONObject();
         final JSONObject parameters=args;
+        if(WorkspaceCommands.handles(action)){if(!AgentClient.get(app).isEnabled()){callback.finish(false,"MCP désactivé");return;}WorkspaceCommands.run(app,action,args,callback);return;}
         if("open_url".equals(action)){
             String url=args.optString("url","");
             if(url.length()>2000||!isPublicHttps(Uri.parse(url))){callback.finish(false,"URL HTTPS publique requise.");return;}

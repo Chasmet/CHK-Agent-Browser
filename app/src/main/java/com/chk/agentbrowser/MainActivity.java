@@ -43,10 +43,14 @@ public class MainActivity extends Activity {
     private WebView current;
     private BrowserStore store;
     private FrameLayout container;
-    private LinearLayout strip;
     private EditText address;
     private ProgressBar progress;
-    private TextView bookmark;
+    private WorkspacePanel workspace;
+    private String activeSpace="browser";
+    private boolean focusMode;
+    private View fullScreenVideo;
+    private WebChromeClient.CustomViewCallback fullScreenCallback;
+    private final Runnable connectionTick=new Runnable(){public void run(){if(!isFinishing()){((TextView)findViewById(R.id.connection_badge)).setText(agentClient.isEnabled()?(agentClient.isAutonomous()?"● Agent actif · autonome":"● Agent actif · manuel"):"Ton espace de travail");transferHandler.postDelayed(this,3000);}}};
     private ValueCallback<Uri[]> fileCallback;
     private AgentClient agentClient;
     private Uri[] pendingUploadUris;
@@ -58,30 +62,32 @@ public class MainActivity extends Activity {
         super.onCreate(state);setContentView(R.layout.activity_main);
         store=new BrowserStore(this);
         agentClient=AgentClient.get(this);
-        container=findViewById(R.id.web_container);strip=findViewById(R.id.tab_strip);
+        container=findViewById(R.id.web_container);
         address=findViewById(R.id.address);progress=findViewById(R.id.progress);
-        bookmark=findViewById(R.id.bookmark);
         findViewById(R.id.back).setOnClickListener(v->{if(current!=null&&current.canGoBack())current.goBack();});
-        findViewById(R.id.forward).setOnClickListener(v->{if(current!=null&&current.canGoForward())current.goForward();});
         findViewById(R.id.go).setOnClickListener(v->navigate(address.getText().toString()));
-        findViewById(R.id.reload).setOnClickListener(v->{if(current!=null)current.reload();});
-        findViewById(R.id.new_tab).setOnClickListener(v->newTab(HOME));
-        findViewById(R.id.settings).setOnClickListener(v->startActivity(new Intent(this,SettingsActivity.class)));
-        findViewById(R.id.agent).setOnClickListener(v->readPage());
-        findViewById(R.id.library).setOnClickListener(v->library());
-        bookmark.setOnClickListener(v->toggleBookmark());
+        findViewById(R.id.new_tab).setOnClickListener(v->{showSpace("browser");newTab(HOME);});
         address.setOnEditorActionListener((v,id,event)->{
             if(id==EditorInfo.IME_ACTION_GO || (event!=null&&event.getKeyCode()==KeyEvent.KEYCODE_ENTER)){
                 navigate(address.getText().toString());return true;
             }return false;
         });
-        newTab(HOME);
+        workspace=new WorkspacePanel(this,findViewById(R.id.workspace_container));
+        findViewById(R.id.nav_browser).setOnClickListener(v->showSpace("browser"));
+        findViewById(R.id.nav_files).setOnClickListener(v->showSpace("files"));
+        findViewById(R.id.nav_notes).setOnClickListener(v->showSpace("notes"));
+        findViewById(R.id.menu).setOnClickListener(v->browserMenu());
+        findViewById(R.id.tab_count).setOnClickListener(v->tabOverview());
+        restoreTabs(state);
+        showSpace(state==null?"browser":state.getString("space","browser"));
+        String launch=getIntent().getStringExtra("open_url");if(launch!=null)navigate(launch);
         autoUpdate();
     }
     private void toast(String value){Toast.makeText(this,value,Toast.LENGTH_SHORT).show();}
     private int dp(float p){return (int)(getResources().getDisplayMetrics().density*p+0.5f);}
     private void autoUpdate(){
         android.content.SharedPreferences pref=getSharedPreferences("update_monitor",MODE_PRIVATE);
+        if(!pref.getBoolean("enabled",true))return;
         long now=System.currentTimeMillis();
         if(now-pref.getLong("last_check",0)<86400000L)return;
         pref.edit().putLong("last_check",now).apply();
@@ -106,6 +112,7 @@ public class MainActivity extends Activity {
         catch(Exception e){return HOME;}
     }
     private void navigate(String text){
+        showSpace("browser");
         String url=normalize(text);
         if(url.isEmpty()){toast("Adresse non autorisée");return;}
         if(current!=null)current.loadUrl(url);
@@ -113,7 +120,7 @@ public class MainActivity extends Activity {
         address.clearFocus();
     }
     private void newTab(String url){
-        if(tabs.size()>=12){toast("Maximum 12 onglets");return;}
+        if(tabs.size()>=12){toast("Maximum 12 onglets : ferme un onglet pour en ouvrir un autre");return;}
         WebView web=new WebView(this);web.setBackgroundColor(Color.WHITE);configure(web);
         tabs.add(web);select(web);web.loadUrl(url);
     }
@@ -124,6 +131,8 @@ public class MainActivity extends Activity {
         s.setJavaScriptCanOpenWindowsAutomatically(true);s.setSupportMultipleWindows(true);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setBuiltInZoomControls(true);s.setDisplayZoomControls(false);
+        s.setUseWideViewPort(true);s.setLoadWithOverviewMode(true);
+        s.setTextZoom(getSharedPreferences("mobile_ui",MODE_PRIVATE).getInt("text_zoom",100));
         if(Build.VERSION.SDK_INT>=26)s.setSafeBrowsingEnabled(true);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
@@ -144,10 +153,16 @@ public class MainActivity extends Activity {
             @Override public void onPageFinished(WebView v,String url){
                 applyCookiePolicy(v,url);
                 if(url!=null)store.add("history",v.getTitle(),url);
-                if(v==current){address.setText(url);updateBookmark();refreshTabs();}
+                if(v==current){if(!address.hasFocus())address.setText(url);refreshTabs();saveTabs();}
             }
         });
+        web.setOnLongClickListener(v->{WebView.HitTestResult hit=web.getHitTestResult();if(hit==null||hit.getExtra()==null||!(hit.getType()==WebView.HitTestResult.SRC_ANCHOR_TYPE||hit.getType()==WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE))return false;String link=hit.getExtra();if(!link.startsWith("https://"))return false;new AlertDialog.Builder(this).setTitle("Lien").setMessage(link).setItems(new String[]{"Ouvrir dans un nouvel onglet","Copier le lien","Partager"},(d,i)->{if(i==0)newTab(link);else if(i==1){((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Lien",link));toast("Lien copié");}else startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,link),"Partager le lien"));}).show();return true;});
         web.setWebChromeClient(new WebChromeClient(){
+            @Override public void onShowCustomView(View view,CustomViewCallback callback){
+                if(fullScreenVideo!=null){callback.onCustomViewHidden();return;}
+                fullScreenVideo=view;fullScreenCallback=callback;((ViewGroup)getWindow().getDecorView()).addView(view,new ViewGroup.LayoutParams(-1,-1));getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+            }
+            @Override public void onHideCustomView(){hideFullScreenVideo();}
             @Override public void onProgressChanged(WebView v,int percentage){
                 if(v==current){progress.setVisibility(percentage>=100?View.GONE:View.VISIBLE);progress.setProgress(percentage);}
             }
@@ -210,7 +225,7 @@ public class MainActivity extends Activity {
         if(web.getParent() instanceof ViewGroup)((ViewGroup)web.getParent()).removeView(web);
         container.addView(web,new FrameLayout.LayoutParams(-1,-1));
         address.setText(web.getUrl()==null?"":web.getUrl());
-        progress.setVisibility(View.GONE);updateBookmark();refreshTabs();
+        progress.setVisibility(View.GONE);refreshTabs();
     }
     private void close(WebView web){
         int i=tabs.indexOf(web);if(i<0)return;
@@ -219,33 +234,19 @@ public class MainActivity extends Activity {
             container.removeView(web);current=null;
             if(!tabs.isEmpty())select(tabs.get(Math.max(0,i-1)));
         }
-        web.destroy();if(tabs.isEmpty())newTab(HOME);refreshTabs();
+        web.destroy();if(tabs.isEmpty())newTab(HOME);refreshTabs();saveTabs();
     }
     private void refreshTabs(){
-        strip.removeAllViews();
-        for(WebView web:tabs){
-            LinearLayout item=new LinearLayout(this);item.setGravity(Gravity.CENTER_VERTICAL);
-            item.setBackgroundColor(web==current?Color.rgb(39,76,104):Color.rgb(20,32,50));
-            TextView label=new TextView(this);
-            String title=web.getTitle();if(title==null||title.isEmpty())title="Nouvel onglet";
-            label.setText(title.length()>19?title.substring(0,19)+"…":title);
-            label.setTextColor(Color.WHITE);label.setTextSize(12);label.setPadding(dp(12),0,dp(5),0);
-            item.addView(label,new LinearLayout.LayoutParams(dp(126),-1));
-            TextView x=new TextView(this);x.setText("×");x.setTextSize(22);x.setGravity(Gravity.CENTER);x.setTextColor(Color.LTGRAY);
-            item.addView(x,new LinearLayout.LayoutParams(dp(34),-1));
-            item.setOnClickListener(v->select(web));x.setOnClickListener(v->close(web));
-            strip.addView(item,new LinearLayout.LayoutParams(dp(160),-1));
-        }
-    }
-    private void updateBookmark(){
-        bookmark.setText(store.hasFavorite(current==null?"":current.getUrl())?"★ Favori":"☆ Favori");
+        ((TextView)findViewById(R.id.tab_count)).setText(String.valueOf(tabs.size()));
+        findViewById(R.id.tab_count).setContentDescription("Voir les "+tabs.size()+" onglets");
+        if(activeSpace.equals("browser"))((TextView)findViewById(R.id.space_title)).setText("CHK Browser");
     }
     private void toggleBookmark(){
         if(current==null||current.getUrl()==null)return;
         String url=current.getUrl();
         if(store.hasFavorite(url)){store.removeFavorite(url);toast("Favori retiré");}
         else{store.add("favorites",current.getTitle(),url);toast("Favori ajouté");}
-        updateBookmark();
+
     }
     private void library(){
         new AlertDialog.Builder(this).setTitle("Bibliothèque")
@@ -280,6 +281,8 @@ public class MainActivity extends Activity {
     }
     @Override protected void onResume(){
         super.onResume();
+        transferHandler.removeCallbacks(connectionTick);transferHandler.post(connectionTick);
+        if(workspace!=null&&!activeSpace.equals("browser"))workspace.refresh();
         if(agentClient!=null){
             AgentService.ensureRunning(this);
             if(agentClient.isAutonomous()&&current!=null){
@@ -300,6 +303,7 @@ public class MainActivity extends Activity {
         }
     }
     @Override protected void onPause(){
+        saveTabs();transferHandler.removeCallbacks(connectionTick);
         if(agentClient!=null) {
             if(current!=null)AgentService.syncVisible(this,current.getUrl());
             agentClient.detach(this);
@@ -315,7 +319,8 @@ public class MainActivity extends Activity {
         if(args==null)args=new JSONObject();
         final JSONObject parameters=args;
         String extra="";
-        switch(action){
+        if(WorkspaceCommands.handles(action))extra="Utiliser l’espace Fichiers et Notes : "+action;
+        else switch(action){
             case "read_page":extra="Lire le texte actuellement visible dans la page";break;
             case "tabs":extra="Lister les onglets et leurs adresses";break;
             case "open_url":extra="Ouvrir : "+args.optString("url","");break;
@@ -361,6 +366,10 @@ public class MainActivity extends Activity {
     }
     private void runAgentCommand(String action,JSONObject args,AgentClient.ResultCallback callback){
         if(!agentClient.isEnabled()){callback.finish(false,"MCP désactivé par le propriétaire.");return;}
+        if(WorkspaceCommands.handles(action)){
+            WorkspaceCommands.run(this,action,args,(ok,result)->{if(workspace!=null&&!activeSpace.equals("browser"))workspace.refresh();callback.finish(ok,result);});return;
+        }
+        showSpace("browser");
         if(current==null){callback.finish(false,"Aucun onglet.");return;}
         try{
             switch(action){
@@ -605,6 +614,47 @@ public class MainActivity extends Activity {
             callback.finish(false,"Capture impossible : "+e.getClass().getSimpleName());
         }
     }
+    private void hideFullScreenVideo(){if(fullScreenVideo==null)return;((ViewGroup)getWindow().getDecorView()).removeView(fullScreenVideo);fullScreenVideo=null;getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);WebChromeClient.CustomViewCallback cb=fullScreenCallback;fullScreenCallback=null;if(cb!=null)cb.onCustomViewHidden();}
+    private void showSpace(String space){
+        boolean browser=space.equals("browser");
+        findViewById(R.id.web_container).setVisibility(browser?View.VISIBLE:View.GONE);
+        findViewById(R.id.workspace_container).setVisibility(browser?View.GONE:View.VISIBLE);
+        findViewById(R.id.address_bar).setVisibility(browser?View.VISIBLE:View.GONE);
+        findViewById(R.id.new_tab).setVisibility(browser?View.VISIBLE:View.GONE);
+        findViewById(R.id.tab_count).setVisibility(browser?View.VISIBLE:View.GONE);
+        ((TextView)findViewById(R.id.space_title)).setText(browser?"CHK Browser":space.equals("files")?"Fichiers":"Notes");
+        String[] spaces={"browser","files","notes"};int[] ids={R.id.nav_browser,R.id.nav_files,R.id.nav_notes};
+        for(int i=0;i<ids.length;i++){TextView v=findViewById(ids[i]);boolean selected=space.equals(spaces[i]);v.setTextColor(selected?MobileUi.ACCENT:MobileUi.MUTED);v.setBackground(selected?MobileUi.bg(this,MobileUi.CARD):null);v.setSelected(selected);v.setFocusable(true);}
+        if(!browser&&workspace!=null&&!space.equals(activeSpace))workspace.show(space);
+        activeSpace=space;
+    }
+    private void browserMenu(){
+        if(!activeSpace.equals("browser")){new AlertDialog.Builder(this).setTitle("Espace de travail").setItems(new String[]{"Réglages","Revenir au navigateur"},(d,i)->{if(i==0)startActivity(new Intent(this,SettingsActivity.class));else showSpace("browser");}).show();return;}
+        new AlertDialog.Builder(this).setTitle("Actions de la page").setItems(new String[]{"Actualiser","Page suivante",store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris","Favoris et historique","Rechercher dans la page","Partager le lien","Enregistrer la page dans Notes","Lire / copier le texte","Taille du texte","Mode lecture plein écran","Réglages"},(d,i)->{
+            switch(i){case 0:if(current!=null)current.reload();break;case 1:if(current!=null&&current.canGoForward())current.goForward();break;case 2:toggleBookmark();break;case 3:library();break;case 4:findInPage();break;
+                case 5:if(current!=null)startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,current.getUrl()),"Partager la page"));break;
+                case 6:savePageNote();break;case 7:readPage();break;case 8:textSize();break;case 9:setFocusMode(true);break;case 10:startActivity(new Intent(this,SettingsActivity.class));break;}
+        }).setNegativeButton("Fermer",null).show();
+    }
+    private void textSize(){new AlertDialog.Builder(this).setTitle("Taille du texte des pages").setItems(new String[]{"100 % · Standard","115 % · Confort","130 % · Grand","150 % · Très grand"},(d,i)->{int zoom=new int[]{100,115,130,150}[i];getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putInt("text_zoom",zoom).apply();for(WebView web:tabs)web.getSettings().setTextZoom(zoom);}).show();}
+    private void findInPage(){if(current==null)return;WebView web=current;EditText input=new EditText(this);input.setSingleLine(true);input.setHint("Mot à rechercher");LinearLayout box=MobileUi.column(this);box.setPadding(dp(16),dp(8),dp(16),dp(8));box.addView(input);TextView count=MobileUi.text(this,"Saisis un mot",14,MobileUi.MUTED);box.addView(count);web.setFindListener((index,total,done)->{if(done)count.setText(total==0?"Aucun résultat":(index+1)+" / "+total);});input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int aft){}public void onTextChanged(CharSequence s,int st,int b,int c){web.findAllAsync(s.toString());}public void afterTextChanged(android.text.Editable e){}});
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Rechercher dans la page").setView(box).setPositiveButton("Suivant",null).setNeutralButton("Précédent",null).setNegativeButton("Fermer",null).create();dialog.setOnDismissListener(d->{web.clearMatches();web.setFindListener(null);});dialog.setOnShowListener(d->{dialog.getButton(-1).setOnClickListener(v->web.findNext(true));dialog.getButton(-3).setOnClickListener(v->web.findNext(false));});dialog.show();
+    }
+    private void setFocusMode(boolean enabled){focusMode=enabled;findViewById(R.id.space_nav).setVisibility(enabled?View.GONE:View.VISIBLE);findViewById(R.id.address_bar).setVisibility(enabled?View.GONE:View.VISIBLE);if(enabled)toast("Lecture agrandie · Retour pour retrouver les commandes");}
+    private void savePageNote(){if(current==null)return;WebView web=current;String title=web.getTitle(),url=web.getUrl();web.evaluateJavascript("(document.body && document.body.innerText || '').slice(0,12000)",raw->{if(isFinishing())return;startActivity(new Intent(this,NoteEditorActivity.class).putExtra("title",title).putExtra("body",fromJavascript(raw)).putExtra("source",url));});}
+    private void tabOverview(){
+        android.app.Dialog dialog=new android.app.Dialog(this);LinearLayout box=MobileUi.column(this);box.setPadding(dp(16),dp(16),dp(16),dp(16));box.setBackgroundColor(Color.rgb(13,20,35));box.addView(MobileUi.text(this,"Tes onglets · "+tabs.size()+" / 12",22,MobileUi.TEXT));
+        android.widget.ScrollView sc=new android.widget.ScrollView(this);box.addView(sc,new LinearLayout.LayoutParams(-1,0,1));LinearLayout rows=MobileUi.column(this);sc.addView(rows);
+        for(WebView web:new ArrayList<>(tabs)){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);String title=web.getTitle()==null?"Nouvel onglet":web.getTitle();TextView label=MobileUi.action(this,(web==current?"●  ":"")+title+"\n"+(web.getUrl()==null?"":web.getUrl()));label.setMaxLines(3);label.setTextColor(web==current?MobileUi.ACCENT:MobileUi.TEXT);row.addView(label,new LinearLayout.LayoutParams(0,-2,1));label.setOnClickListener(v->{select(web);showSpace("browser");dialog.dismiss();});TextView x=MobileUi.action(this,"×");x.setTextSize(24);x.setContentDescription("Fermer l’onglet "+title);row.addView(x,new LinearLayout.LayoutParams(dp(48),dp(64)));x.setOnClickListener(v->{close(web);dialog.dismiss();tabOverview();});rows.addView(row);}
+        TextView add=MobileUi.action(this,"＋ Nouvel onglet");box.addView(add);add.setOnClickListener(v->{showSpace("browser");newTab(HOME);dialog.dismiss();address.requestFocus();((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(address,InputMethodManager.SHOW_IMPLICIT);});TextView done=MobileUi.action(this,"Revenir à la page");box.addView(done);done.setOnClickListener(v->dialog.dismiss());dialog.setContentView(box);android.view.Window w=dialog.getWindow();if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.setLayout(-1,Math.round(getResources().getDisplayMetrics().heightPixels*0.80f));w.setGravity(Gravity.BOTTOM);}dialog.show();if(w!=null)w.setLayout(-1,Math.round(getResources().getDisplayMetrics().heightPixels*0.80f));
+    }
+    private void saveTabs(){if(tabs.isEmpty())return;JSONArray urls=new JSONArray();for(WebView web:tabs){String url=web.getUrl();urls.put(url!=null&&url.startsWith("https://")?url:HOME);}getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putString("tabs",urls.toString()).putInt("active_tab",Math.max(0,tabs.indexOf(current))).apply();}
+    private void restoreTabs(Bundle state){
+        try{JSONArray urls=new JSONArray(state==null?getSharedPreferences("mobile_ui",MODE_PRIVATE).getString("tabs","[]"):state.getString("tabs","[]"));int selected=state==null?getSharedPreferences("mobile_ui",MODE_PRIVATE).getInt("active_tab",0):state.getInt("active_tab",0);
+            for(int i=0;i<Math.min(12,urls.length());i++){String url=urls.optString(i,HOME);newTab(url.startsWith("https://")?url:HOME);}if(!tabs.isEmpty())select(tabs.get(Math.min(tabs.size()-1,Math.max(0,selected))));
+        }catch(Exception ignored){}if(tabs.isEmpty())newTab(HOME);
+    }
+    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);saveTabs();out.putString("tabs",getSharedPreferences("mobile_ui",MODE_PRIVATE).getString("tabs","[]"));out.putInt("active_tab",Math.max(0,tabs.indexOf(current)));out.putString("space",activeSpace);}
     private static String fromJavascript(String raw){
         if(raw==null)return "";
         try{return new JSONArray("["+raw+"]").getString(0);}
@@ -613,15 +663,20 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(workspace!=null&&workspace.result(request,result,data))return;
         if(request==FILE_REQUEST&&fileCallback!=null){
             fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));fileCallback=null;
         }
     }
     @Override public void onBackPressed(){
+        if(fullScreenVideo!=null){hideFullScreenVideo();return;}
+        if(focusMode){setFocusMode(false);return;}
+        if(!activeSpace.equals("browser")){if(workspace.back())return;showSpace("browser");return;}
         if(current!=null&&current.canGoBack())current.goBack();else super.onBackPressed();
     }
     @Override protected void onDestroy(){
         super.onDestroy();
+        if(workspace!=null)workspace.destroy();hideFullScreenVideo();
         for(WebView v:tabs){if(v.getParent() instanceof ViewGroup)((ViewGroup)v.getParent()).removeView(v);v.destroy();}
         tabs.clear();
         if(fileCallback!=null)fileCallback.onReceiveValue(null);

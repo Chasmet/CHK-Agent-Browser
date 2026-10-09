@@ -1,7 +1,7 @@
 name: CHK Agent Browser - APK Android et Releases
 on:
   push:
-    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009]
+    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009]
   workflow_dispatch:
 permissions:
   contents: write
@@ -37,6 +37,25 @@ jobs:
         run: bash validation/check.sh
       - name: Compiler APK debug
         run: ./gradlew --no-daemon assembleDebug lintDebug
+      - name: Autoriser KVM pour les tests Android
+        run: sudo chmod 666 /dev/kvm
+      - name: Tester Fichiers, Notes, stockage et navigation sur Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: aosp_atd
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
+      - name: Conserver les résultats des tests Android
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-android-tests-${{ github.run_number }}
+          path: app/build/reports/androidTests/
+          retention-days: 2
+          if-no-files-found: ignore
       - name: Conserver seulement 1 jour dans Actions
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4

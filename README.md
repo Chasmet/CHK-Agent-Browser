@@ -44,3 +44,11 @@ La connexion MCP, le package et la signature sont conservés pendant une mise à
 6. Arrêter le MCP : aucune commande ne doit être exécutée ; réactiver puis redémarrer le téléphone pour vérifier la reprise.
 
 Références Android : https://developer.android.com/training/monitoring-device-state/doze-standby et https://developer.android.com/develop/background-work/services/fgs/service-types
+
+## Nouvel espace mobile Fichiers et Notes
+
+La navigation inférieure donne accès au Navigateur, aux Fichiers et aux Notes. L’adresse est accessible au pouce, les onglets se retrouvent dans un panneau vertical et les actions supplémentaires dans le menu ⋮. Les adresses des onglets et la taille du texte sont restaurées.
+
+Fichiers : dossiers, import multiple depuis Android, création de documents texte, renommage, déplacement, recherche, aperçu image/vidéo, partage, export, téléchargements existants et corbeille récupérable. Notes : autosauvegarde SQLite, recherche, épinglage, URL source, capture de texte de page et export Markdown. Les révisions protègent les modifications concurrentes du téléphone et du MCP.
+
+Le module isolé `backend/browser_workspace.py` dans le dépôt du relais expose les outils `browser_files_*`, `browser_notes_*`, `browser_workspace_status` et `browser_upload_workspace_file`. Il utilise le même service, la même URL MCP et les droits déjà enregistrés. Aucun nouveau service Render ni clé API. Voir [audit et limites de la version](docs/AUDIT_MOBILE_2026-10-09.md).

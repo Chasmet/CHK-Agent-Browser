@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#0D1423" android:padding="12dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="56dp" android:gravity="center_vertical">
+        <TextView android:id="@+id/note_back" style="@style/NavButton" android:text="‹" android:contentDescription="Enregistrer et revenir aux notes" />
+        <TextView android:id="@+id/note_status" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Ma note" android:textColor="#94A8C1" android:textSize="14sp" />
+        <TextView android:id="@+id/note_menu" style="@style/NavButton" android:text="⋮" android:contentDescription="Options de la note" />
+    </LinearLayout>
+    <EditText android:id="@+id/note_title" android:layout_width="match_parent" android:layout_height="56dp" android:hint="Titre de la note" android:textSize="23sp" android:textStyle="bold" android:textColor="#F1F5FF" android:textColorHint="#94A8C1" android:singleLine="true" android:inputType="textCapSentences" android:maxLength="120" android:background="@android:color/transparent" />
+    <Switch android:id="@+id/note_pinned" android:layout_width="match_parent" android:layout_height="48dp" android:text="Épingler cette note" android:textColor="#69E2C6" />
+    <TextView android:id="@+id/note_source" android:layout_width="match_parent" android:layout_height="48dp" android:textColor="#69E2C6" android:singleLine="true" android:ellipsize="middle" android:gravity="center_vertical" android:visibility="gone" />
+    <EditText android:id="@+id/note_body" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="top|start" android:hint="Écris une idée, une liste ou ton prochain projet…" android:textColor="#F1F5FF" android:textColorHint="#94A8C1" android:textSize="18sp" android:lineSpacingExtra="5dp" android:inputType="textMultiLine|textCapSentences" android:maxLength="12000" android:background="@android:color/transparent" android:padding="8dp" />
+    <TextView android:id="@+id/note_checklist" android:layout_width="match_parent" android:layout_height="48dp" android:text="＋ Ajouter une case à cocher" android:gravity="center_vertical" android:textSize="15sp" android:textColor="#69E2C6" android:paddingHorizontal="8dp" />
+</LinearLayout>

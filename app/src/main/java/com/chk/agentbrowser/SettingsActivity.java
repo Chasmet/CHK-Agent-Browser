@@ -31,7 +31,7 @@ public final class SettingsActivity extends Activity {
     private Switch autonomousMode, previewMode;
     private final Handler refresh=new Handler();
     private final Runnable statusTick=new Runnable(){
-        @Override public void run(){showMcp();refresh.postDelayed(this,2000L);}
+        @Override public void run(){showMcp();showDownloadProgress();refresh.postDelayed(this,2000L);}
     };
 
     @Override public void onCreate(Bundle state) {
@@ -39,6 +39,8 @@ public final class SettingsActivity extends Activity {
         setContentView(R.layout.activity_settings);
         updates=new UpdateManager(this);
         agent=AgentClient.get(this);
+        findViewById(R.id.settings_back).setOnClickListener(v->finish());
+        Switch autoUpdate=findViewById(R.id.auto_update);autoUpdate.setChecked(getSharedPreferences("update_monitor",MODE_PRIVATE).getBoolean("enabled",true));autoUpdate.setOnCheckedChangeListener((b,on)->getSharedPreferences("update_monitor",MODE_PRIVATE).edit().putBoolean("enabled",on).apply());
         autonomousMode=findViewById(R.id.autonomous_mode);
         previewMode=findViewById(R.id.preview_mode);
         autonomousMode.setChecked(agent.isAutonomous());
@@ -190,6 +192,12 @@ public final class SettingsActivity extends Activity {
                     }).show();
             }
         });
+    }
+    private void showDownloadProgress(){
+        String message=updates.downloadProgress();
+        if(message==null)return;
+        if(message.equals("ready")){if(install.getVisibility()!=View.VISIBLE)showInstall();}
+        else status.setText(message);
     }
     private void showInstall() {
         File ready=updates.completedApk();

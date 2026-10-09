@@ -121,6 +121,16 @@ public final class UpdateManager {
             .putString("version",release.version).apply();
         return id;
     }
+    public String downloadProgress(){
+        long id=prefs.getLong("download_id",-1);if(id<0)return null;
+        try(android.database.Cursor c=((DownloadManager)context.getSystemService(Context.DOWNLOAD_SERVICE)).query(new DownloadManager.Query().setFilterById(id))){
+            if(c==null||!c.moveToFirst())return null;int status=c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+            if(status==DownloadManager.STATUS_SUCCESSFUL)return "ready";
+            if(status==DownloadManager.STATUS_FAILED)return "Téléchargement interrompu. Vérifie les mises à jour pour réessayer.";
+            long received=c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)),total=c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+            return total>0?"Téléchargement : "+Math.min(100,received*100/total)+" %":"Téléchargement en cours…";
+        }catch(Exception e){return null;}
+    }
     public boolean isOurDownload(long id) {
         return id>=0 && prefs.getLong("download_id",-1L)==id;
     }

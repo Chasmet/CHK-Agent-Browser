@@ -190,6 +190,7 @@ public final class AgentClient {
                     JSONObject info = new JSONObject();
                     info.put("url", limit(page, 500)); info.put("title", limit(title, 150));
                     info.put("autonomous",isAutonomous());
+                    info.put("workspace_version",1);
                     info.put("session_source",currentHandler==null?"none":currentHandler.sessionSource());
                     info.put("executing_id",settings.getString("executing_id",""));
                     request("POST", "/agentbrowser/api/heartbeat", info, true);
@@ -268,7 +269,7 @@ public final class AgentClient {
         try {
             JSONObject result = new JSONObject();
             result.put("id",id);result.put("ok",success);
-            if(success)result.put("result",limit(message,("preview".equals(action)||"screenshot".equals(action))?230000:11000));
+            if(success)result.put("result",limit(message,(WorkspaceCommands.handles(action)||"preview".equals(action)||"screenshot".equals(action))?230000:11000));
             else result.put("error",limit(message,750));
             settings.edit().putString("result_outbox",result.toString())
                 .putString("last_result",result.toString()).putString("last_result_id",id)
@@ -327,7 +328,7 @@ public final class AgentClient {
                 byte[] buf=new byte[4096]; int n;
                 while((n=input.read(buf))!=-1) {
                     output.write(buf,0,n);
-                    if(output.size()>48000) throw new Exception("Réponse trop longue");
+                    if(output.size()>(path.equals("/agentbrowser/api/poll")?230000:48000)) throw new Exception("Réponse trop longue");
                 }
                 return new JSONObject(new String(output.toByteArray(),StandardCharsets.UTF_8));
             }

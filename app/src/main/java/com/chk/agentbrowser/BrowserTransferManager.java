@@ -46,6 +46,13 @@ public final class BrowserTransferManager {
                 for(int i=0;i<files.length();i++){
                     JSONObject item=files.optJSONObject(i);
                     if(item==null)throw new Exception("Description de fichier invalide");
+                    String local=item.optString("workspace_path","");
+                    if(!local.isEmpty()){
+                        WorkspaceStore workspace=new WorkspaceStore(app);File source=workspace.file(local);
+                        if(!source.isFile())throw new Exception("Fichier Fichiers introuvable");
+                        total+=source.length();if(total>WorkspaceStore.MAX_IMPORT)throw new Exception("Ensemble de fichiers supérieur à 512 Mo");
+                        uris[i]=workspace.uri(local);continue;
+                    }
                     String url=item.optString("url","");
                     String name=safeName(item.optString("name","file-"+(i+1)));
                     String expected=item.optString("sha256","").toLowerCase(Locale.ROOT);
