@@ -62,6 +62,9 @@ public final class VideoEditorEngine {
     public interface Done {void completed(boolean ok,String json);}
     public void command(Context context,String action,JSONObject args,Done cb){
         Context application=context.getApplicationContext();
+        if("video_editor_status".equals(action)){
+            MAIN.post(()->cb.completed(true,status().toString()));return;
+        }
         if("video_editor_export".equals(action)){
             MAIN.post(()->startExport(application,args.optBoolean("replace",false),cb));return;
         }
