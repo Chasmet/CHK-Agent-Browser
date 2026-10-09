@@ -27,6 +27,8 @@ public final class VideoEditorActivity extends Activity {
     private boolean importing;
     private boolean compact;
     private long lastProjectCheck;
+    private boolean primingPreview;
+    private float previewVolume=1;
     private TextView title,clock,status,play,format;
 
     private androidx.media3.ui.PlayerView viewer;
@@ -55,10 +57,10 @@ public final class VideoEditorActivity extends Activity {
         FrameLayout canvas=new FrameLayout(this);canvas.setBackgroundColor(0xff000000);root.addView(canvas,new LinearLayout.LayoutParams(-1,0,1));viewer=(androidx.media3.ui.PlayerView)getLayoutInflater().inflate(R.layout.studio_player,canvas,false);canvas.addView(viewer,new FrameLayout.LayoutParams(-1,-1));
         TextView empty=MobileUi.text(this,"＋\nAjouter une vidéo",17,MobileUi.MUTED);empty.setGravity(Gravity.CENTER);empty.setTag("empty");canvas.addView(empty,new FrameLayout.LayoutParams(-1,-1));empty.setOnClickListener(v->addMenu("video"));
         player=new CompositionPlayer.Builder(this).build();viewer.setPlayer(player);
-        player.addListener(new Player.Listener(){@Override public void onPlayerError(androidx.media3.common.PlaybackException error){toast("Aperçu indisponible : "+error.getErrorCodeName());}});
+        player.addListener(new Player.Listener(){@Override public void onRenderedFirstFrame(){if(primingPreview){primingPreview=false;player.pause();player.setVolume(previewVolume);}}@Override public void onPlayerError(androidx.media3.common.PlaybackException error){toast("Aperçu indisponible : "+error.getErrorCodeName());}});
         LinearLayout playback=new LinearLayout(this);playback.setPadding(dp(8),0,dp(4),0);playback.setGravity(Gravity.CENTER_VERTICAL);root.addView(playback,new LinearLayout.LayoutParams(-1,dp(48)));
         clock=MobileUi.text(this,"00:00 / 00:00",11,0xffc0c3cc);clock.setPadding(dp(4),0,0,0);playback.addView(clock,new LinearLayout.LayoutParams(0,-2,1));
-        play=chip("▶");playback.addView(play,new LinearLayout.LayoutParams(dp(48),-1));play.setOnClickListener(v->{if(player.isPlaying())player.pause();else{if(player.getPlaybackState()==Player.STATE_ENDED)player.seekTo(0);player.play();}});
+        play=chip("▶");playback.addView(play,new LinearLayout.LayoutParams(dp(48),-1));play.setOnClickListener(v->{if(primingPreview){primingPreview=false;player.setVolume(previewVolume);player.play();return;}if(player.isPlaying())player.pause();else{if(player.getPlaybackState()==Player.STATE_ENDED)player.seekTo(0);player.play();}});
         format=chip("9:16");format.setTextSize(11);format.setContentDescription("Format du montage");playback.addView(format,new LinearLayout.LayoutParams(dp(44),dp(38)));format.setOnClickListener(v->ratioMenu());
         TextView un=chip("↶");un.setContentDescription("Annuler la dernière modification");playback.addView(un,new LinearLayout.LayoutParams(dp(40),-1));un.setOnClickListener(v->history(false));
         TextView re=chip("↷");re.setContentDescription("Rétablir la modification");playback.addView(re,new LinearLayout.LayoutParams(dp(40),-1));re.setOnClickListener(v->history(true));
@@ -93,7 +95,7 @@ public final class VideoEditorActivity extends Activity {
     private void save(){saving=true;String fallback=undo.peekLast();JSONObject snapshot;try{snapshot=new JSONObject(project.toString());}catch(Exception e){return;}
         engine.command(this,"video_editor_project_save",new JSONObjectSafe("project",snapshot).withRevision(revision),(ok,res)->ui.post(()->{saving=false;if(!alive)return;if(ok){try{revision=new JSONObject(res).getJSONObject("project").optInt("revision");project.put("revision",revision);}catch(Exception ignored){}draw();preview();}else{toast(res);try{if(fallback!=null)project=new JSONObject(fallback);}catch(Exception ignored){}draw();}}));
     }
-    private void preview(){if(clips().length()==0){player.stop();return;}int generation=++previewGeneration;long position=player.getCurrentPosition();boolean playing=player.isPlaying();String snapshot=project.toString();WorkspaceCommands.IO.execute(()->{try{Composition composition=engine.composition(this,new JSONObject(snapshot));ui.post(()->{if(!alive||generation!=previewGeneration)return;try{player.setComposition(composition,Math.min(position,Math.max(0,total()-1)));player.prepare();player.setPlayWhenReady(playing);}catch(Exception e){toast("Aperçu : "+e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
+    private void preview(){if(clips().length()==0){player.stop();return;}int generation=++previewGeneration;long position=player.getCurrentPosition();boolean playing=player.isPlaying();String snapshot=project.toString();WorkspaceCommands.IO.execute(()->{try{Composition composition=engine.composition(this,new JSONObject(snapshot));ui.post(()->{if(!alive||generation!=previewGeneration)return;try{player.setComposition(composition,Math.min(position,Math.max(0,total()-1)));player.prepare();if(!playing){if(!primingPreview)previewVolume=player.getVolume();primingPreview=true;player.setVolume(0);}player.setPlayWhenReady(true);}catch(Exception e){toast("Aperçu : "+e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
     private void history(boolean forward){if(saving||project==null)return;ArrayDeque<String> from=forward?redo:undo,to=forward?undo:redo;if(from.isEmpty())return;try{to.addLast(project.toString());project=new JSONObject(from.removeLast());save();}catch(Exception e){toast(e.getMessage());}}
     private void put(JSONObject object,String key,Object value){try{remember();object.put(key,value);save();}catch(Exception e){toast(e.getMessage());}}
     private void split(){if(clip()==null)return;JSONObject c=clip();long cut=Math.round((player.getCurrentPosition()-start(selected))*c.optDouble("speed",1)),duration=c.optLong("duration_ms");if(cut<500||duration-cut<500){toast("Place le curseur au milieu du plan (minimum 0,5 s par partie)");return;}
@@ -140,7 +142,7 @@ public final class VideoEditorActivity extends Activity {
         });
     }
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("export_copy_path",exportCopyPath);}
-    @Override protected void onPause(){if(player!=null)player.pause();super.onPause();}
+    @Override protected void onPause(){if(player!=null){primingPreview=false;player.pause();player.setVolume(previewVolume);}super.onPause();}
     @Override protected void onDestroy(){alive=false;previewGeneration++;ui.removeCallbacksAndMessages(null);if(player!=null)player.release();super.onDestroy();}
     private static final class JSONObjectSafe extends JSONObject{JSONObjectSafe(String key,Object value){try{put(key,value);}catch(Exception ignored){}}JSONObjectSafe withRevision(int revision){try{put("expected_revision",revision);}catch(Exception ignored){}return this;}}
 }

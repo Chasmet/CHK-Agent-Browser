@@ -366,11 +366,12 @@ public final class VideoEditorEngine {
                 fx.add(new androidx.media3.effect.OverlayEffect(Collections.singletonList(androidx.media3.effect.TextOverlay.createStaticTextOverlay(text,settings))));
             }
             final float speed=(float)c.optDouble("speed",1);
-            videos.add(new EditedMediaItem.Builder(media(store.file(c.getString("path")),c.optLong("start_ms",0),len))
+            EditedMediaItem.Builder video=new EditedMediaItem.Builder(media(store.file(c.getString("path")),c.optLong("start_ms",0),len))
                 .setDurationUs(sourceDurationUs(store,c,sourceDurations))
                 .setRemoveAudio(!original||c.optBoolean("mute",false))
-                .setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return speed;}public long getNextSpeedChangeTimeUs(long timeUs){return androidx.media3.common.C.TIME_UNSET;}})
-                .setEffects(new Effects(Collections.emptyList(),fx)).build());
+                .setEffects(new Effects(Collections.emptyList(),fx));
+            if(speed!=1)video.setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return speed;}public long getNextSpeedChangeTimeUs(long timeUs){return androidx.media3.common.C.TIME_UNSET;}});
+            videos.add(video.build());
         }
         if(external)for(int i=0;i<audios.length();i++){
             JSONObject a=audios.getJSONObject(i);
