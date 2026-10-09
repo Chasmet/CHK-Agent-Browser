@@ -350,6 +350,7 @@ public final class VideoEditorEngine {
         WorkspaceStore store=new WorkspaceStore(context);
         JSONArray clips=project.getJSONArray("clips"),audios=project.optJSONArray("audio");
         List<EditedMediaItem> videos=new ArrayList<>(),sounds=new ArrayList<>();
+        java.util.Map<String,Long> sourceDurations=new java.util.HashMap<>();
         boolean external=audios!=null&&audios.length()>0;
         boolean original=!project.optBoolean("mute_original",external);
         for(int i=0;i<clips.length();i++){
@@ -366,13 +367,14 @@ public final class VideoEditorEngine {
             }
             final float speed=(float)c.optDouble("speed",1);
             videos.add(new EditedMediaItem.Builder(media(store.file(c.getString("path")),c.optLong("start_ms",0),len))
+                .setDurationUs(sourceDurationUs(store,c,sourceDurations))
                 .setRemoveAudio(!original||c.optBoolean("mute",false))
                 .setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return speed;}public long getNextSpeedChangeTimeUs(long timeUs){return androidx.media3.common.C.TIME_UNSET;}})
                 .setEffects(new Effects(Collections.emptyList(),fx)).build());
         }
         if(external)for(int i=0;i<audios.length();i++){
             JSONObject a=audios.getJSONObject(i);
-            sounds.add(new EditedMediaItem.Builder(media(store.file(a.getString("path")),a.optLong("start_ms",0),a.optLong("duration_ms",10000))).setRemoveVideo(true).build());
+            sounds.add(new EditedMediaItem.Builder(media(store.file(a.getString("path")),a.optLong("start_ms",0),a.optLong("duration_ms",10000))).setDurationUs(sourceDurationUs(store,a,sourceDurations)).setRemoveVideo(true).build());
         }
         EditedMediaItemSequence sequence=original?EditedMediaItemSequence.withAudioAndVideoFrom(videos):EditedMediaItemSequence.withVideoFrom(videos);
         Composition.Builder builder=sounds.isEmpty()?new Composition.Builder(sequence):new Composition.Builder(sequence,EditedMediaItemSequence.withAudioFrom(sounds));
@@ -390,6 +392,9 @@ public final class VideoEditorEngine {
             builder.setEffects(new Effects(Collections.emptyList(),Collections.singletonList(Presentation.createForWidthAndHeight(width,height,layout))));
         }
         return builder.build();
+    }
+    private long sourceDurationUs(WorkspaceStore store,JSONObject clip,java.util.Map<String,Long> cache)throws Exception{
+        String path=clip.getString("path");Long value=cache.get(path);if(value==null){MediaMetadataRetriever retriever=new MediaMetadataRetriever();try{retriever.setDataSource(store.file(path).getAbsolutePath());String duration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);value=duration==null?0:Long.parseLong(duration);}finally{retriever.release();}cache.put(path,value);}return Math.max(value,clip.optLong("start_ms")+clip.optLong("duration_ms",10000))*1000;
     }
     private void startExport(Context context,JSONObject project,Composition composition,boolean replace,Done callback){
         try{
