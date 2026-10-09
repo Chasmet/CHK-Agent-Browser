@@ -14,6 +14,16 @@ La session utilise un service au premier plan de type `specialUse`, adapté au c
 
 Dans Réglages, **Protéger la connexion écran éteint** ouvre la demande Android ciblée d’exemption de batterie. Sur Honor/Huawei, autoriser également le lancement automatique et l’exécution en arrière-plan dans les réglages système. Une session permanente consomme davantage de batterie. Sans exemption, Doze peut couper le réseau et ignorer les wake locks. Aucune application ne peut fonctionner lorsque le téléphone est totalement éteint ou après un arrêt forcé Android ; reprise au démarrage lorsque le système l’autorise, sinon à l’ouverture de l’application.
 
+## Clic vérifié et traçabilité de session (mise à jour 2026-10-09)
+
+Le relais propose `browser_click_verified(selector, expected_selector="", expected_text="", expected_url_contains="", timeout_ms=10000)`.
+Au moins une condition de réussite est obligatoire. Si l'état demandé existe déjà, **aucun nouveau clic n'est exécuté**.
+Après un clic unique, le navigateur attend la condition jusqu'à 20 secondes : il confirme le résultat observé ou signale explicitement un **résultat non confirmé**. Ne pas réessayer un achat, ajout, suppression ou envoi sans relire la page en cas d'incertitude.
+
+Les lectures renvoient également `document_url`, `session_source` (`visible` / `background`) et `visibility` pour détecter un basculement de WebView. Le relais MCP expose la provenance de la session dans `browser_status`. La WebView visible et la WebView autonome restent deux contextes JavaScript distincts : l'URL seule n'est **pas** une garantie d'identité de session.
+
+Pour employer les nouveaux outils, mettre à jour **à la fois** l'APK et le relais Render, puis actualiser le connecteur ChatGPT pour exposer les commandes supplémentaires.
+
 ## Navigation et formulaires
 
 La lecture MCP renvoie du texte et les sélecteurs CSS des contrôles visibles, sans valeurs des mots de passe. La saisie prend en charge les champs natifs et les zones éditables, avec événements compatibles avec les formulaires React. Les champs password, file, hidden et readonly sont bloqués. La sélection manuelle de fichiers est disponible dans le navigateur visible ; le moteur de fond n’automatise pas le sélecteur Android.
