@@ -47,7 +47,7 @@ import java.util.concurrent.Executors;
 public final class VideoEditorEngine {
     private static final String SAVE = "video_editor_project.json";
     private static final String ALPHA_OMEGA_OFFICIAL_OUTPUT =
-        "musique/chknoirshadow/clip-grok-videos/ALPHA_OMEGA_CLIP_OFFICIEL_9x16.mp4";
+        "musique/chknoirshadow/clip-grok-videos/ALPHA_OMEGA_CLIP_OFFICIEL_9x16_V2.mp4";
     private static final String DEFAULT_OUTPUT =
         "musique/chknoirshadow/clip-grok-videos/ALPHA_OMEGA_CLIP_FINAL_GROK.mp4";
     private static final ExecutorService DISK=Executors.newSingleThreadExecutor();
@@ -333,12 +333,6 @@ public final class VideoEditorEngine {
                 long start=c.optLong("start_ms",0),len=c.optLong("duration_ms",10000);
                 List<androidx.media3.common.Effect> videoEffects=effects(
                     c.optString("filter","aucun"),len,c.optLong("fade_ms",0));
-                if("9:16".equals(project.optString("aspect_ratio","source"))){
-                    int layout="fit".equals(project.optString("aspect_mode","crop"))
-                        ? Presentation.LAYOUT_SCALE_TO_FIT
-                        : Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP;
-                    videoEffects.add(Presentation.createForWidthAndHeight(720,1280,layout));
-                }
                 videos.add(new EditedMediaItem.Builder(media(store.file(c.getString("path")),start,len))
                     .setRemoveAudio(true)
                     .setEffects(new Effects(Collections.emptyList(),videoEffects))
@@ -351,9 +345,20 @@ public final class VideoEditorEngine {
                         .setRemoveVideo(true).build());
             }
             EditedMediaItemSequence videoSequence=EditedMediaItemSequence.withVideoFrom(videos);
-            Composition composition=sounds.isEmpty()
-                    ?new Composition.Builder(videoSequence).build()
-                    :new Composition.Builder(videoSequence,EditedMediaItemSequence.withAudioFrom(sounds)).build();
+            // Apply final presentation to the ENTIRE composition. With multiple
+            // sequences, per-item effects may not establish the final output frame.
+            Composition.Builder compositionBuilder=sounds.isEmpty()
+                    ?new Composition.Builder(videoSequence)
+                    :new Composition.Builder(videoSequence,EditedMediaItemSequence.withAudioFrom(sounds));
+            if("9:16".equals(project.optString("aspect_ratio","source"))){
+                int layout="fit".equals(project.optString("aspect_mode","crop"))
+                    ? Presentation.LAYOUT_SCALE_TO_FIT
+                    : Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP;
+                compositionBuilder.setEffects(new Effects(
+                    Collections.emptyList(),Collections.singletonList(
+                        Presentation.createForWidthAndHeight(720,1280,layout))));
+            }
+            Composition composition=compositionBuilder.build();
             app=context;activeOutput=file;lastOutput=output;error="";percent=0;state="running";
             transformer=new Transformer.Builder(context).setVideoMimeType(MimeTypes.VIDEO_H264)
                .addListener(new Transformer.Listener(){
