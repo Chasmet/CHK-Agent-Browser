@@ -172,14 +172,19 @@ public final class VideoEditorEngine {
             String hasAudio=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO);
             String width=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
             String height=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+            String rotationValue=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+            int rotation=rotationValue==null?0:Integer.parseInt(rotationValue);
+            boolean rotated=Math.abs(rotation)%180==90;
+            String displayWidth=rotated?height:width,displayHeight=rotated?width:height;
             long durationMs=duration==null?-1:Long.parseLong(duration);
             boolean picture="yes".equalsIgnoreCase(hasVideo),sound="yes".equalsIgnoreCase(hasAudio);
             boolean correctDuration=expectedMs>0&&durationMs>=0&&Math.abs(durationMs-expectedMs)<=500;
             float ratio=ratio(project.optString("aspect_ratio","source"));
-            boolean correctAspect=ratio==0 || (width!=null&&height!=null&&Math.abs(Float.parseFloat(width)/Float.parseFloat(height)-ratio)<0.015f);
+            boolean correctAspect=ratio==0 || (displayWidth!=null&&displayHeight!=null&&Math.abs(Float.parseFloat(displayWidth)/Float.parseFloat(displayHeight)-ratio)<0.015f);
             boolean valid=picture&&(!(audioCount>0)||sound)&&correctDuration&&sourcesPresent&&correctAspect;
             result.put("duration_ms",durationMs).put("has_video",picture)
-                .put("has_audio",sound).put("width_px",width).put("height_px",height)
+                .put("has_audio",sound).put("width_px",displayWidth).put("height_px",displayHeight)
+                .put("encoded_width_px",width).put("encoded_height_px",height).put("rotation_degrees",rotation)
                 .put("duration_matches_project",correctDuration)
                 .put("aspect_ratio_matches_project",correctAspect).put("valid",valid);
             if(!valid)result.put("reason","Contrôler la durée, les pistes et les sources du projet");
