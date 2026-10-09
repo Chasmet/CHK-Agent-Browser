@@ -15,7 +15,7 @@ public final class BrowserScripts {
 
     public static String readPage() {
         return "(function(){"+finder()
-            + "var out={text:(document.body&&document.body.innerText||'').slice(0,5000),elements:[],forms:0,ready:document.readyState};"
+            + "var out={text:(document.body&&document.body.innerText||'').slice(0,5000),elements:[],forms:0,ready:document.readyState,document_url:(typeof location!=='undefined'?location.href:''),visibility:(document.visibilityState||'unknown')};"
             + "var rs=roots(),nodes=[];rs.forEach(function(r){try{nodes=nodes.concat(Array.from(r.querySelectorAll('input,textarea,select,button,a,[role=button],[role=checkbox],[role=radio],[contenteditable=true],[tabindex=\"0\"]')));}catch(e){}});"
             + "function label(el){return (el.getAttribute('aria-label')||el.getAttribute('title')||el.placeholder||el.innerText||el.name||'').trim().replace(/\\s+/g,' ').slice(0,120);}"
             + "function score(el){var tag=(el.tagName||'').toLowerCase(),v=label(el).toLowerCase();"
@@ -36,6 +36,18 @@ public final class BrowserScripts {
             + "out.elements.push(item);if(JSON.stringify(out).length>9400){out.elements.pop();break;}}"
             + "try{out.forms=roots().reduce(function(n,r){return n+r.querySelectorAll('form').length;},0);}catch(e){}"
             + "return JSON.stringify(out);})()";
+    }
+
+    /** A read-only postcondition for verified clicks. DONE means every requested condition holds. */
+    public static String condition(String selectorLiteral,String textLiteral,String urlLiteral) {
+        return "(function(){try{"+finder()
+            +"var sel="+selectorLiteral+",text="+textLiteral+",url="+urlLiteral+";"
+            +"if(!sel&&!text&&!url)return 'ERROR: condition absente';"
+            +"if(sel&&!deepFind(sel))return 'WAIT';"
+            +"if(text&&(document.body&&document.body.innerText||'').indexOf(text)<0)return 'WAIT';"
+            +"if(url&&location.href.indexOf(url)<0)return 'WAIT';"
+            +"return 'DONE';"
+            +"}catch(e){return 'ERROR: '+e.message;}})()";
     }
 
     public static String type(String selectorLiteral,String textLiteral) {
