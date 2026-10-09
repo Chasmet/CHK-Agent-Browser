@@ -65,6 +65,13 @@ public final class VideoEditorEngine {
         if("video_editor_status".equals(action)){
             MAIN.post(()->cb.completed(true,status().toString()));return;
         }
+        if("video_editor_verify_output".equals(action)){
+            DISK.execute(()->{
+                try{cb.completed(true,verifyOutput(application).toString());}
+                catch(Exception ex){cb.completed(false,ex.getMessage()==null?ex.getClass().getSimpleName():ex.getMessage());}
+            });
+            return;
+        }
         if("video_editor_export".equals(action)){
             MAIN.post(()->startExport(application,args.optBoolean("replace",false),cb));return;
         }
@@ -112,6 +119,56 @@ public final class VideoEditorEngine {
            }
         }catch(Exception ignored){}
         return o;
+    }
+    /** Read-only verification of the MP4 on the phone; survives activity/process restart. */
+    public JSONObject verifyOutput(Context context)throws Exception{
+        JSONObject project=load(context);
+        String output=project.optString("output",DEFAULT_OUTPUT);
+        WorkspaceStore store=new WorkspaceStore(context);
+        File file=store.file(output);
+        JSONArray videos=project.optJSONArray("clips"),audio=project.optJSONArray("audio");
+        int videoCount=videos==null?0:videos.length(),audioCount=audio==null?0:audio.length();
+        long expectedMs=0;
+        boolean sourcesPresent=videoCount>0;
+        for(int i=0;i<videoCount;i++){
+            JSONObject item=videos.optJSONObject(i);
+            if(item==null){sourcesPresent=false;continue;}
+            expectedMs+=item.optLong("duration_ms",10000);
+            try{sourcesPresent &= requireSource(store,item.optString("path"),"video").isFile();}
+            catch(Exception ignored){sourcesPresent=false;}
+        }
+        for(int i=0;i<audioCount;i++){
+            JSONObject item=audio.optJSONObject(i);
+            try{sourcesPresent &= item!=null && requireSource(store,item.optString("path"),"audio").isFile();}
+            catch(Exception ignored){sourcesPresent=false;}
+        }
+        JSONObject result=new JSONObject().put("output",output).put("exists",file.isFile())
+            .put("size_bytes",file.isFile()?file.length():0)
+            .put("expected_duration_ms",expectedMs)
+            .put("project_video_count",videoCount).put("project_audio_count",audioCount)
+            .put("sources_present",sourcesPresent).put("valid",false);
+        if(!file.isFile()||file.length()<10000)
+            return result.put("reason","Fichier MP4 absent ou incomplet");
+        MediaMetadataRetriever retriever=new MediaMetadataRetriever();
+        try{
+            retriever.setDataSource(file.getAbsolutePath());
+            String duration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            String hasVideo=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO);
+            String hasAudio=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO);
+            String width=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+            String height=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+            long durationMs=duration==null?-1:Long.parseLong(duration);
+            boolean picture="yes".equalsIgnoreCase(hasVideo),sound="yes".equalsIgnoreCase(hasAudio);
+            boolean correctDuration=expectedMs>0&&durationMs>=0&&Math.abs(durationMs-expectedMs)<=500;
+            boolean valid=picture&&(! (audioCount>0)||sound)&&correctDuration&&sourcesPresent;
+            result.put("duration_ms",durationMs).put("has_video",picture)
+                .put("has_audio",sound).put("width_px",width).put("height_px",height)
+                .put("duration_matches_project",correctDuration).put("valid",valid);
+            if(!valid)result.put("reason","Contrôler la durée, les pistes et les sources du projet");
+            return result;
+        }catch(Exception ex){
+            return result.put("reason","Métadonnées MP4 illisibles : "+ex.getClass().getSimpleName());
+        }finally{retriever.release();}
     }
     public JSONObject load(Context context)throws Exception{
         File f=new File(context.getFilesDir(),SAVE);
