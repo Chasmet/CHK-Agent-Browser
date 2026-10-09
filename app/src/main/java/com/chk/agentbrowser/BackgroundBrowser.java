@@ -191,13 +191,17 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 case "read_page":{
                     WebView web=current;String page=pageUrl(),title=pageTitle();
                     web.evaluateJavascript(BrowserScripts.readPage(),raw->{
-                        try{JSONObject result=new JSONObject();result.put("url",page);result.put("title",title);JSONObject details=new JSONObject(jsResult(raw));result.put("text",details.optString("text"));result.put("elements",details.optJSONArray("elements"));result.put("forms",details.optInt("forms"));result.put("ready",details.optString("ready"));cb.finish(true,result.toString());}
+                        try{JSONObject result=new JSONObject();result.put("url",page);result.put("title",title);JSONObject details=new JSONObject(jsResult(raw));result.put("text",details.optString("text"));result.put("elements",details.optJSONArray("elements"));result.put("document_url",details.optString("document_url"));result.put("session_source","background");result.put("visibility",details.optString("visibility"));result.put("forms",details.optInt("forms"));result.put("ready",details.optString("ready"));cb.finish(true,result.toString());}
                         catch(Exception e){cb.finish(false,"Lecture de page impossible.");}
                     });return;
                 }
                 case "scroll":{
                     int offset=(int)(current.getHeight()*0.7f);if("up".equals(args.optString("direction")))offset=-offset;
                     current.scrollBy(0,offset);cb.finish(true,"Défilement effectué.");return;
+                }
+                case "click_verified":{
+                    VerifiedClick.run(current,args,main,cb);
+                    return;
                 }
                 case "click":{
                     String selector=args.optString("selector","");

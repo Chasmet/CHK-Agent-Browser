@@ -54,6 +54,7 @@ public final class AgentClient {
         void onCommand(JSONObject command, ResultCallback callback);
         String pageUrl();
         String pageTitle();
+        default String sessionSource() { return "background"; }
     }
     public interface RegistrationCallback {void completed(boolean ok, String message); }
     public interface IncomingListener {
@@ -189,6 +190,7 @@ public final class AgentClient {
                     JSONObject info = new JSONObject();
                     info.put("url", limit(page, 500)); info.put("title", limit(title, 150));
                     info.put("autonomous",isAutonomous());
+                    info.put("session_source",currentHandler==null?"none":currentHandler.sessionSource());
                     info.put("executing_id",settings.getString("executing_id",""));
                     request("POST", "/agentbrowser/api/heartbeat", info, true);
                     lastHeartbeat=SystemClock.elapsedRealtime();
