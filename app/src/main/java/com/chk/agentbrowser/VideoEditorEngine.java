@@ -42,7 +42,7 @@ import java.util.concurrent.Executors;
  * secret-dependent API, FFmpeg binary or CapCut account is needed.
  * Transformer runs on main Looper; large media are streamed by Media3.
  */
-@UnstableApi
+@androidx.annotation.OptIn(markerClass = UnstableApi.class)
 public final class VideoEditorEngine {
     private static final String SAVE = "video_editor_project.json";
     private static final String DEFAULT_OUTPUT =
