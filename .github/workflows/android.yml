@@ -27,12 +27,12 @@ jobs:
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           test -n "$SDKMANAGER"
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Installer Gradle 8.6
+      - name: Installer Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.6'
+          gradle-version: '8.7'
       - name: Générer le wrapper Gradle
-        run: gradle wrapper --gradle-version 8.6
+        run: gradle wrapper --gradle-version 8.7
       - name: Vérifier les scripts navigateur et la reconnexion
         run: bash validation/check.sh
       - name: Compiler APK debug

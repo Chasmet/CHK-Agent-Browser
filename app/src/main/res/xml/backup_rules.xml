@@ -2,6 +2,7 @@
     <include domain="sharedpref" path="." />
     <include domain="file" path="workspace/" />
     <include domain="file" path="video_editor_project.json" />
+    <include domain="file" path="video_last_export.json" />
     <include domain="file" path="workspace_trash/" />
     <include domain="database" path="workspace.db" />
     <exclude domain="sharedpref" path="browser_mcp_v1.xml" />

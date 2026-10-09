@@ -136,7 +136,8 @@ public final class VideoEditorEngine {
     }
     /** Read-only verification of the MP4 on the phone; survives activity/process restart. */
     public JSONObject verifyOutput(Context context)throws Exception{
-        JSONObject project=load(context);
+        File record=new File(context.getFilesDir(),"video_last_export.json");
+        JSONObject project=record.isFile()?readProject(record):load(context);
         String output=project.optString("output",DEFAULT_OUTPUT);
         WorkspaceStore store=new WorkspaceStore(context);
         File file=store.file(output);
@@ -191,6 +192,9 @@ public final class VideoEditorEngine {
         File f=new File(context.getFilesDir(),SAVE);
         if(!f.isFile())return new JSONObject().put("name","Nouveau montage")
                 .put("output","Montage-"+System.currentTimeMillis()+".mp4").put("aspect_ratio","source").put("clips",new JSONArray()).put("audio",new JSONArray());
+        return readProject(f);
+    }
+    private JSONObject readProject(File f)throws Exception{
         if(f.length()>200000)throw new IllegalStateException("Projet trop grand");
         byte[] bytes=new byte[(int)f.length()];
         try(FileInputStream in=new FileInputStream(f)){
@@ -199,8 +203,9 @@ public final class VideoEditorEngine {
         }
         return new JSONObject(new String(bytes,StandardCharsets.UTF_8));
     }
-    private void persist(Context app,JSONObject project)throws Exception{
-        File output=new File(app.getFilesDir(),SAVE),tmp=new File(app.getFilesDir(),SAVE+".tmp");
+    private void persist(Context app,JSONObject project)throws Exception{persistNamed(app,SAVE,project);}
+    private void persistNamed(Context app,String name,JSONObject project)throws Exception{
+        File output=new File(app.getFilesDir(),name),tmp=new File(app.getFilesDir(),name+".tmp");
         try(FileOutputStream out=new FileOutputStream(tmp)){
             out.write(project.toString(2).getBytes(StandardCharsets.UTF_8));
             out.getFD().sync();
@@ -288,7 +293,7 @@ public final class VideoEditorEngine {
         }
         if(videoDuration>20*60*1000)throw new IllegalArgumentException("Montage limité à 20 minutes");
         String output=p.optString("output","");
-        if(!output.endsWith(".mp4")||output.length()>400)throw new IllegalArgumentException("Destination MP4 obligatoire");
+        if(!output.toLowerCase(Locale.ROOT).endsWith(".mp4")||output.length()>400)throw new IllegalArgumentException("Destination MP4 obligatoire");
         File dest=store.file(output);
         if(dest.isDirectory()||!dest.getParentFile().isDirectory())
             throw new IllegalArgumentException("Dossier de sortie inexistant");
@@ -372,9 +377,15 @@ public final class VideoEditorEngine {
         EditedMediaItemSequence sequence=original?EditedMediaItemSequence.withAudioAndVideoFrom(videos):EditedMediaItemSequence.withVideoFrom(videos);
         Composition.Builder builder=sounds.isEmpty()?new Composition.Builder(sequence):new Composition.Builder(sequence,EditedMediaItemSequence.withAudioFrom(sounds));
         float aspect=ratio(project.optString("aspect_ratio","source"));
+        if(aspect==0){
+            JSONObject first=clips.getJSONObject(0);JSONObject metadata=MediaInspection.info(context,first.getString("path"));
+            int width=metadata.optInt("width",0),height=metadata.optInt("height",0);
+            if(width>0&&height>0){aspect=(float)width/height;int rotation=metadata.optInt("rotation",0)+(int)first.optDouble("rotation",0);if(Math.abs(rotation)%180==90)aspect=1f/aspect;}
+        }
         if(aspect>0){
-            int height=project.optInt("resolution",720),width=Math.max(2,Math.round(height*aspect/2)*2);
-            if("9:16".equals(project.optString("aspect_ratio"))&&!project.has("resolution")){width=720;height=1280;}
+            int quality=project.optInt("resolution",720);
+            int width=aspect>=1?Math.max(2,Math.round(quality*aspect/2)*2):quality;
+            int height=aspect>=1?quality:Math.max(2,Math.round(quality/aspect/2)*2);
             int layout="fit".equals(project.optString("aspect_mode","fit"))?Presentation.LAYOUT_SCALE_TO_FIT:Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP;
             builder.setEffects(new Effects(Collections.emptyList(),Collections.singletonList(Presentation.createForWidthAndHeight(width,height,layout))));
         }
@@ -392,10 +403,16 @@ public final class VideoEditorEngine {
                .addListener(new Transformer.Listener(){
                  @Override public void onCompleted(Composition c,ExportResult result){
                     if(!"running".equals(state))return;
-                    if(activeOutput==null||!activeOutput.isFile()||activeOutput.length()<1000||(!replace&&finalOutput.exists())||!activeOutput.renameTo(finalOutput)){
-                        state="failed";error="Impossible de finaliser le MP4";if(activeOutput!=null)activeOutput.delete();
-                    }else{state="completed";percent=100;}
-                    transformer=null;
+                    transformer=null;percent=99;
+                    WorkspaceCommands.IO.execute(()->{
+                        if(!"running".equals(state))return;
+                        if(activeOutput==null||!activeOutput.isFile()||activeOutput.length()<1000||(!replace&&finalOutput.exists())||!activeOutput.renameTo(finalOutput)){
+                            state="failed";error="Impossible de finaliser le MP4";if(activeOutput!=null)activeOutput.delete();
+                        }else{
+                            try{persistNamed(context,"video_last_export.json",project);}catch(Exception ex){error="MP4 créé ; historique du rendu non sauvegardé";}
+                            state="completed";percent=100;
+                        }
+                    });
                  }
                  @Override public void onError(Composition c,ExportResult result,ExportException e){
                     state="failed";error=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage();
