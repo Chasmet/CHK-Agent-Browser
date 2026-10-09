@@ -49,4 +49,15 @@ const status=JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/status.js','ut
     location:{href:'https://example.com'}
 }));
 assert.equal(status.readyState,'complete');assert.equal(status.forms,1);assert.ok(status.messages.length>=1);
-console.log('PASS: retry bounds, native forms, dynamic controls, upload confirmation helpers and bounded page extraction');
+const condition=fs.readFileSync(root+'/condition.js','utf8');
+const conditionPage={body:{innerText:'Saving...'},querySelector:()=>null,querySelectorAll:()=>[]};
+const location={href:'https://example.com/working'};
+assert.equal(vm.runInNewContext(condition,{document:conditionPage,location}),'WAIT');
+conditionPage.querySelector=s=>s==='#done'?{}:null;
+conditionPage.body.innerText='Saved successfully';
+location.href='https://example.com/done';
+assert.equal(vm.runInNewContext(condition,{document:conditionPage,location}),'DONE');
+conditionPage.body.innerText='Saving again';
+assert.equal(vm.runInNewContext(condition,{document:conditionPage,location}),'WAIT');
+
+console.log('PASS: retry bounds, native forms, dynamic controls, upload confirmation helpers and bounded page extraction and verified-click postconditions');
