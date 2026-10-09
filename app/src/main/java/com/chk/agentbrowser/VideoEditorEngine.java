@@ -404,7 +404,7 @@ public final class VideoEditorEngine {
             // Render beside the destination and preserve the previous completed file on failure.
             File partial=new File(destination.getParentFile(),".render-"+java.util.UUID.randomUUID()+".mp4");
             app=context;activeOutput=partial;finalOutput=destination;lastOutput=output;error="";percent=0;state="running";
-            transformer=new Transformer.Builder(context).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
+            transformer=new Transformer.Builder(context).setMuxerFactory(new androidx.media3.transformer.InAppMp4Muxer.Factory()).setMaxDelayBetweenMuxerSamplesMs(60000).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                .addListener(new Transformer.Listener(){
                  @Override public void onCompleted(Composition c,ExportResult result){
                     if(!"running".equals(state))return;
@@ -420,7 +420,7 @@ public final class VideoEditorEngine {
                     });
                  }
                  @Override public void onError(Composition c,ExportResult result,ExportException e){
-                    state="failed";error=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage();
+                    android.util.Log.e("ChkVideoExport","Échec du rendu MP4",e);state="failed";error=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage();
                     if(activeOutput!=null)activeOutput.delete();transformer=null;
                  }
                }).build();
