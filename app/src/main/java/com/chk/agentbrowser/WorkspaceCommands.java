@@ -13,9 +13,13 @@ public final class WorkspaceCommands {
     public static final ExecutorService IO=Executors.newSingleThreadExecutor();
     public static final Handler UI=new Handler(Looper.getMainLooper());
     private WorkspaceCommands(){}
-    public static boolean handles(String action){return action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status");}
+    public static boolean handles(String action){return action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status")||action.startsWith("video_editor_");}
     public static void run(Context context,String action,JSONObject args,AgentClient.ResultCallback cb){
         Context app=context.getApplicationContext();
+        if(action.startsWith("video_editor_")){
+            VideoEditorEngine.get().command(app,action,args,(ok,result)->cb.finish(ok,result));
+            return;
+        }
         if(action.equals("files_import")){
             BrowserTransferManager.prepareUploads(app,args.optJSONArray("files"),AgentClient.get(app).deviceTokenForTransfers(),(ok,uris,message)->{
                 if(!ok){cb.finish(false,message);return;}
