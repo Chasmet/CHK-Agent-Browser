@@ -97,4 +97,4 @@ jobs:
         run: |
           gh release create "v${RELEASE_VERSION}" "CHK-Agent-Browser-${RELEASE_VERSION}.apk" \
             --title "CHK Agent Browser ${RELEASE_VERSION}" \
-            --notes "APK signé. Mises à jour : Réglages > Vérifier les mises à jour."
+            --notes "Interface mobile refaite : navigateur, Fichiers, Notes et Studio. Navigation MCP visible, timeline native et exports complets avec remplacement ou nouvelle copie. APK signé avec la clé persistante. Mises à jour : Réglages > Vérifier les mises à jour."

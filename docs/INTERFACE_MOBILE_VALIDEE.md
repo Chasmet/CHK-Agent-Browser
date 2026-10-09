@@ -21,9 +21,11 @@ Les miniatures utilisent deux décodeurs indépendants des opérations de fichie
 
 Cela réduit les sources de ralentissement ; la cadence réelle dépend du téléphone, du codec et du média. Aucun objectif de FPS sur téléphone physique n’est présenté comme mesuré sur un émulateur.
 
-## Vérifications prévues avant publication
+## Validation et publication
 
-Compilation debug et instrumentation, lint sans erreur, contrôles Java/JavaScript, tests Android de fichiers/notes existants, aperçu Media3 prêt, export réel audio+vidéo avec filtres/vitesse/ratio, montage de sept plans (21 secondes) et remplacement, dialogue présentant les deux choix d’export, clic MCP dans la vraie WebView visible exécuté une fois, vérification visuelle des écrans. La chaîne GitHub Actions doit réussir avant publication de l’APK signé avec la clé persistante.
+La chaîne de publication compile les APK et l’instrumentation, impose un lint sans erreur et les contrôles Java/JavaScript, puis exécute 15 tests Android : fichiers et notes, aperçu vidéo réellement affiché, export audio+vidéo avec filtres/vitesse/ratio, export accéléré sans audio original, montage de sept plans (21 secondes) avec remplacement, dialogue présentant les deux choix d’export et clic MCP exécuté une fois dans la WebView visible. La durée, l’audio et les dimensions affichées du MP4 sont contrôlés. Le délai du test accepte les décodeurs logiciels lents ; le moteur conserve sa surveillance d’absence d’échantillons.
+
+Les écrans sont vérifiés à une largeur de 360 dp. La publication de l’APK signé reste conditionnée à la réussite de tous les tests GitHub Actions, avec la clé persistante.
 
 ## MCP et mise à jour
 
