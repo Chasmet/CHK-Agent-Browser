@@ -25,9 +25,10 @@
     </FrameLayout>
     <TextView android:id="@+id/browser_error" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:padding="12dp" android:background="#42361C" android:textColor="#FFF2CC" android:textSize="14sp" android:visibility="gone" android:clickable="true" android:focusable="true" />
     <LinearLayout android:id="@+id/space_nav" android:layout_width="match_parent" android:layout_height="64dp" android:gravity="center_vertical" android:background="#202124" android:paddingHorizontal="8dp">
-        <TextView android:id="@+id/nav_browser" style="@style/BottomButton" android:text="Navigateur" android:drawableTop="@drawable/ic_nav_browser" android:drawablePadding="3dp" android:contentDescription="Espace Navigateur" />
+        <TextView android:id="@+id/nav_browser" style="@style/BottomButton" android:text="Web" android:drawableTop="@drawable/ic_nav_browser" android:drawablePadding="3dp" android:contentDescription="Espace Navigateur" />
         <TextView android:id="@+id/nav_files" style="@style/BottomButton" android:text="Fichiers" android:drawableTop="@drawable/ic_nav_files" android:drawablePadding="3dp" android:contentDescription="Espace Fichiers" />
         <TextView android:id="@+id/nav_video" style="@style/BottomButton" android:text="Studio" android:drawableTop="@drawable/ic_nav_video" android:drawablePadding="3dp" android:contentDescription="Éditeur vidéo" />
+        <TextView android:id="@+id/nav_cut" style="@style/BottomButton" android:text="Cut" android:drawableTop="@drawable/ic_nav_cut" android:drawablePadding="3dp" android:contentDescription="Cut Vidéo et programmation" />
         <TextView android:id="@+id/nav_notes" style="@style/BottomButton" android:text="Notes" android:drawableTop="@drawable/ic_nav_notes" android:drawablePadding="3dp" android:contentDescription="Espace Notes" />
     </LinearLayout>
 </LinearLayout>

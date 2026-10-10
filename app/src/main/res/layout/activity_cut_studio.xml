@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#17181C">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="58dp"
+        android:gravity="center_vertical" android:paddingHorizontal="16dp">
+        <TextView android:id="@+id/cut_back" android:layout_width="48dp"
+            android:layout_height="match_parent" android:gravity="center_vertical"
+            android:text="‹" android:textSize="32sp" android:textColor="#E6EBF7"
+            android:contentDescription="Retour" />
+        <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content" android:orientation="vertical">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Cut Vidéo" android:textStyle="bold" android:textSize="21sp"
+                android:textColor="#FFFFFF" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Découpage et publication · CHK" android:textSize="11sp"
+                android:textColor="#A8B7CB" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="54dp"
+        android:orientation="horizontal" android:paddingHorizontal="8dp"
+        android:background="#202329">
+        <TextView android:id="@+id/cut_tab_export" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="match_parent"
+            android:gravity="center" android:text="Découper" android:textColor="#FFFFFF"
+            android:textSize="14sp" android:contentDescription="Découper la vidéo" />
+        <TextView android:id="@+id/cut_tab_library" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="match_parent"
+            android:gravity="center" android:text="Mes vidéos" android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+        <TextView android:id="@+id/cut_tab_planning" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="match_parent"
+            android:gravity="center" android:text="Planning" android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+    </LinearLayout>
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:fillViewport="true">
+        <LinearLayout android:id="@+id/cut_content" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:orientation="vertical"
+            android:padding="16dp" />
+    </ScrollView>
+    <TextView android:id="@+id/cut_status" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:minHeight="40dp"
+        android:gravity="center_vertical" android:paddingHorizontal="16dp"
+        android:text="Fichiers conservés sur ce téléphone"
+        android:textColor="#A8B7CB" android:textSize="12sp"
+        android:background="#202329" />
+</LinearLayout>
