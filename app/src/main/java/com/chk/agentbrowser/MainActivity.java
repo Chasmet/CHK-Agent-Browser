@@ -85,12 +85,15 @@ public class MainActivity extends Activity {
         findViewById(R.id.nav_files).setOnClickListener(v->showSpace("files"));
         findViewById(R.id.nav_notes).setOnClickListener(v->showSpace("notes"));
         findViewById(R.id.nav_video).setOnClickListener(v->startActivity(new Intent(this,StudioProjectsActivity.class)));
+         findViewById(R.id.nav_cut).setOnClickListener(v->startActivity(new Intent(this,CutStudioActivity.class)));
         findViewById(R.id.menu).setOnClickListener(v->browserMenu());
         findViewById(R.id.tab_count).setOnClickListener(v->tabOverview());
         findViewById(R.id.tab_count).setOnLongClickListener(v->{newTab(HOME);return true;});
         restoreTabs(state);
         showSpace(state==null?"browser":state.getString("space","browser"));
         String launch=getIntent().getStringExtra("open_url");if(launch!=null)navigate(launch);
+         String cutLaunch=getIntent().getStringExtra("cutstudio_url");
+         if(cutLaunch!=null&&cutLaunch.startsWith("https://")){showSpace("browser");newTab(cutLaunch);}
         autoUpdate();
     }
     private void toast(String value){Toast.makeText(this,value,Toast.LENGTH_SHORT).show();}
