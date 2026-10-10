@@ -116,6 +116,76 @@ public final class VideoEditorIntegrationTest {
         }finally{image.recycle();}
         assertTrue("Black preview after seeking: expected real decoded frames",lit);
     }
+
+    @Test public void testDurableProjectLibraryCreateReopenDuplicateTrashRestore()throws Exception{
+        JSONObject before=invoke("video_editor_project_read",new JSONObject());
+        String legacyId=before.getString("project_id");
+        String originalName=before.optString("name");
+        JSONObject list=invoke("video_editor_project_list",new JSONObject());
+        assertTrue("Active draft is indexed",list.getInt("count")>=1);
+        assertEquals(legacyId,list.getString("active_id"));
+
+        JSONObject created=invoke("video_editor_project_new",new JSONObject()).getJSONObject("project");
+        String id=created.getString("project_id");
+        assertNotEquals(legacyId,id);
+        assertEquals(0,created.getJSONArray("clips").length());
+        String uniqueOut=created.getString("output");
+        assertNotEquals(before.optString("output"),uniqueOut);
+
+        JSONObject edited=new JSONObject(created.toString());
+        edited.put("name","Projet brouillon test").put("clips",
+            new JSONArray().put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",1500)));
+        invoke("video_editor_project_save",new JSONObject().put("project",edited)
+            .put("expected_revision",created.getInt("revision")));
+        JSONObject renamed=invoke("video_editor_project_rename",
+            new JSONObject().put("id",id).put("name","Projet retrouvé")).getJSONObject("project");
+        assertEquals("Projet retrouvé",renamed.getString("name"));
+        assertEquals(1,renamed.getJSONArray("clips").length());
+        JSONObject dupe=invoke("video_editor_project_duplicate",
+            new JSONObject().put("id",id)).getJSONObject("project");
+        assertNotEquals(id,dupe.getString("project_id"));
+        assertNotEquals(uniqueOut,dupe.getString("output"));
+        assertEquals(1,dupe.getJSONArray("clips").length());
+
+        JSONObject returned=invoke("video_editor_project_open",new JSONObject().put("id",id)).getJSONObject("project");
+        assertEquals("Projet retrouvé",returned.getString("name"));
+        assertEquals(1,returned.getJSONArray("clips").length());
+        invoke("video_editor_project_trash",new JSONObject().put("id",id));
+        assertNotEquals(id,invoke("video_editor_project_read",new JSONObject()).getString("project_id"));
+        JSONArray trash=invoke("video_editor_project_list",new JSONObject().put("trash",true)).getJSONArray("items");
+        boolean found=false;for(int i=0;i<trash.length();i++)if(id.equals(trash.getJSONObject(i).optString("id")))found=true;
+        assertTrue("Trashed draft must remain recoverable",found);
+        JSONArray normal=invoke("video_editor_project_list",new JSONObject()).getJSONArray("items");
+        for(int i=0;i<normal.length();i++)assertNotEquals("Trashed draft must not resurrect",id,normal.getJSONObject(i).getString("id"));
+        invoke("video_editor_project_restore",new JSONObject().put("id",id));
+        JSONObject reopened=invoke("video_editor_project_open",new JSONObject().put("id",id)).getJSONObject("project");
+        assertEquals("Projet retrouvé",reopened.getString("name"));
+        assertEquals(1,reopened.getJSONArray("clips").length());
+
+        // Go back to the original active draft, preserving its exact contents.
+        JSONObject legacy=invoke("video_editor_project_open",new JSONObject().put("id",legacyId)).getJSONObject("project");
+        assertEquals(originalName,legacy.optString("name"));
+    }
+    @Test public void testStudioProjectLibraryScreenAndCreateAction()throws Exception{
+        invoke("video_editor_project_read",new JSONObject());
+        StudioProjectsActivity activity=(StudioProjectsActivity)getInstrumentation().startActivitySync(
+            new Intent(context,StudioProjectsActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try{
+            boolean appeared=false;
+            for(int i=0;i<60;i++){
+                AtomicBoolean ready=new AtomicBoolean(false);
+                getInstrumentation().runOnMainSync(()->{
+                    android.view.View root=activity.getWindow().getDecorView();
+                    ready.set(root.findViewWithTag("studio_projects_list")!=null
+                        &&root.findViewWithTag("studio_new_project")!=null);
+                });
+                if(ready.get()){appeared=true;break;}
+                Thread.sleep(100);
+            }
+            assertTrue("Project home must be accessible on Android phone",appeared);
+            snapshot(activity,"projects");
+        }finally{getInstrumentation().runOnMainSync(()->activity.finish());}
+    }
     private void snapshot(android.app.Activity activity,String name)throws Exception{
         AtomicReference<android.graphics.Bitmap> output=new AtomicReference<>();AtomicReference<android.view.SurfaceView> surface=new AtomicReference<>();getInstrumentation().runOnMainSync(()->{android.view.View decor=activity.getWindow().getDecorView();android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(decor.getWidth(),decor.getHeight(),android.graphics.Bitmap.Config.ARGB_8888);decor.draw(new android.graphics.Canvas(image));output.set(image);if(activity instanceof VideoEditorActivity){try{java.lang.reflect.Field field=VideoEditorActivity.class.getDeclaredField("viewer");field.setAccessible(true);android.view.View view=((androidx.media3.ui.PlayerView)field.get(activity)).getVideoSurfaceView();if(view instanceof android.view.SurfaceView)surface.set((android.view.SurfaceView)view);}catch(Exception e){throw new RuntimeException(e);}}});
         android.graphics.Bitmap image=output.get();if(surface.get()!=null){android.view.SurfaceView view=surface.get();AtomicInteger copied=new AtomicInteger(-1);android.graphics.Bitmap frame=android.graphics.Bitmap.createBitmap(view.getWidth(),view.getHeight(),android.graphics.Bitmap.Config.ARGB_8888);for(int attempt=0;attempt<40;attempt++){CountDownLatch frameReady=new CountDownLatch(1);getInstrumentation().runOnMainSync(()->android.view.PixelCopy.request(view,frame,result->{copied.set(result);frameReady.countDown();},new android.os.Handler(android.os.Looper.getMainLooper())));assertTrue(frameReady.await(15,TimeUnit.SECONDS));if(copied.get()==android.view.PixelCopy.SUCCESS)break;Thread.sleep(300);}assertEquals("Actual video surface must be readable",android.view.PixelCopy.SUCCESS,copied.get());int lit=0;for(int y=0;y<frame.getHeight();y+=4)for(int x=0;x<frame.getWidth();x+=4){int color=frame.getPixel(x,y);if(android.graphics.Color.red(color)+android.graphics.Color.green(color)+android.graphics.Color.blue(color)>70)lit++;}assertTrue("Composition preview must display video pixels",lit>20);int[] location=new int[2];getInstrumentation().runOnMainSync(()->view.getLocationInWindow(location));new android.graphics.Canvas(image).drawBitmap(frame,location[0],location[1],null);frame.recycle();}

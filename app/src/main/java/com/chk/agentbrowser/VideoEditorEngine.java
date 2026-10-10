@@ -101,6 +101,8 @@ public final class VideoEditorEngine {
                 JSONObject data;
                 if("video_editor_status".equals(action))data=status();
                 else if("video_editor_project_read".equals(action))data=load(application);
+                else if("video_editor_project_list".equals(action))
+                    data=StudioProjectLibrary.list(application,args.optBoolean("trash",false));
                 else if("video_editor_project_save".equals(action)){
                     if("running".equals(state)||"preparing".equals(state))throw new IllegalStateException("Export actif");
                     JSONObject project=args.getJSONObject("project");
@@ -109,17 +111,43 @@ public final class VideoEditorEngine {
                     validate(application,project);project.put("revision",current.optInt("revision",0)+1);
                     persist(application,project);
                     data=new JSONObject().put("saved",true).put("project",project);
+                }else if("video_editor_project_new".equals(action)){
+                    blockProjectSwitch();
+                    JSONObject fresh=StudioProjectLibrary.blank();
+                    validate(application,fresh);
+                    data=new JSONObject().put("project",StudioProjectLibrary.create(application,fresh));
+                }else if("video_editor_project_open".equals(action)){
+                    blockProjectSwitch();
+                    data=new JSONObject().put("project",StudioProjectLibrary.open(application,args.getString("id")));
+                }else if("video_editor_project_duplicate".equals(action)){
+                    blockProjectSwitch();
+                    data=new JSONObject().put("project",StudioProjectLibrary.duplicate(application,args.getString("id")));
+                }else if("video_editor_project_rename".equals(action)){
+                    blockProjectSwitch();
+                    data=new JSONObject().put("project",StudioProjectLibrary.rename(application,args.getString("id"),args.getString("name")));
+                }else if("video_editor_project_trash".equals(action)){
+                    blockProjectSwitch();
+                    StudioProjectLibrary.trash(application,args.getString("id"));
+                    data=new JSONObject().put("trashed",true);
+                }else if("video_editor_project_restore".equals(action)){
+                    blockProjectSwitch();
+                    StudioProjectLibrary.restore(application,args.getString("id"));
+                    data=new JSONObject().put("restored",true);
                 }else if("video_editor_preset_alpha_omega".equals(action)){
                     if("running".equals(state)||"preparing".equals(state))throw new IllegalStateException("Export actif");
-                    JSONObject project=alphaOmega(application);project.put("revision",load(application).optInt("revision",0)+1);
-                    persist(application,project);
+                    JSONObject project=alphaOmega(application);
+                    project=StudioProjectLibrary.create(application,project);
                     data=new JSONObject().put("saved",true).put("project",project);
                 }else throw new IllegalArgumentException("Commande vidéo inconnue");
                 cb.completed(true,data.toString());
             }catch(Exception ex){cb.completed(false,ex.getMessage());}
         });
     }
-    public JSONObject status(){
+    private void blockProjectSwitch(){
+        if("running".equals(state)||"preparing".equals(state))
+            throw new IllegalStateException("Export en cours : attends la fin avant de changer de projet");
+    }
+        public JSONObject status(){
         JSONObject o=new JSONObject();
         try{o.put("state",state).put("progress_percent",percent)
            .put("error",error).put("output",lastOutput)
@@ -194,10 +222,7 @@ public final class VideoEditorEngine {
         }finally{retriever.release();}
     }
     public JSONObject load(Context context)throws Exception{
-        File f=new File(context.getFilesDir(),SAVE);
-        if(!f.isFile())return new JSONObject().put("name","Nouveau montage")
-                .put("output","Montage-"+System.currentTimeMillis()+".mp4").put("aspect_ratio","source").put("clips",new JSONArray()).put("audio",new JSONArray());
-        return readProject(f);
+        return StudioProjectLibrary.active(context);
     }
     private JSONObject readProject(File f)throws Exception{
         if(f.length()>200000)throw new IllegalStateException("Projet trop grand");
@@ -208,7 +233,9 @@ public final class VideoEditorEngine {
         }
         return new JSONObject(new String(bytes,StandardCharsets.UTF_8));
     }
-    private void persist(Context app,JSONObject project)throws Exception{persistNamed(app,SAVE,project);}
+    private void persist(Context app,JSONObject project)throws Exception{
+        StudioProjectLibrary.save(app,project);
+    }
     private void persistNamed(Context app,String name,JSONObject project)throws Exception{
         File output=new File(app.getFilesDir(),name),tmp=new File(app.getFilesDir(),name+".tmp");
         try(FileOutputStream out=new FileOutputStream(tmp)){
