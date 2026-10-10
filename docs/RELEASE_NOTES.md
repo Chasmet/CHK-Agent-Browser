@@ -1,3 +1,17 @@
+NOUVEAU — Cut Vidéo directement dans CHK Agent Browser.
+
+- Nouvel onglet Cut dans la navigation mobile, sans modifier l'application Cut Vidéo autonome.
+- Découpe MP4 hors ligne : 15, 30, 60, 90 secondes ou personnalisée, début/fin, exports séquentiels Media3.
+- Bibliothèque des extraits dans Fichiers CHK/CutVideo ; lecture et partage des MP4.
+- Programmation de rappels Android et métadonnées par réseau (YouTube, TikTok, Instagram, X).
+- Liens directs vers les outils de création des réseaux via la WebView existante, formulaires validables sur place.
+- Copie des métadonnées et import depuis le presse-papiers ; gestion multi-comptes CHKNOIRSHADOW et QG.
+- Suivi local « Programmé », « À publier », « Publié » ; l'état Publié est une validation manuelle, pas une garantie API.
+- Copie du planning dans CutVideo/publications.json consultable via les outils MCP Fichiers.
+- Tests Android de non-régression.
+
+Fiabilité : conservation des données existantes, de la signature permanente et du mécanisme de mise à jour intégrée. Les publications ne sont pas expédiées automatiquement : elles doivent être confirmées sur les sites ou par une API autorisée.
+
 Mise à jour générale de fiabilité du navigateur, des fichiers, des notes et du Studio.
 
 - Récupération des onglets après interruption du moteur WebView ; message et action pour rouvrir la page.
