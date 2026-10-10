@@ -56,6 +56,8 @@ public final class VideoEditorEngine {
     private volatile String state="idle", error="",lastOutput="";
     private volatile int percent;
     private Transformer transformer;
+    private final Object exportLock=new Object();
+    private volatile long exportGeneration;
     private File activeOutput, finalOutput;
     private Context app;
 
@@ -78,20 +80,23 @@ public final class VideoEditorEngine {
         if("video_editor_export".equals(action)){
             MAIN.post(()->{
                 if("running".equals(state)||"preparing".equals(state)){cb.completed(false,"Un export est déjà actif");return;}
-                state="preparing";error="";percent=0;
+                final long ticket; synchronized(exportLock){ticket=++exportGeneration;state="preparing";error="";percent=0;}
                 DISK.execute(()->{try{
                     JSONObject project=load(application);validate(application,project);
                     if(project.getJSONArray("clips").length()==0)throw new IllegalArgumentException("Ajoute une vidéo avant d’exporter");
                     Composition composition=composition(application,project);
-                    MAIN.post(()->{if(!"preparing".equals(state)){cb.completed(false,"Export annulé");return;}startExport(application,project,composition,args.optBoolean("replace",false),cb);});
-                }catch(Exception ex){state="failed";error=ex.getMessage();cb.completed(false,error);}});
+                    MAIN.post(()->{if(ticket!=exportGeneration||!"preparing".equals(state)){cb.completed(false,"Export annulé");return;}startExport(application,project,composition,args.optBoolean("replace",false),ticket,cb);});
+                }catch(Exception ex){synchronized(exportLock){if(ticket==exportGeneration){state="failed";error=ex.getMessage();}}cb.completed(false,ex.getMessage());}});
             });return;
         }
         if("video_editor_cancel".equals(action)){
             MAIN.post(()->{
-                if("running".equals(state)||"preparing".equals(state)){
-                    if(transformer!=null)transformer.cancel();transformer=null;state="cancelled";
-                    if(activeOutput!=null)activeOutput.delete();
+                synchronized(exportLock){
+                    if("running".equals(state)||"preparing".equals(state)){
+                        exportGeneration++;
+                        if(transformer!=null)transformer.cancel();transformer=null;state="cancelled";
+                        if(activeOutput!=null)activeOutput.delete();
+                    }
                 }
                 cb.completed(true,status().toString());
             });return;
@@ -411,6 +416,8 @@ public final class VideoEditorEngine {
             throw new IllegalArgumentException("Dossier de sortie inexistant");
         for(int i=0;i<clips.length();i++)if(output.equals(clips.getJSONObject(i).getString("path")))
             throw new IllegalArgumentException("Sortie identique à une vidéo source");
+        if(sounds!=null)for(int i=0;i<sounds.length();i++)if(output.equals(sounds.getJSONObject(i).getString("path")))
+            throw new IllegalArgumentException("Sortie identique à une source audio");
     }
     private void checkMediaDuration(File f,long requested)throws Exception{
         MediaMetadataRetriever r=new MediaMetadataRetriever();
@@ -534,7 +541,7 @@ public final class VideoEditorEngine {
     private long sourceDurationUs(WorkspaceStore store,JSONObject clip,java.util.Map<String,Long> cache)throws Exception{
         String path=clip.getString("path");Long value=cache.get(path);if(value==null){MediaMetadataRetriever retriever=new MediaMetadataRetriever();try{retriever.setDataSource(store.file(path).getAbsolutePath());String duration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);value=duration==null?0:Long.parseLong(duration);}finally{retriever.release();}cache.put(path,value);}return Math.max(value,clip.optLong("start_ms")+clip.optLong("duration_ms",10000))*1000;
     }
-    private void startExport(Context context,JSONObject project,Composition composition,boolean replace,Done callback){
+    private void startExport(Context context,JSONObject project,Composition composition,boolean replace,long ticket,Done callback){
         try{
             WorkspaceStore store=new WorkspaceStore(context);String output=project.getString("output");
             File destination=store.file(output);
@@ -545,33 +552,37 @@ public final class VideoEditorEngine {
             transformer=new Transformer.Builder(context).setMuxerFactory(new androidx.media3.transformer.InAppMp4Muxer.Factory()).setMaxDelayBetweenMuxerSamplesMs(60000).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                .addListener(new Transformer.Listener(){
                  @Override public void onCompleted(Composition c,ExportResult result){
-                    if(!"running".equals(state))return;
+                    if(ticket!=exportGeneration||!"running".equals(state))return;
                     transformer=null;percent=99;
                     WorkspaceCommands.IO.execute(()->{
-                        if(!"running".equals(state))return;
+                        if(ticket!=exportGeneration||!"running".equals(state))return;
                         try{
-                            if(activeOutput==null||!activeOutput.isFile()||activeOutput.length()<1000)
+                            if(!partial.isFile()||partial.length()<1000)
                                 throw new IllegalStateException("Rendu MP4 absent ou incomplet");
-                            JSONObject visual=inspectRenderedClips(context,activeOutput,project);
+                            JSONObject visual=inspectRenderedClips(context,partial,project);
                             if(visual.getJSONArray("black_video_segments").length()>0)
                                 throw new IllegalStateException("Export rejeté : images noires dans les cuts "
                                     +visual.getJSONArray("black_video_segments")
                                     +" (luminosité "+visual.getJSONArray("frame_samples")
                                     +"). L'ancien clip est conservé.");
-                            if((!replace&&finalOutput.exists())||!activeOutput.renameTo(finalOutput))
-                                throw new IllegalStateException("Impossible de finaliser le MP4");
-                            try{persistNamed(context,"video_last_export.json",project);}
-                            catch(Exception ex){error="MP4 créé ; historique du rendu non sauvegardé";}
-                            state="completed";percent=100;
+                            synchronized(exportLock){
+                                if(ticket!=exportGeneration||!"running".equals(state)){partial.delete();return;}
+                                if((!replace&&destination.exists())||!partial.renameTo(destination))
+                                    throw new IllegalStateException("Impossible de finaliser le MP4");
+                                try{persistNamed(context,"video_last_export.json",project);}
+                                catch(Exception ex){error="MP4 créé ; historique du rendu non sauvegardé";}
+                                state="completed";percent=100;
+                            }
                         }catch(Exception ex){
-                            state="failed";error=ex.getMessage();
-                            if(activeOutput!=null)activeOutput.delete();
+                            synchronized(exportLock){if(ticket==exportGeneration){state="failed";error=ex.getMessage();}}
+                            partial.delete();
                         }
                     });
                  }
                  @Override public void onError(Composition c,ExportResult result,ExportException e){
+                    if(ticket!=exportGeneration){partial.delete();return;}
                     android.util.Log.e("ChkVideoExport","Échec du rendu MP4",e);state="failed";error=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage();
-                    if(activeOutput!=null)activeOutput.delete();transformer=null;
+                    partial.delete();transformer=null;
                  }
                }).build();
             if(!VideoExportService.start(context)&&!AgentClient.get(context).isEnabled())throw new IllegalStateException("Ouvre Studio sur le téléphone pour démarrer un export protégé");

@@ -22,6 +22,34 @@ public final class VideoEditorIntegrationTest {
     @After public void tearDown()throws Exception{store.file(source).delete();}
     private JSONObject invoke(String action,JSONObject args)throws Exception{CountDownLatch done=new CountDownLatch(1);AtomicReference<String> result=new AtomicReference<>();AtomicBoolean success=new AtomicBoolean();VideoEditorEngine.get().command(context,action,args,(ok,value)->{success.set(ok);result.set(value);done.countDown();});assertTrue("Command timed out",done.await(30,TimeUnit.SECONDS));assertTrue(result.get(),success.get());return new JSONObject(result.get());}
     private JSONObject project(String output)throws Exception{return new JSONObject().put("name","Encoder test").put("output",output).put("aspect_ratio","1:1").put("aspect_mode","fit").put("resolution",480).put("clips",new JSONArray().put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",1000).put("filter","noir")).put(new JSONObject().put("path",source).put("start_ms",1000).put("duration_ms",1000).put("speed",2).put("text","CHK"))).put("audio",new JSONArray());}
+    @Test public void testCancelThenRestartCannotStartAnObsoleteExport()throws Exception{
+        String output="restart-"+UUID.randomUUID()+".mp4";
+        invoke("video_editor_project_save",new JSONObject().put("project",project(output)));
+        java.lang.reflect.Field f=VideoEditorEngine.class.getDeclaredField("DISK");f.setAccessible(true);
+        ExecutorService disk=(ExecutorService)f.get(null);CountDownLatch blocked=new CountDownLatch(1),release=new CountDownLatch(1);
+        disk.execute(()->{blocked.countDown();try{release.await(20,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}});
+        assertTrue(blocked.await(5,TimeUnit.SECONDS));
+        CountDownLatch first=new CountDownLatch(1),second=new CountDownLatch(1);
+        AtomicBoolean obsoleteAccepted=new AtomicBoolean(true),latestAccepted=new AtomicBoolean(false);
+        try{
+            VideoEditorEngine.get().command(context,"video_editor_export",new JSONObject(),(ok,res)->{obsoleteAccepted.set(ok);first.countDown();});
+            invoke("video_editor_cancel",new JSONObject());
+            VideoEditorEngine.get().command(context,"video_editor_export",new JSONObject(),(ok,res)->{latestAccepted.set(ok);second.countDown();});
+            getInstrumentation().waitForIdleSync();release.countDown();
+            assertTrue(first.await(30,TimeUnit.SECONDS));assertFalse("Cancelled preparation must never start",obsoleteAccepted.get());
+            assertTrue(second.await(30,TimeUnit.SECONDS));assertTrue("Latest export should start",latestAccepted.get());
+            awaitExport();assertTrue(store.file(output).length()>1000);
+        }finally{release.countDown();invoke("video_editor_cancel",new JSONObject());store.file(output).delete();}
+    }
+    @Test public void testExportCannotOverwriteAnAudioSourceInAMp4Container()throws Exception{
+        String audioSource="audio-source-"+UUID.randomUUID()+".mp4";
+        store.importUri(Uri.fromFile(store.file(source)),audioSource);
+        try{
+            JSONObject p=project(audioSource).put("audio",new JSONArray().put(new JSONObject().put("path",audioSource).put("start_ms",0).put("duration_ms",1000)));
+            try{VideoEditorEngine.get().validate(context,p);fail("Must reject an audio source as output");}
+            catch(IllegalArgumentException expected){assertTrue(expected.getMessage().contains("source audio"));}
+        }finally{store.file(audioSource).delete();}
+    }
     @Test public void testInspectAnyExtensionAndConsent()throws Exception{JSONObject info=MediaInspection.info(context,source);assertEquals(320,info.getInt("width"));assertEquals(2,info.getJSONArray("tracks").length());assertTrue(info.getLong("duration_ms")>=2900);assertTrue(MediaInspection.codecs().getJSONArray("codecs").length()>0);boolean previous=AgentClient.get(context).isPreviewAllowed();try{AgentClient.get(context).setPreviewAllowed(false);try{MediaInspection.frame(context,source,100);fail("Preview must require sharing consent");}catch(IOException expected){}AgentClient.get(context).setPreviewAllowed(true);JSONObject image=MediaInspection.frame(context,source,1000);assertTrue(android.util.Base64.decode(image.getString("jpeg_base64"),0).length>1000);assertTrue(image.getInt("width")<=640);}finally{AgentClient.get(context).setPreviewAllowed(previous);}}
     @Test public void testEmptyDraftAndRevisionGuard()throws Exception{JSONObject draft=new JSONObject().put("output","Draft-"+UUID.randomUUID()+".mp4").put("clips",new JSONArray()).put("audio",new JSONArray());JSONObject saved=invoke("video_editor_project_save",new JSONObject().put("project",draft));int revision=saved.getJSONObject("project").getInt("revision");CountDownLatch done=new CountDownLatch(1);AtomicBoolean success=new AtomicBoolean(true);VideoEditorEngine.get().command(context,"video_editor_project_save",new JSONObject().put("project",draft).put("expected_revision",revision-1),(ok,value)->{success.set(ok);done.countDown();});assertTrue(done.await(10,TimeUnit.SECONDS));assertFalse(success.get());assertEquals(revision,invoke("video_editor_project_read",new JSONObject()).getInt("revision"));}
     @Test public void testRealExportPreservesAudioAndAppliesRatioAndSpeed()throws Exception{String output="export-"+UUID.randomUUID()+".mp4";invoke("video_editor_project_save",new JSONObject().put("project",project(output)));invoke("video_editor_export",new JSONObject());String state="";for(int i=0;i<360;i++){JSONObject status=invoke("video_editor_status",new JSONObject());state=status.getString("state");if(!state.equals("running")&&!state.equals("preparing"))break;Thread.sleep(500);}assertEquals(VideoEditorEngine.get().status().toString(),"completed",state);JSONObject verified=invoke("video_editor_verify_output",new JSONObject());assertTrue(verified.toString(),verified.getBoolean("valid"));assertEquals("480",verified.getString("width_px"));assertEquals("480",verified.getString("height_px"));assertTrue(verified.getBoolean("has_audio"));assertTrue(Math.abs(verified.getLong("duration_ms")-1500)<300);assertEquals(1500,verified.getLong("expected_duration_ms"));

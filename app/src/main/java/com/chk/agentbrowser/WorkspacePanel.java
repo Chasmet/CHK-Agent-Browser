@@ -23,7 +23,7 @@ public final class WorkspacePanel {
     private LinearLayout list;
     private TextView location;
     private EditText search;
-    private String folder="",space="files",exportPath="";
+    private String folder="",space="files",exportPath="",importFolder="";
     private int generation,offset;
     private String category="all",sort="name";
     private boolean grid=true,selectMode;
@@ -32,6 +32,8 @@ public final class WorkspacePanel {
     private final android.os.Handler handler=new android.os.Handler();
     private final Runnable filter=()->{offset=0;refresh();};
     public WorkspacePanel(Activity a,FrameLayout host){this.a=a;this.host=host;}
+    void saveState(android.os.Bundle out){out.putString("workspace_folder",folder);out.putString("workspace_export",exportPath);out.putString("workspace_import",importFolder);out.putString("workspace_category",category);}
+    void restoreState(android.os.Bundle state){if(state==null)return;folder=state.getString("workspace_folder","");exportPath=state.getString("workspace_export","");importFolder=state.getString("workspace_import",folder);category=state.getString("workspace_category","all");}
     private int ink(){return space.equals("files")?0xff202124:MobileUi.TEXT;}
     private int muted(){return space.equals("files")?0xff687080:MobileUi.MUTED;}
     private TextView label(String value,int size){return MobileUi.text(a,value,size,ink());}
@@ -114,11 +116,16 @@ public final class WorkspacePanel {
         case 6:confirm("Mettre cet élément à la corbeille ?",()->work(()->{new WorkspaceStore(a).trash(path);return "Élément dans la corbeille";}));break;
     }}).setNegativeButton("Fermer",null).show();}
     private void openFile(String path,boolean share){try{WorkspaceStore s=new WorkspaceStore(a);if(!share&&(s.mime(path).startsWith("image/")||s.mime(path).startsWith("video/")||s.mime(path).startsWith("audio/"))){a.startActivity(new Intent(a,MediaPreviewActivity.class).putExtra("path",path));return;}Uri u=s.uri(path);Intent intent=new Intent(share?Intent.ACTION_SEND:Intent.ACTION_VIEW);if(share){intent.setType(s.mime(path));intent.putExtra(Intent.EXTRA_STREAM,u);}else intent.setDataAndType(u,s.mime(path));intent.setClipData(ClipData.newRawUri("Fichier",u));intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);a.startActivity(Intent.createChooser(intent,share?"Partager le fichier":"Ouvrir le fichier"));}catch(Exception e){toast("Aucune application compatible ou fichier inaccessible");}}
-    private void importPicker(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);try{a.startActivityForResult(i,IMPORT);}catch(Exception e){toast("Sélecteur Android indisponible");}}
+    private void importPicker(){importFolder=folder;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);try{a.startActivityForResult(i,IMPORT);}catch(Exception e){toast("Sélecteur Android indisponible");}}
     private void exportPicker(String path){exportPath=path;try{WorkspaceStore s=new WorkspaceStore(a);Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(s.mime(path)).putExtra(Intent.EXTRA_TITLE,path.substring(path.lastIndexOf('/')+1));a.startActivityForResult(i,EXPORT);}catch(Exception e){toast(e.getMessage());}}
     public boolean result(int request,int result,Intent data){if(request!=IMPORT&&request!=EXPORT)return false;if(result!=Activity.RESULT_OK||data==null)return true;
-        if(request==IMPORT){java.util.List<Uri> uris=new java.util.ArrayList<>();if(data.getClipData()!=null){for(int i=0;i<Math.min(50,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());}else if(data.getData()!=null)uris.add(data.getData());String destination=folder;
-            work(()->{WorkspaceStore s=new WorkspaceStore(a);int count=0;for(Uri u:uris){String name="Fichier-"+System.nanoTime();try(Cursor c=a.getContentResolver().query(u,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())name=c.getString(0);}String path=WorkspacePaths.child(destination,name);if(s.file(path).exists())path=WorkspacePaths.child(destination,System.currentTimeMillis()+"-"+name);s.importUri(u,path);count++;}return count+" fichier(s) importé(s)";});
+        if(request==IMPORT){java.util.List<Uri> uris=new java.util.ArrayList<>();if(data.getClipData()!=null){for(int i=0;i<Math.min(50,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());}else if(data.getData()!=null)uris.add(data.getData());String destination=importFolder;
+            work(()->{WorkspaceStore s=new WorkspaceStore(a);int count=0;java.util.List<String> failures=new java.util.ArrayList<>();
+                for(Uri u:uris){try{String name="Fichier-"+System.nanoTime();try(Cursor c=a.getContentResolver().query(u,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())name=c.getString(0);}
+                    File parent=WorkspacePaths.resolve(new File(a.getFilesDir(),"workspace"),destination,true);
+                    String path=WorkspacePaths.child(destination,FileNames.available(parent,name,null));s.importUri(u,path);count++;
+                }catch(Exception e){failures.add(e.getMessage()==null?"fichier inaccessible":e.getMessage());}}
+                return count+" fichier(s) importé(s)"+(failures.isEmpty()?"":" · "+failures.size()+" échec(s) : "+failures.get(0));});
         }else {Uri target=data.getData();String path=exportPath;work(()->{try(InputStream in=new FileInputStream(new WorkspaceStore(a).file(path));OutputStream out=a.getContentResolver().openOutputStream(target)){if(out==null)throw new IOException("Destination inaccessible");byte[] buf=new byte[32768];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);}return "Fichier exporté";});}return true;
     }
     private void editText(String path){WorkspaceCommands.IO.execute(()->{try{JSONObject o=new WorkspaceStore(a).readText(path,0);if(o.getInt("next_offset")!=-1)throw new IOException("Édition locale limitée à 12 000 caractères");String body=o.getString("text");WorkspaceCommands.UI.post(()->{if(a.isFinishing())return;EditText input=new EditText(a);input.setText(body);input.setMinLines(8);input.setMaxLines(14);input.setGravity(android.view.Gravity.TOP);new AlertDialog.Builder(a).setTitle("Modifier "+path).setView(input).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,i)->work(()->{WorkspaceStore s=new WorkspaceStore(a);if(!s.readText(path,0).getString("text").equals(body))throw new IOException("Fichier modifié ailleurs : rouvre-le");s.writeText(path,input.getText().toString(),true);return "Document enregistré";})).show();});}catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}});}

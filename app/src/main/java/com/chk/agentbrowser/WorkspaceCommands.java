@@ -15,6 +15,7 @@ public final class WorkspaceCommands {
     private WorkspaceCommands(){}
     public static boolean handles(String action){return action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status")||action.startsWith("video_editor_")||action.startsWith("media_");}
     public static void run(Context context,String action,JSONObject args,AgentClient.ResultCallback cb){
+        if(!cb.isActive())return;
         Context app=context.getApplicationContext();
         if(action.startsWith("video_editor_")){
             VideoEditorEngine.get().command(app,action,args,(ok,result)->cb.finish(ok,result));
@@ -24,16 +25,18 @@ public final class WorkspaceCommands {
             BrowserTransferManager.prepareUploads(app,args.optJSONArray("files"),AgentClient.get(app).deviceTokenForTransfers(),(ok,uris,message)->{
                 if(!ok){cb.finish(false,message);return;}
                 IO.execute(()->{try{
+                    if(!cb.isActive())return;
                     WorkspaceStore s=new WorkspaceStore(app);JSONArray rows=new JSONArray();JSONArray files=args.getJSONArray("files");
                     // Validate the whole destination set before writing any file.
                     java.util.HashSet<String> paths=new java.util.HashSet<>();
                     for(int i=0;i<uris.length;i++){String p=WorkspacePaths.child(args.optString("folder",""),files.getJSONObject(i).getString("name"));if(!paths.add(p)||s.file(p).exists()||!s.file(p).getParentFile().isDirectory())throw new Exception("Destination existante ou parent absent : "+p);}
-                    for(int i=0;i<uris.length;i++){String p=WorkspacePaths.child(args.optString("folder",""),files.getJSONObject(i).getString("name"));s.importUri(uris[i],p);rows.put(p);}
+                    for(int i=0;i<uris.length;i++){if(!cb.isActive())return;String p=WorkspacePaths.child(args.optString("folder",""),files.getJSONObject(i).getString("name"));s.importUri(uris[i],p);rows.put(p);}
                     finish(cb,true,new JSONObject().put("imported",rows).toString());
                 }catch(Exception e){finish(cb,false,"Importation interrompue, certains fichiers peuvent être présents : "+e.getMessage());}});
             });return;
         }
         IO.execute(()->{try{
+            if(!cb.isActive())return;
             WorkspaceStore s=new WorkspaceStore(app);String path=args.optString("path","");Object result;
             switch(action){
                 case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("video_editor",true).put("media_inspection",true).put("workspace_version",2).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;

@@ -13,6 +13,14 @@ public final class NoteEditorActivity extends Activity {
     private TextView status,sourceView;
     private String id="",source="";
     private int revision;
+    private SaveState lastSave;
+    private static final class SaveState {
+        NoteEditorActivity owner;
+        String id,error;
+        int revision;
+        boolean complete;
+    }
+    @Override public Object onRetainNonConfigurationInstance(){return lastSave;}
     private boolean loading=true,dirty,saving,conflict,leaveWhenSaved;
     private final android.os.Handler handler=new android.os.Handler();
     private final Runnable autosave=()->save();
@@ -26,13 +34,32 @@ public final class NoteEditorActivity extends Activity {
         if(saved!=null){source=saved.getString("source","");revision=saved.getInt("revision");title.setText(saved.getString("title",""));body.setText(saved.getString("body",""));pinned.setChecked(saved.getBoolean("pinned"));loading=false;dirty=saved.getBoolean("dirty",true);showSource();if(dirty)handler.post(autosave);}
         else if(id.isEmpty()){title.setText(getIntent().getStringExtra("title"));body.setText(getIntent().getStringExtra("body"));source=getIntent().getStringExtra("source");if(source==null)source="";loading=false;dirty=true;showSource();handler.post(autosave);}
         else load();
+        Object retained=getLastNonConfigurationInstance();
+        if(retained instanceof SaveState){
+            lastSave=(SaveState)retained;lastSave.owner=this;saving=!lastSave.complete;
+            if(lastSave.complete)finishSave(lastSave);
+        }
     }
-    private void load(){loading=true;title.setEnabled(false);body.setEnabled(false);pinned.setEnabled(false);String readId=id;WorkspaceCommands.IO.execute(()->{try{JSONObject n=new WorkspaceStore(this).note(readId);if(n.getBoolean("deleted"))throw new Exception("Cette note est dans la corbeille");WorkspaceCommands.UI.post(()->{if(isFinishing())return;try{id=n.getString("id");revision=n.getInt("revision");source=n.getString("source_url");title.setText(n.getString("title"));body.setText(n.getString("body"));pinned.setChecked(n.getBoolean("pinned"));loading=false;dirty=false;conflict=false;title.setEnabled(true);body.setEnabled(true);pinned.setEnabled(true);status.setText("Enregistrée sur ce téléphone");showSource();}catch(Exception e){status.setText(e.getMessage());}});}catch(Exception e){WorkspaceCommands.UI.post(()->{status.setText(e.getMessage());loading=false;});}});}
+    private void load(){loading=true;title.setEnabled(false);body.setEnabled(false);pinned.setEnabled(false);String readId=id;WorkspaceCommands.IO.execute(()->{try{JSONObject n=new WorkspaceStore(this).note(readId);if(n.getBoolean("deleted"))throw new Exception("Cette note est dans la corbeille");WorkspaceCommands.UI.post(()->{if(isFinishing()||isDestroyed())return;try{id=n.getString("id");revision=n.getInt("revision");source=n.getString("source_url");title.setText(n.getString("title"));body.setText(n.getString("body"));pinned.setChecked(n.getBoolean("pinned"));loading=false;dirty=false;conflict=false;title.setEnabled(true);body.setEnabled(true);pinned.setEnabled(true);status.setText("Enregistrée sur ce téléphone");showSource();}catch(Exception e){status.setText(e.getMessage());}});}catch(Exception e){WorkspaceCommands.UI.post(()->{status.setText(e.getMessage());loading=false;});}});}
     private void showSource(){sourceView.setVisibility(source.isEmpty()?android.view.View.GONE:android.view.View.VISIBLE);sourceView.setText("↗ "+source);sourceView.setOnClickListener(v->{if(source.startsWith("https://"))startActivity(new Intent(this,MainActivity.class).putExtra("open_url",source));});}
     private void changed(){if(loading)return;dirty=true;status.setText(conflict?"Conflit : conserve une copie depuis le menu":"Modifications en cours…");handler.removeCallbacks(autosave);handler.postDelayed(autosave,650);}
     private void save(){handler.removeCallbacks(autosave);if(loading||saving||conflict||!dirty){if(leaveWhenSaved&&!dirty&&!saving&&!conflict)finish();return;}
         String saveId=id,t=title.getText().toString(),b=body.getText().toString(),url=source;boolean pin=pinned.isChecked();int expected=revision;
-        saving=true;dirty=false;status.setText("Enregistrement…");WorkspaceCommands.IO.execute(()->{try{JSONObject n=new WorkspaceStore(this).saveNote(saveId,t,b,url,pin,expected);WorkspaceCommands.UI.post(()->{try{id=n.getString("id");revision=n.getInt("revision");saving=false;status.setText("Enregistrée sur ce téléphone");if(dirty)save();else if(leaveWhenSaved)finish();}catch(Exception e){failed(e.getMessage());}});}catch(Exception e){WorkspaceCommands.UI.post(()->failed(e.getMessage()));}});
+        saving=true;dirty=false;status.setText("Enregistrement…");
+        SaveState task=new SaveState();task.owner=this;lastSave=task;
+        android.content.Context app=getApplicationContext();
+        WorkspaceCommands.IO.execute(()->{
+            try{JSONObject n=new WorkspaceStore(app).saveNote(saveId,t,b,url,pin,expected);task.id=n.getString("id");task.revision=n.getInt("revision");}
+            catch(Exception e){task.error=e.getMessage()==null?"Enregistrement impossible":e.getMessage();}
+            WorkspaceCommands.UI.post(()->{task.complete=true;if(task.owner!=null)task.owner.finishSave(task);});
+        });
+    }
+    private void finishSave(SaveState task){
+        if(isDestroyed()||task!=lastSave)return;
+        saving=false;
+        if(task.error!=null){failed(task.error);return;}
+        id=task.id;revision=task.revision;status.setText("Enregistrée sur ce téléphone");
+        if(dirty)save();else if(leaveWhenSaved)finish();
     }
     private void failed(String message){saving=false;dirty=true;conflict=true;leaveWhenSaved=false;status.setText(message);if(!isFinishing()&&!isDestroyed())new AlertDialog.Builder(this).setTitle("Modifications conservées dans l’éditeur").setMessage(message).setPositiveButton("Conserver une copie",(d,i)->copyDraft()).setNegativeButton("Continuer à lire",null).show();}
     private void copyDraft(){if(saving)return;id="";revision=0;conflict=false;dirty=true;title.setText((title.getText()+" (copie)").substring(0,Math.min(120,title.length()+8)));save();}
@@ -41,5 +68,5 @@ public final class NoteEditorActivity extends Activity {
     @Override public void onBackPressed(){if(conflict){new AlertDialog.Builder(this).setTitle("Conserver tes modifications").setMessage("La note a changé pendant l’édition.").setPositiveButton("Enregistrer une copie et fermer",(d,i)->{leaveWhenSaved=true;copyDraft();}).setNegativeButton("Continuer l’édition",null).show();return;}leaveWhenSaved=true;save();}
     @Override protected void onPause(){save();super.onPause();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putString("id",id);out.putString("title",title.getText().toString());out.putString("body",body.getText().toString());out.putString("source",source);out.putInt("revision",revision);out.putBoolean("pinned",pinned.isChecked());out.putBoolean("dirty",dirty||saving);}
-    @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);super.onDestroy();}
+    @Override protected void onDestroy(){if(lastSave!=null&&lastSave.owner==this)lastSave.owner=null;handler.removeCallbacksAndMessages(null);super.onDestroy();}
 }

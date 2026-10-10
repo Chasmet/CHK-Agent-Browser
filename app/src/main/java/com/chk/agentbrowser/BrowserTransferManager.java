@@ -26,6 +26,7 @@ public final class BrowserTransferManager {
     private static final long MAX_TOTAL=32L*1024L*1024L;
     private static final ExecutorService IO=Executors.newSingleThreadExecutor();
     private static final Handler UI=new Handler(Looper.getMainLooper());
+    private static final java.util.Set<String> downloadNames=new java.util.HashSet<>();
     public interface UploadCallback{void done(boolean ok,Uri[] uris,String message);}
     public interface DownloadCallback{void done(boolean ok,String message);}
 
@@ -80,23 +81,42 @@ public final class BrowserTransferManager {
         c.setConnectTimeout(12000);c.setReadTimeout(30000);c.setInstanceFollowRedirects(false);
         c.setRequestProperty("Accept","*/*");c.setRequestProperty("User-Agent","CHK-Agent-Browser/2.1");
         c.setRequestProperty("Authorization","Bearer "+bearer);
+        long total=0;boolean complete=false;
+        try {
         int code=c.getResponseCode();
-        if(code<200||code>=300){c.disconnect();throw new Exception("Serveur de transfert HTTP "+code);}
-        long total=0;
+        if(code<200||code>=300)throw new Exception("Serveur de transfert HTTP "+code);
         try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(target)){
             byte[] buf=new byte[16384];int n;
             while((n=in.read(buf))!=-1){
                 total+=n;if(total>MAX_FILE)throw new Exception("Fichier supérieur à 12 Mo");
                 digest.update(buf,0,n);out.write(buf,0,n);
             }
-        }finally{c.disconnect();}
-        return total;
+        }
+        complete=true;return total;
+        }finally{c.disconnect();if(!complete)target.delete();}
     }
 
     public static void downloadToApp(Context context,String url,String userAgent,String mime,DownloadCallback callback){
+        downloadToApp(context,url,userAgent,null,mime,callback);
+    }
+    public static void downloadToApp(Context context,String url,String userAgent,String disposition,String mime,DownloadCallback callback){
         if(url==null||!url.startsWith("https://")){callback.done(false,"Téléchargement HTTPS requis.");return;}
         try{
-            String name=android.webkit.URLUtil.guessFileName(url,null,mime);
+            File root=context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            if(root==null||(!root.isDirectory()&&!root.mkdirs()))throw new Exception("Stockage des téléchargements indisponible");
+            final String name;
+            synchronized(downloadNames){
+                DownloadManager downloads=(DownloadManager)context.getSystemService(Context.DOWNLOAD_SERVICE);
+                try(Cursor pending=downloads.query(new DownloadManager.Query().setFilterByStatus(
+                        DownloadManager.STATUS_PENDING|DownloadManager.STATUS_RUNNING|DownloadManager.STATUS_PAUSED))){
+                    if(pending!=null)while(pending.moveToNext()){
+                        String destination=pending.getString(pending.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI));
+                        if(destination!=null){String taken=Uri.parse(destination).getLastPathSegment();if(taken!=null)downloadNames.add(taken);}
+                    }
+                }
+                name=FileNames.available(root,android.webkit.URLUtil.guessFileName(url,disposition,mime),downloadNames);
+                downloadNames.add(name);
+            }
             DownloadManager.Request request=new DownloadManager.Request(Uri.parse(url));
             request.setTitle(name);
             if(mime!=null&&!mime.isEmpty())request.setMimeType(mime);
@@ -116,16 +136,19 @@ public final class BrowserTransferManager {
                         if(status==DownloadManager.STATUS_SUCCESSFUL){
                             String local=c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI));
                             long size=c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+                            synchronized(downloadNames){downloadNames.remove(name);}
                             callback.done(true,"Téléchargement confirmé : "+name+" · "+size+" octets · "+(local==null?"stockage application":local));
                             return;
                         }
                         if(status==DownloadManager.STATUS_FAILED){
-                            callback.done(false,"Téléchargement refusé ou interrompu par Android.");return;
+                            int reason=c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON));
+                            synchronized(downloadNames){downloadNames.remove(name);}
+                            callback.done(false,"Téléchargement impossible (Android "+reason+"). Vérifie la connexion et l’espace libre.");return;
                         }
-                    }
+                    }else{callback.done(false,"Téléchargement supprimé ou annulé.");return;}
                 }catch(Exception e){callback.done(false,"Vérification du téléchargement impossible.");return;}
                 if(android.os.SystemClock.elapsedRealtime()-started>90000L){
-                    callback.done(false,"Téléchargement non confirmé après 90 secondes.");return;
+                    callback.done(false,"Téléchargement encore en cours après 90 secondes. Consulte Fichiers > Téléchargements avant de le relancer.");return;
                 }
                 UI.postDelayed(poll[0],1000L);
             };

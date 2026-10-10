@@ -28,6 +28,7 @@ public final class SettingsActivity extends Activity {
     private TextView mcpStatus, status;
     private Button mcpConnect, mcpCopy, mcpDisable, check, install;
     private boolean askedToInstall, awaitingInstallPermission;
+    private long validatedDownloadId=Long.MIN_VALUE;
     private Switch autonomousMode, previewMode;
     private final Handler refresh=new Handler();
     private final Runnable statusTick=new Runnable(){
@@ -37,6 +38,7 @@ public final class SettingsActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         setContentView(R.layout.activity_settings);
+        if(state!=null)awaitingInstallPermission=state.getBoolean("awaiting_install_permission",false);
         updates=new UpdateManager(this);
         agent=AgentClient.get(this);
         findViewById(R.id.settings_back).setOnClickListener(v->finish());
@@ -115,6 +117,7 @@ public final class SettingsActivity extends Activity {
         status.setText("GitHub Releases publiques : mises à jour directement sur ce téléphone.");
         showMcp();showInstall();
     }
+    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putBoolean("awaiting_install_permission",awaitingInstallPermission);}
     @Override protected void onPause(){refresh.removeCallbacks(statusTick);super.onPause();}
     private void showMcp() {
         boolean enabled=agent.isEnabled(), link=!agent.mcpUrl().isEmpty();
@@ -194,17 +197,24 @@ public final class SettingsActivity extends Activity {
         });
     }
     private void showDownloadProgress(){
+        if(!check.isEnabled())return;
         String message=updates.downloadProgress();
         if(message==null)return;
         if(message.equals("ready")){if(install.getVisibility()!=View.VISIBLE)showInstall();}
         else status.setText(message);
     }
     private void showInstall() {
-        File ready=updates.completedApk();
-        install.setVisibility(ready==null?View.GONE:View.VISIBLE);
-        if(ready!=null) {
-            status.setText("Mise à jour vérifiée et téléchargée. Appuie sur Installer ; Android demandera confirmation.");
-        }
+        long id=updates.downloadId();
+        if(id==validatedDownloadId)return;
+        // DownloadManager status is cheap; certificate parsing runs outside the UI.
+        if(!"ready".equals(updates.downloadProgress())){install.setVisibility(View.GONE);return;}
+        validatedDownloadId=id;install.setVisibility(View.GONE);
+        updates.checkCompletedApk(ready->{
+            if(isFinishing()||isDestroyed()||id!=updates.downloadId())return;
+            install.setVisibility(ready==null?View.GONE:View.VISIBLE);
+            status.setText(ready==null?"APK déjà installé ou incompatible. Vérifie les mises à jour pour réessayer.":
+                "Mise à jour vérifiée et téléchargée. Appuie sur Installer ; Android demandera confirmation.");
+        });
     }
     private void confirmInstall() {
         if(updates.completedApk()==null) {

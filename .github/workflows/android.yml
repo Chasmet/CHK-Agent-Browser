@@ -1,7 +1,7 @@
 name: CHK Agent Browser - APK Android et Releases
 on:
   push:
-    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009, agent/mobile-studio-20261009]
+    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009, agent/mobile-studio-20261009, agent/general-audit-20261010]
   workflow_dispatch:
 permissions:
   contents: write
@@ -97,4 +97,4 @@ jobs:
         run: |
           gh release create "v${RELEASE_VERSION}" "CHK-Agent-Browser-${RELEASE_VERSION}.apk" \
             --title "CHK Agent Browser ${RELEASE_VERSION}" \
-            --notes "Interface mobile refaite : navigateur, Fichiers, Notes et Studio. Navigation MCP visible, timeline native et exports complets avec remplacement ou nouvelle copie. APK signé avec la clé persistante. Mises à jour : Réglages > Vérifier les mises à jour."
+            --notes-file docs/RELEASE_NOTES.md

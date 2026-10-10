@@ -38,7 +38,7 @@ public final class AgentClient {
     private CommandHandler handler;
     private CommandHandler backgroundHandler;
     private IncomingListener incoming;
-    private JSONObject pending;
+    private volatile JSONObject pending;
     private long receivedAt;
     private boolean presenting;
     private int networkErrors;
@@ -49,7 +49,10 @@ public final class AgentClient {
     private final Runnable tick = this::poll;
     private final Runnable expiry = () -> finishPending(false, "Commande expirée. Vérifie la connexion et le mode autonome.");
 
-    public interface ResultCallback { void finish(boolean success, String result); }
+    public interface ResultCallback {
+        void finish(boolean success, String result);
+        default boolean isActive(){return true;}
+    }
     public interface CommandHandler {
         void onCommand(JSONObject command, ResultCallback callback);
         String pageUrl();
@@ -93,6 +96,10 @@ public final class AgentClient {
             if(!running||!isEnabled())return;
             ui.removeCallbacks(tick);ui.post(tick);
         });
+    }
+    void browserInterrupted(){
+        if(pending!=null&&!WorkspaceCommands.handles(pending.optString("action","")))
+            finishPending(false,"Page interrompue par Android. Résultat inconnu : relis la page avant de recommencer l'action.");
     }
     public boolean isAutonomous(){return settings.getBoolean("autonomous_mode",false);}
     public void setAutonomous(boolean allow){
@@ -248,9 +255,17 @@ public final class AgentClient {
         if(!settings.edit().putString("executing_id",originalId).commit()) {
             finishPending(false,"Impossible de mémoriser la commande : aucune action exécutée.");return;
         }
-        receiver.onCommand(command, (approved, text) -> ui.post(() -> {
-            if(pending != null && originalId.equals(pending.optString("id"))) finishPending(approved, text);
-        }));
+        ResultCallback callback=new ResultCallback(){
+            @Override public boolean isActive(){
+                JSONObject active=pending;
+                return isEnabled()&&active==command;
+            }
+            @Override public void finish(boolean approved,String text){ui.post(()->{
+                if(pending==command)finishPending(approved,text);
+            });}
+        };
+        try{receiver.onCommand(command,callback);}
+        catch(RuntimeException failure){finishPending(false,"Commande interrompue : "+failure.getClass().getSimpleName());}
     }
     private void finishPending(boolean ok, String message) {
         if(pending == null) return;
@@ -267,10 +282,7 @@ public final class AgentClient {
     }
     private void sendResult(String id, String action, boolean success, String message) {
         try {
-            JSONObject result = new JSONObject();
-            result.put("id",id);result.put("ok",success);
-            if(success)result.put("result",limit(message,(WorkspaceCommands.handles(action)||"preview".equals(action)||"screenshot".equals(action))?230000:11000));
-            else result.put("error",limit(message,750));
+            JSONObject result=CommandResult.envelope(id,action,success,message);
             settings.edit().putString("result_outbox",result.toString())
                 .putString("last_result",result.toString()).putString("last_result_id",id)
                 .remove("executing_id").commit();

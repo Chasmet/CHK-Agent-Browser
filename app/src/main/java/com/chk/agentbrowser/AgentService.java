@@ -36,6 +36,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     private PowerManager.WakeLock sessionLock;
     private ConnectivityManager connectivity;
     private ConnectivityManager.NetworkCallback networkCallback;
+    private String networkSignature="";
     private final Handler main=new Handler(android.os.Looper.getMainLooper());
     private final Runnable maintenance=new Runnable(){
         @Override public void run(){
@@ -94,14 +95,22 @@ public final class AgentService extends Service implements AgentClient.IncomingL
                 refreshNotification();
             }
             @Override public void onCapabilitiesChanged(Network network,android.net.NetworkCapabilities caps){
+                String signature=network.toString()+":"+caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+                    +":"+caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
+                    +":"+caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+                if(signature.equals(networkSignature))return;
+                networkSignature=signature;
                 String type=caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)?"Wi-Fi":
                     (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)?"mobile":"autre");
                 AgentLog.add(AgentService.this,"réseau","transport actif : "+type);
                 AgentClient.get(AgentService.this).reconnect();
             }
         };
-        try{connectivity.registerNetworkCallback(new NetworkRequest.Builder()
-            .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),networkCallback);}
+        try{
+            if(Build.VERSION.SDK_INT>=24)connectivity.registerDefaultNetworkCallback(networkCallback);
+            else connectivity.registerNetworkCallback(new NetworkRequest.Builder()
+                .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),networkCallback);
+        }
         catch(RuntimeException ignored){networkCallback=null;}
         notifications=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         if(Build.VERSION.SDK_INT>=26){

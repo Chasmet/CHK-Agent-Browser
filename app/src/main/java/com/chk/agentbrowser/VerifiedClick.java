@@ -33,6 +33,7 @@ public final class VerifiedClick {
                 JSONObject.quote(expectedText),JSONObject.quote(expectedUrl));
         final long start=SystemClock.elapsedRealtime();
         web.evaluateJavascript(condition, before->{
+            if(!callback.isActive()||!BrowserWebState.alive(web))return;
             String state=value(before);
             if("DONE".equals(state)) {
                 callback.finish(true,"Condition déjà satisfaite : aucun clic supplémentaire.");
@@ -47,6 +48,7 @@ public final class VerifiedClick {
                 if(!"Clic effectué".equals(result)) { callback.finish(false,result);return; }
                 final Runnable[] check=new Runnable[1];
                 check[0]=()->{
+                    if(!callback.isActive()||!BrowserWebState.alive(web))return;
                     try {
                         web.evaluateJavascript(condition,rawState->{
                             String current=value(rawState);

@@ -65,10 +65,18 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 Uri link=request.getUrl();return link==null||!isPublicHttps(link);
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap favicon){
-                applyCookiePolicy(view,url);
+                BrowserWebState.remember(view,url);applyCookiePolicy(view,url);
                 if(view==current)loading=true;
             }
+            @Override public boolean onRenderProcessGone(WebView dead,android.webkit.RenderProcessGoneDetail detail){
+                String url=BrowserWebState.url(dead);int index=tabs.indexOf(dead);boolean active=current==dead;
+                AgentClient.get(app).browserInterrupted();awaiting=null;loading=false;
+                BrowserWebState.close(dead);dead.destroy();
+                if(index>=0){WebView replacement=createWebView();BrowserWebState.remember(replacement,url);tabs.set(index,replacement);if(active){current=replacement;saveLast(url);}}
+                return true;
+            }
             @Override public void onPageFinished(WebView view,String url){
+                if(!BrowserWebState.alive(view))return;
                 applyCookiePolicy(view,url);
                 if(view==current){
                     loading=false;
@@ -141,14 +149,14 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
 
     public void destroy(){
         closed=true;main.removeCallbacksAndMessages(null);
-        for(WebView web:new ArrayList<>(tabs)){try{web.stopLoading();web.destroy();}catch(Exception ignored){}}
+        for(WebView web:new ArrayList<>(tabs)){try{BrowserWebState.close(web);web.stopLoading();web.destroy();}catch(Exception ignored){}}
         tabs.clear();current=null;
         if(pendingUploadCallback!=null)pendingUploadCallback.finish(false,"Moteur autonome arrêté pendant l'importation.");
         pendingUploadCallback=null;pendingUploadUris=null;pendingUploadWeb=null;
     }
     private void closeTab(WebView web){
         if(web==null||!tabs.contains(web))return;
-        int index=tabs.indexOf(web);tabs.remove(web);try{web.destroy();}catch(Exception ignored){}
+        int index=tabs.indexOf(web);tabs.remove(web);try{BrowserWebState.close(web);web.destroy();}catch(Exception ignored){}
         if(current==web)current=tabs.isEmpty()?null:tabs.get(Math.max(0,Math.min(index-1,tabs.size()-1)));
         if(current==null&&!closed){current=createWebView();tabs.add(current);restore();}
     }
@@ -160,6 +168,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
     }
 
     @Override public void onCommand(JSONObject command,AgentClient.ResultCallback callback){
+        if(!callback.isActive())return;
         if(closed){callback.finish(false,"Moteur en arrière-plan arrêté.");return;}
         if(!AgentClient.get(app).isAutonomous()){callback.finish(false,"Le mode autonome doit être activé dans les réglages.");return;}
         String action=command.optString("action","");
@@ -181,6 +190,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
     }
 
     private void execute(String action,JSONObject args,AgentClient.ResultCallback cb){
+        if(!cb.isActive())return;
         if(closed||current==null||!AgentClient.get(app).isEnabled()||!AgentClient.get(app).isAutonomous()){
             cb.finish(false,"Session autonome arrêtée par le propriétaire.");return;
         }
@@ -266,7 +276,10 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         if(host==null||(!expected.isEmpty()&&!expected.equalsIgnoreCase(host))){
             cb.finish(false,"Destination d'importation différente de celle autorisée.");return;
         }
+        final String document=web.getUrl();
         BrowserTransferManager.prepareUploads(app,files,AgentClient.get(app).deviceTokenForTransfers(),(ok,uris,message)->{
+            if(!cb.isActive())return;
+            if(!BrowserWebState.alive(web)||!document.equals(web.getUrl())){cb.finish(false,"La page a changé pendant la préparation du fichier.");return;}
             if(!ok){cb.finish(false,message);return;}
             // Native HTML input selection is often blocked from off-screen JavaScript clicks.
             // Populate only this owner-approved file input directly with the staged CHK media.
@@ -282,13 +295,14 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         web.evaluateJavascript(BrowserScripts.linkUrl(JSONObject.quote(selector)),raw->{String url=jsResult(raw);if(url.isEmpty())cb.finish(false,"Lien de téléchargement introuvable.");else downloadResolved(web,url,args.optString("mime_type",""),cb);});
     }
     private void downloadResolved(WebView web,String url,String mime,AgentClient.ResultCallback cb){
+        if(!cb.isActive()||!BrowserWebState.alive(web))return;
         if(!url.startsWith("https://")){cb.finish(false,"Téléchargement HTTPS uniquement.");return;}
         BrowserTransferManager.downloadToApp(app,url,web.getSettings().getUserAgentString(),mime,(ok,message)->cb.finish(ok,message));
     }
     private void waitForElement(WebView web,String selector,int timeout,AgentClient.ResultCallback cb){
         if(selector.isEmpty()||selector.length()>=350){cb.finish(false,"Sélecteur invalide.");return;}
         long start=android.os.SystemClock.elapsedRealtime();Runnable[] poll=new Runnable[1];
-        poll[0]=()->web.evaluateJavascript(BrowserScripts.exists(JSONObject.quote(selector)),raw->{if("true".equals(raw)){cb.finish(true,"Élément disponible.");return;}if(android.os.SystemClock.elapsedRealtime()-start>=timeout){cb.finish(false,"Élément absent après "+timeout+" ms.");return;}main.postDelayed(poll[0],350L);});
+        poll[0]=()->{if(!cb.isActive()||!BrowserWebState.alive(web))return;web.evaluateJavascript(BrowserScripts.exists(JSONObject.quote(selector)),raw->{if("true".equals(raw)){cb.finish(true,"Élément disponible.");return;}if(android.os.SystemClock.elapsedRealtime()-start>=timeout){cb.finish(false,"Élément absent après "+timeout+" ms.");return;}main.postDelayed(poll[0],350L);});};
         poll[0].run();
     }
 

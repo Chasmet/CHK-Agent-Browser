@@ -31,11 +31,17 @@ public final class UpdateManager {
     private static final String API =
         "https://api.github.com/repos/Chasmet/CHK-Agent-Browser/releases/latest";
     public static final String ACTION_INSTALL_READY = "com.chk.agentbrowser.INSTALL_READY";
+    private static final Object DOWNLOAD_LOCK=new Object();
     private final Context context;
     private final SharedPreferences prefs;
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     public interface Listener { void onResult(String message, Release release); }
+    public interface ReadyListener { void completed(File apk); }
+    public long downloadId(){return prefs.getLong("download_id",-1);}
+    public void checkCompletedApk(ReadyListener callback){
+        new Thread(()->{File file=completedApk();ui.post(()->callback.completed(file));},"chk-verify-apk").start();
+    }
     public static final class Release {
         public final String version, url, filename;
         Release(String v, String u, String f) { version=v; url=u; filename=f; }
@@ -90,6 +96,7 @@ public final class UpdateManager {
         ui.post(()->callback.onResult(status,release));
     }
     public static boolean newer(String remote,String local) {
+        if(remote==null||local==null)return false;
         if(!remote.matches("[0-9]+\\.[0-9]+\\.[0-9]+") ||
            !local.matches("[0-9]+\\.[0-9]+\\.[0-9]+"))return false;
         String[] a=remote.split("\\."),b=local.split("\\.");
@@ -102,11 +109,24 @@ public final class UpdateManager {
         return false;
     }
     public long download(Release release) {
+        synchronized(DOWNLOAD_LOCK){
         if(release==null || !release.filename.matches("CHK-Agent-Browser-[0-9]+\\.[0-9]+\\.[0-9]+\\.apk") ||
            !release.url.startsWith("https://github.com/Chasmet/CHK-Agent-Browser/releases/download/"))
             throw new IllegalArgumentException("Release non autorisée");
         File root=context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
         if(root==null)throw new IllegalStateException("Stockage du téléphone indisponible");
+        DownloadManager manager=(DownloadManager)context.getSystemService(Context.DOWNLOAD_SERVICE);
+        long previous=downloadId();
+        if(previous>=0){
+            try(android.database.Cursor row=manager.query(new DownloadManager.Query().setFilterById(previous))){
+                if(row!=null&&row.moveToFirst()&&release.filename.equals(prefs.getString("filename",""))){
+                    int state=row.getInt(row.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                    if(state==DownloadManager.STATUS_PENDING||state==DownloadManager.STATUS_RUNNING||state==DownloadManager.STATUS_PAUSED)return previous;
+                    if(state==DownloadManager.STATUS_SUCCESSFUL&&completedApk()!=null)return previous;
+                }
+            }
+            manager.remove(previous);
+        }
         File apk=new File(root,release.filename);
         if(apk.exists() && !apk.delete())throw new IllegalStateException("Ancien fichier verrouillé");
         DownloadManager.Request request=new DownloadManager.Request(Uri.parse(release.url));
@@ -120,6 +140,7 @@ public final class UpdateManager {
         prefs.edit().putLong("download_id",id).putString("filename",release.filename)
             .putString("version",release.version).apply();
         return id;
+        }
     }
     public String downloadProgress(){
         long id=prefs.getLong("download_id",-1);if(id<0)return null;
