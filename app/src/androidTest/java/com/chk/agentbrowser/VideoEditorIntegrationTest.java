@@ -62,6 +62,14 @@ public final class VideoEditorIntegrationTest {
             AtomicInteger count=new AtomicInteger();
             getInstrumentation().runOnMainSync(()->count.set(player.getMediaItemCount()));
             assertEquals("All 7 videos must be in the preview playlist",7,count.get());
+            AtomicReference<Float> displayedRatio=new AtomicReference<>(0f);
+            getInstrumentation().runOnMainSync(()->{
+                try{java.lang.reflect.Field vf=VideoEditorActivity.class.getDeclaredField("viewer");
+                    vf.setAccessible(true);androidx.media3.ui.PlayerView pv=(androidx.media3.ui.PlayerView)vf.get(studio);
+                    displayedRatio.set((float)pv.getWidth()/Math.max(1,pv.getHeight()));
+                }catch(Exception e){throw new RuntimeException(e);}
+            });
+            assertEquals("Studio must display a true 9:16 video frame",9f/16f,displayedRatio.get(),.025f);
             for(int target:new int[]{0,2,4,6,1}){
                 getInstrumentation().runOnMainSync(()->player.seekTo(target,500));
                 boolean correct=false;
