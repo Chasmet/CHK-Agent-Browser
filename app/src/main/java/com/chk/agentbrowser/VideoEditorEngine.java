@@ -233,11 +233,11 @@ public final class VideoEditorEngine {
      * is not automatically rejected. This protects the final existing MP4. */
     private JSONObject inspectRenderedClips(Context context,File render,JSONObject project)throws Exception{
         JSONArray clips=project.optJSONArray("clips");
-        JSONArray black=new JSONArray();
+        JSONArray black=new JSONArray(),samples=new JSONArray();
         int checked=0,unverifiable=0;
         if(clips==null||clips.length()<2)return new JSONObject()
             .put("verified_video_segments",0).put("unverified_video_segments",0)
-            .put("black_video_segments",black);
+            .put("black_video_segments",black).put("frame_samples",samples);
         MediaMetadataRetriever output=new MediaMetadataRetriever();
         long timelineMs=0;
         try{
@@ -268,6 +268,9 @@ public final class VideoEditorEngine {
                     checked++;
                     float sourceBrightness=sampleBrightness(original);
                     float renderedBrightness=sampleBrightness(rendered);
+                    samples.put(new JSONObject().put("cut",i+1)
+                        .put("source_luma",Math.round(sourceBrightness))
+                        .put("export_luma",Math.round(renderedBrightness)));
                     if(sourceBrightness>24f&&renderedBrightness<4f)
                         black.put(i+1);
                 }catch(Exception ex){
@@ -541,7 +544,8 @@ public final class VideoEditorEngine {
                             if(visual.getJSONArray("black_video_segments").length()>0)
                                 throw new IllegalStateException("Export rejeté : images noires dans les cuts "
                                     +visual.getJSONArray("black_video_segments")
-                                    +". L'ancien clip est conservé.");
+                                    +" (luminosité "+visual.getJSONArray("frame_samples")
+                                    +"). L'ancien clip est conservé.");
                             if((!replace&&finalOutput.exists())||!activeOutput.renameTo(finalOutput))
                                 throw new IllegalStateException("Impossible de finaliser le MP4");
                             try{persistNamed(context,"video_last_export.json",project);}
