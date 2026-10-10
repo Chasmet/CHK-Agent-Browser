@@ -258,15 +258,19 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         return true;
     }
     private void startMcpUpload(WebView web,JSONObject args,AgentClient.ResultCallback cb){
-        String selector=args.optString("selector","");JSONArray files=args.optJSONArray("files");
-        if(selector.isEmpty()||selector.length()>=350){cb.finish(false,"Sélecteur de fichier invalide.");return;}
-        String expected=args.optString("expected_host","");String host=web.getUrl()==null?null:Uri.parse(web.getUrl()).getHost();
-        if(host==null||(!expected.isEmpty()&&!expected.equalsIgnoreCase(host))){cb.finish(false,"Destination d'importation différente de celle autorisée.");return;}
+        String selector=args.optString("selector","");
+        JSONArray files=args.optJSONArray("files");
+        if(selector.isEmpty()||selector.length()>=350){cb.finish(false,"Sélecteur fichier invalide.");return;}
+        String expected=args.optString("expected_host","");
+        String host=web.getUrl()==null?null:Uri.parse(web.getUrl()).getHost();
+        if(host==null||(!expected.isEmpty()&&!expected.equalsIgnoreCase(host))){
+            cb.finish(false,"Destination d'importation différente de celle autorisée.");return;
+        }
         BrowserTransferManager.prepareUploads(app,files,AgentClient.get(app).deviceTokenForTransfers(),(ok,uris,message)->{
-            if(!ok){cb.finish(false,message);return;}if(pendingUploadCallback!=null){cb.finish(false,"Une autre importation est déjà en cours.");return;}
-            pendingUploadUris=uris;pendingUploadCallback=cb;pendingUploadSelector=selector;pendingUploadWeb=web;
-            web.evaluateJavascript(BrowserScripts.fileClick(JSONObject.quote(selector)),raw->{String result=jsResult(raw);if(!"Sélecteur fichier ouvert".equals(result)&&pendingUploadCallback==cb){pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;pendingUploadSelector="";cb.finish(false,result);}});
-            main.postDelayed(()->{if(pendingUploadCallback==cb){pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;pendingUploadSelector="";cb.finish(false,"Le site n'a pas ouvert son sélecteur de fichiers.");}},7000L);
+            if(!ok){cb.finish(false,message);return;}
+            // Native HTML input selection is often blocked from off-screen JavaScript clicks.
+            // Populate only this owner-approved file input directly with the staged CHK media.
+            BrowserJsUploader.upload(app,web,selector,uris,cb);
         });
     }
     private void startMcpDownload(WebView web,JSONObject args,AgentClient.ResultCallback cb){
