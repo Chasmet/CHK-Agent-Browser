@@ -123,6 +123,12 @@ public final class BrowserTransferManager {
             request.addRequestHeader("User-Agent",userAgent==null?"CHK-Agent-Browser/2.1":userAgent);
             String cookies=CookieManager.getInstance().getCookie(url);
             if(cookies!=null&&!cookies.isEmpty())request.addRequestHeader("Cookie",cookies);
+            // Grok media CDN rejects bare DownloadManager requests without its page origin.
+            String remoteHost=Uri.parse(url).getHost();
+            if("assets.grok.com".equalsIgnoreCase(remoteHost)){
+                request.addRequestHeader("Referer","https://grok.com/");
+                request.addRequestHeader("Origin","https://grok.com");
+            }
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             request.setDestinationInExternalFilesDir(context,Environment.DIRECTORY_DOWNLOADS,name);
             DownloadManager manager=(DownloadManager)context.getSystemService(Context.DOWNLOAD_SERVICE);
