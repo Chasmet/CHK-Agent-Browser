@@ -57,6 +57,59 @@ public final class VideoEditorIntegrationTest {
         String output="dialog-"+UUID.randomUUID()+".mp4";try(FileOutputStream old=new FileOutputStream(store.file(output))){old.write(new byte[1024]);}invoke("video_editor_project_save",new JSONObject().put("project",project(output)));
         VideoEditorActivity activity=(VideoEditorActivity)getInstrumentation().startActivitySync(new Intent(context,VideoEditorActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));Thread.sleep(1500);getInstrumentation().runOnMainSync(()->activity.getWindow().getDecorView().findViewWithTag("export_project").performClick());boolean choices=false;for(int i=0;i<30;i++){android.view.accessibility.AccessibilityNodeInfo root=getInstrumentation().getUiAutomation().getRootInActiveWindow();if(root!=null&&!root.findAccessibilityNodeInfosByText("Nouvelle copie").isEmpty()&&!root.findAccessibilityNodeInfosByText("Remplacer").isEmpty()){choices=true;root.findAccessibilityNodeInfosByText("Annuler").get(0).performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK);break;}Thread.sleep(200);}assertTrue("Both export choices must be reachable",choices);getInstrumentation().runOnMainSync(()->activity.finish());assertEquals(1024,store.file(output).length());store.file(output).delete();
     }
+    @Test public void testFullscreenPreviewAndReturnToTimeline()throws Exception{
+        String output="fullscreen-"+UUID.randomUUID()+".mp4";
+        invoke("video_editor_project_save",new JSONObject().put("project",project(output).put("aspect_ratio","9:16")));
+        VideoEditorActivity studio=(VideoEditorActivity)getInstrumentation().startActivitySync(
+            new Intent(context,VideoEditorActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try{
+            boolean buttonVisible=false;
+            for(int attempt=0;attempt<45;attempt++){
+                AtomicBoolean available=new AtomicBoolean();
+                getInstrumentation().runOnMainSync(()->available.set(
+                    studio.getWindow().getDecorView().findViewWithTag("studio_fullscreen")!=null));
+                if(available.get()){buttonVisible=true;break;}
+                Thread.sleep(150);
+            }
+            assertTrue("Fullscreen button must be on the editor canvas",buttonVisible);
+            getInstrumentation().runOnMainSync(()->studio.getWindow().getDecorView()
+                .findViewWithTag("studio_fullscreen").performClick());
+            boolean opened=false;
+            for(int attempt=0;attempt<35;attempt++){
+                AtomicBoolean visible=new AtomicBoolean();
+                getInstrumentation().runOnMainSync(()->{
+                    try{java.lang.reflect.Field d=VideoEditorActivity.class.getDeclaredField("fullscreenDialog");
+                        d.setAccessible(true);
+                        android.app.Dialog dialog=(android.app.Dialog)d.get(studio);
+                        visible.set(dialog!=null&&dialog.isShowing()&&dialog.findViewById(
+                            android.R.id.content)!=null
+                            &&dialog.getWindow().getDecorView().findViewWithTag("studio_fullscreen_seek")!=null);
+                    }catch(Exception e){throw new RuntimeException(e);}
+                });
+                if(visible.get()){opened=true;break;}Thread.sleep(150);
+            }
+            assertTrue("Fullscreen dialog must contain a usable seek bar",opened);
+            getInstrumentation().runOnMainSync(()->{
+                try{
+                    java.lang.reflect.Field d=VideoEditorActivity.class.getDeclaredField("fullscreenDialog");
+                    d.setAccessible(true);
+                    android.app.Dialog dialog=(android.app.Dialog)d.get(studio);
+                    assertTrue(dialog.getWindow().getDecorView().findViewWithTag("studio_fullscreen_close")
+                        .performClick());
+                }catch(Exception e){throw new RuntimeException(e);}
+            });
+            AtomicBoolean restored=new AtomicBoolean();
+            getInstrumentation().runOnMainSync(()->{
+                try{java.lang.reflect.Field d=VideoEditorActivity.class.getDeclaredField("viewer");
+                    d.setAccessible(true);
+                    androidx.media3.ui.PlayerView pv=(androidx.media3.ui.PlayerView)d.get(studio);
+                    restored.set(pv.getParent()!=null
+                        &&studio.getWindow().getDecorView().findViewWithTag("studio_fullscreen")!=null);
+                }catch(Exception e){throw new RuntimeException(e);}
+            });
+            assertTrue("Fullscreen must restore the SAME video preview view",restored.get());
+        }finally{getInstrumentation().runOnMainSync(studio::finish);}
+    }
     @Test public void testCatalogCopyAndRatioValidation()throws Exception{String folder="catalog-"+UUID.randomUUID();store.mkdir(folder);String destination=folder+"/duplicate.mov";WorkspaceCatalog.copy(context,source,destination);assertEquals(store.file(source).length(),store.file(destination).length());JSONObject catalog=WorkspaceCatalog.query(context,folder,"video","","date",0);assertEquals(1,catalog.getJSONArray("items").length());assertEquals(1,catalog.getJSONObject("counts").getInt("video"));try{WorkspaceCatalog.copy(context,source,destination);fail("Copy must refuse overwrite");}catch(IOException expected){}assertEquals(16f/9f,VideoEditorEngine.ratio("16:9"),0.0001f);assertEquals(2.35f,VideoEditorEngine.ratio("2.35:1"),0.0001f);try{VideoEditorEngine.ratio("NaN:1");fail("NaN ratio accepted");}catch(IllegalArgumentException expected){}store.file(destination).delete();store.file(folder).delete();}
     @Test public void testStudioAndMobileLayoutSnapshots()throws Exception{context.getSharedPreferences("update_monitor",0).edit().putBoolean("enabled",false).commit();MainActivity main=(MainActivity)getInstrumentation().startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));getInstrumentation().waitForIdleSync();getInstrumentation().runOnMainSync(()->main.findViewById(R.id.back).performClick());Thread.sleep(1500);snapshot(main,"browser");getInstrumentation().runOnMainSync(()->main.findViewById(R.id.nav_files).performClick());for(int attempt=0;attempt<100;attempt++){AtomicBoolean loaded=new AtomicBoolean();getInstrumentation().runOnMainSync(()->loaded.set(main.getWindow().getDecorView().findViewWithTag("files_storage")!=null));if(loaded.get())break;Thread.sleep(200);}getInstrumentation().runOnMainSync(()->assertNotNull("File categories must load",main.getWindow().getDecorView().findViewWithTag("files_storage")));snapshot(main,"files");getInstrumentation().runOnMainSync(()->main.finish());invoke("video_editor_project_save",new JSONObject().put("project",project("UI-"+UUID.randomUUID()+".mp4")));VideoEditorActivity studio=(VideoEditorActivity)getInstrumentation().startActivitySync(new Intent(context,VideoEditorActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));Thread.sleep(1500);
         java.lang.reflect.Field preview=VideoEditorActivity.class.getDeclaredField("player");preview.setAccessible(true);androidx.media3.exoplayer.ExoPlayer player=(androidx.media3.exoplayer.ExoPlayer)preview.get(studio);AtomicInteger playback=new AtomicInteger();for(int i=0;i<80;i++){getInstrumentation().runOnMainSync(()->playback.set(player.getPlaybackState()));if(playback.get()==androidx.media3.common.Player.STATE_READY)break;Thread.sleep(250);}assertEquals("Composition preview must be ready",androidx.media3.common.Player.STATE_READY,playback.get());
