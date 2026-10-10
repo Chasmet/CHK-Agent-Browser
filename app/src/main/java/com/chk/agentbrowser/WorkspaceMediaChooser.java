@@ -10,7 +10,6 @@ import android.webkit.WebView;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -64,27 +63,26 @@ public final class WorkspaceMediaChooser {
 
     private void folder(String location){
         try{
-            File folder=store.file(location);
-            if(!folder.isDirectory())throw new IOException("Dossier indisponible");
-            File[] entries=folder.listFiles();
-            if(entries==null)throw new IOException("Lecture impossible");
-            List<File> files=new ArrayList<>();
-            for(File f:entries)if(!f.getName().startsWith(".") &&
-                    (f.isDirectory()||(f.isFile()&&accepts(WorkspacePaths.child(location,f.getName())))))
-                files.add(f);
-            Collections.sort(files,(a,b)->{
-                if(a.isDirectory()!=b.isDirectory())return a.isDirectory()?-1:1;
-                return a.getName().compareToIgnoreCase(b.getName());
-            });
+            List<org.json.JSONObject> files=new ArrayList<>();
+            int offset=0;
+            do{
+                org.json.JSONObject page=store.list(location,"",offset);
+                org.json.JSONArray items=page.getJSONArray("items");
+                for(int i=0;i<items.length();i++){
+                    org.json.JSONObject item=items.getJSONObject(i);
+                    if(item.optBoolean("directory")||accepts(item.getString("path")))files.add(item);
+                }
+                offset=page.optInt("next_offset",-1);
+            }while(offset>=0 && files.size()<2000);
             final List<String> actions=new ArrayList<>();
             final List<String> paths=new ArrayList<>();
             if(!location.isEmpty()){actions.add("‹ Dossier précédent");paths.add("..");}
             if(multiple()&&!selected.isEmpty()){actions.add("✓ Importer la sélection ("+selected.size()+")");paths.add("#done");}
-            for(File f:files){
-                String p=WorkspacePaths.child(location,f.getName());
-                String name=f.getName();
-                if(f.isDirectory())name="▸ "+name;
-                else name=(selected.contains(p)?"✓ ":"")+" "+name+" · "+size(f.length());
+            for(org.json.JSONObject entry:files){
+                String p=entry.getString("path");
+                String name=entry.getString("name");
+                if(entry.optBoolean("directory"))name="▸ "+name;
+                else name=(selected.contains(p)?"✓ ":"")+" "+name+" · "+size(entry.optLong("size"));
                 actions.add(name);paths.add(p);
             }
             String[] labels=actions.toArray(new String[0]);
