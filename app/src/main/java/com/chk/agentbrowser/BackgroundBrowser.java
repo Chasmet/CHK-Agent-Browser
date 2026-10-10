@@ -193,7 +193,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 case "read_page":{
                     WebView web=current;String page=pageUrl(),title=pageTitle();
                     web.evaluateJavascript(BrowserScripts.readPage(),raw->{
-                        try{JSONObject result=new JSONObject();result.put("url",page);result.put("title",title);JSONObject details=new JSONObject(jsResult(raw));result.put("text",details.optString("text"));result.put("elements",details.optJSONArray("elements"));result.put("document_url",details.optString("document_url"));result.put("session_source","background");result.put("visibility",details.optString("visibility"));result.put("forms",details.optInt("forms"));result.put("ready",details.optString("ready"));cb.finish(true,result.toString());}
+                        try{JSONObject result=new JSONObject();result.put("url",page);result.put("title",title);JSONObject details=new JSONObject(jsResult(raw));result.put("text",details.optString("text"));result.put("elements",details.optJSONArray("elements"));result.put("media",details.optJSONArray("media"));result.put("document_url",details.optString("document_url"));result.put("session_source","background");result.put("visibility",details.optString("visibility"));result.put("forms",details.optInt("forms"));result.put("ready",details.optString("ready"));cb.finish(true,result.toString());}
                         catch(Exception e){cb.finish(false,"Lecture de page impossible.");}
                     });return;
                 }
