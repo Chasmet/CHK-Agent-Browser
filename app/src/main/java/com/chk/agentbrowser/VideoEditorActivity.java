@@ -57,7 +57,8 @@ public final class VideoEditorActivity extends Activity {
         title=MobileUi.text(this,"Studio ▾",13,MobileUi.TEXT);title.setPadding(dp(3),0,dp(3),0);title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));title.setOnClickListener(v->projectMenu());
         quality=chip("720p ▾");quality.setTextSize(12);quality.setBackground(MobileUi.bg(this,0xff292b30));header.addView(quality,new LinearLayout.LayoutParams(dp(64),dp(40)));quality.setOnClickListener(v->qualityMenu());
         TextView export=chip("Exporter");export.setTag("export_project");export.setTextSize(13);export.setTextColor(0xff061a18);export.setTypeface(null,android.graphics.Typeface.BOLD);export.setBackground(MobileUi.bg(this,0xff20d4d3));LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(dp(84),dp(40));ep.leftMargin=dp(6);header.addView(export,ep);export.setOnClickListener(v->export());
-        FrameLayout canvas=new FrameLayout(this);canvas.setBackgroundColor(0xff000000);root.addView(canvas,new LinearLayout.LayoutParams(-1,0,1));viewer=(androidx.media3.ui.PlayerView)getLayoutInflater().inflate(R.layout.studio_player,canvas,false);canvas.addView(viewer,new FrameLayout.LayoutParams(-1,-1));
+        FrameLayout canvas=new FrameLayout(this);canvas.setBackgroundColor(0xff000000);root.addView(canvas,new LinearLayout.LayoutParams(-1,0,1));viewer=(androidx.media3.ui.PlayerView)getLayoutInflater().inflate(R.layout.studio_player,canvas,false);canvas.addView(viewer,new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER));
+        canvas.addOnLayoutChangeListener((v,left,top,right,bottom,oldLeft,oldTop,oldRight,oldBottom)->applyPreviewFrame());
         TextView empty=MobileUi.text(this,"＋\nAjouter une vidéo",17,MobileUi.MUTED);empty.setGravity(Gravity.CENTER);empty.setTag("empty");canvas.addView(empty,new FrameLayout.LayoutParams(-1,-1));empty.setOnClickListener(v->addMenu("video"));
         previewHint=MobileUi.text(this,"Chargement de l’aperçu…",13,0xffdde2ec);
         previewHint.setGravity(Gravity.CENTER);previewHint.setBackgroundColor(0x99000000);
@@ -66,7 +67,7 @@ public final class VideoEditorActivity extends Activity {
         previewCaption=MobileUi.text(this,"",18,0xffffffff);previewCaption.setGravity(Gravity.CENTER);
         previewCaption.setShadowLayer(dp(2),0,dp(2),0xff000000);
         FrameLayout.LayoutParams cap=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);cap.bottomMargin=dp(20);
-        canvas.addView(previewCaption,cap);
+        viewer.addView(previewCaption,cap);
         player=new ExoPlayer.Builder(this).build();
         audioPlayer=new ExoPlayer.Builder(this).build();
         viewer.setPlayer(player);
@@ -118,9 +119,29 @@ public final class VideoEditorActivity extends Activity {
     private String name(String path){return path.substring(path.lastIndexOf('/')+1);}
     private boolean editable(){if(project==null||saving||importing){toast("Sauvegarde en cours…");return false;}String s=engine.status().optString("state");if(s.equals("running")||s.equals("preparing")){toast("Attends la fin de l’export ou annule-le");return false;}if(clip()==null){toast("Ajoute puis sélectionne une vidéo");return false;}return true;}
     private void remember(){undo.addLast(project.toString());while(undo.size()>30)undo.removeFirst();redo.clear();}
-    private void draw(){if(!alive||project==null)return;title.setText(project.optString("name","Studio")+" ▾");format.setText(project.optString("aspect_ratio","source").replace("source","Original"));quality.setText(project.optInt("resolution",720)+"p ▾");scope.setText("✓ Projet complet · "+time(total()));selected=Math.max(0,Math.min(selected,clips().length()-1));timeline.setProject(project,selected);clock.setText(time(timelinePosition())+" / "+time(total()));((ViewGroup)viewer.getParent()).findViewWithTag("empty").setVisibility(clips().length()==0?View.VISIBLE:View.GONE);}
+    private void draw(){if(!alive||project==null)return;applyPreviewFrame();title.setText(project.optString("name","Studio")+" ▾");format.setText(project.optString("aspect_ratio","source").replace("source","Original"));quality.setText(project.optInt("resolution",720)+"p ▾");scope.setText("✓ Projet complet · "+time(total()));selected=Math.max(0,Math.min(selected,clips().length()-1));timeline.setProject(project,selected);clock.setText(time(timelinePosition())+" / "+time(total()));((ViewGroup)viewer.getParent()).findViewWithTag("empty").setVisibility(clips().length()==0?View.VISIBLE:View.GONE);}
     private void save(){saving=true;String fallback=undo.peekLast();JSONObject snapshot;try{snapshot=new JSONObject(project.toString());}catch(Exception e){return;}
         engine.command(this,"video_editor_project_save",new JSONObjectSafe("project",snapshot).withRevision(revision),(ok,res)->ui.post(()->{saving=false;if(!alive)return;if(ok){try{revision=new JSONObject(res).getJSONObject("project").optInt("revision");project.put("revision",revision);}catch(Exception ignored){}draw();preview();}else{toast(res);try{if(fallback!=null)project=new JSONObject(fallback);}catch(Exception ignored){}draw();}}));
+    }
+    /** Fit a true output-aspect canvas inside the available phone screen area. */
+    private void applyPreviewFrame(){
+        if(viewer==null||project==null||!(viewer.getParent() instanceof FrameLayout))return;
+        FrameLayout canvas=(FrameLayout)viewer.getParent();
+        int availableWidth=canvas.getWidth(),availableHeight=canvas.getHeight();
+        float ratio=0;
+        try{ratio=VideoEditorEngine.ratio(project.optString("aspect_ratio","source"));}
+        catch(Exception ignored){}
+        int targetWidth=-1,targetHeight=-1;
+        if(ratio>0&&availableWidth>0&&availableHeight>0){
+            targetWidth=Math.min(availableWidth,Math.max(1,Math.round(availableHeight*ratio)));
+            targetHeight=Math.min(availableHeight,Math.max(1,Math.round(targetWidth/ratio)));
+        }
+        FrameLayout.LayoutParams current=(FrameLayout.LayoutParams)viewer.getLayoutParams();
+        if(current.width!=targetWidth||current.height!=targetHeight||current.gravity!=Gravity.CENTER){
+            viewer.setLayoutParams(new FrameLayout.LayoutParams(targetWidth,targetHeight,Gravity.CENTER));
+        }
+        viewer.setResizeMode(ratio>0&&"crop".equals(project.optString("aspect_mode","fit"))
+            ?AspectRatioFrameLayout.RESIZE_MODE_ZOOM:AspectRatioFrameLayout.RESIZE_MODE_FIT);
     }
     /** Reliable source-frame preview. The native export remains the final authority for effects. */
     private void preview(){
@@ -138,8 +159,7 @@ public final class VideoEditorActivity extends Activity {
                     if(!alive||generation!=previewGeneration)return;
                     try{
                         pausePreview();
-                        viewer.setResizeMode("crop".equals(p.optString("aspect_mode","fit"))
-                            ?AspectRatioFrameLayout.RESIZE_MODE_ZOOM:AspectRatioFrameLayout.RESIZE_MODE_FIT);
+                        applyPreviewFrame();
                         player.setMediaItems(videos);player.prepare();
                         audioPlayer.setMediaItems(sounds);
                         if(!sounds.isEmpty())audioPlayer.prepare();
