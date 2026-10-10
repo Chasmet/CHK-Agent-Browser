@@ -360,14 +360,29 @@ public final class VideoEditorEngine {
           default:break;
         }
         if(fade>0){
+            // Media3 may pass composition-wide timestamps to per-item effects.
+            // NEVER compare the global PTS with a single clip's duration: after
+            // the first clip, (length - timeUs/1000) becomes negative and turns
+            // all remaining video permanently black while audio continues.
+            final java.util.concurrent.atomic.AtomicLong firstFrameUs =
+                new java.util.concurrent.atomic.AtomicLong(Long.MIN_VALUE);
             effects.add((RgbMatrix)(timeUs,useHdr)->{
-                long t=timeUs/1000;
-                float gain=Math.min(1f,Math.min((float)t/fade,(float)(length-t)/fade));
-                gain=Math.max(0f,gain);
+                firstFrameUs.compareAndSet(Long.MIN_VALUE,timeUs);
+                long localMs=(timeUs-firstFrameUs.get())/1000;
+                float gain=clipFadeGain(localMs,length,fade);
                 return new float[]{gain,0,0,0, 0,gain,0,0, 0,0,gain,0, 0,0,0,1};
             });
         }
         return effects;
+    }
+    /** Fade is anchored to THIS clip's first video frame, not the full timeline.
+     *  Out-of-range timestamps remain fully visible as a safeguard against
+     *  different time bases during preview, seeking and composition export. */
+    static float clipFadeGain(long localMs,long durationMs,long fadeMs){
+        if(fadeMs<=0||durationMs<=0||localMs<0||localMs>durationMs)return 1f;
+        if(localMs<fadeMs)return Math.max(0f,(float)localMs/fadeMs);
+        if(localMs>durationMs-fadeMs)return Math.max(0f,(float)(durationMs-localMs)/fadeMs);
+        return 1f;
     }
     /** Ratios are independent from container and codec support. */
     public static float ratio(String value){
