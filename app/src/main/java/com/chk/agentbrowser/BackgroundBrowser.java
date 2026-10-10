@@ -41,6 +41,9 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
     private AgentClient.ResultCallback pendingUploadCallback;
     private String pendingUploadSelector="";
     private WebView pendingUploadWeb;
+    // Armed only by an explicit owner-authorized MCP download_file action.
+    private AgentClient.ResultCallback pendingDownloadCallback;
+    private WebView pendingDownloadWeb;
 
     public BackgroundBrowser(Context context){
         app=context.getApplicationContext();
@@ -96,6 +99,21 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){
                 return deliverPendingUpload(view,callback);
             }
+        });
+        web.setDownloadListener((url,userAgent,disposition,mime,length)->{
+            AgentClient.ResultCallback cb=pendingDownloadCallback;
+            if(cb==null||pendingDownloadWeb!=web||!cb.isActive())return;
+            pendingDownloadCallback=null;pendingDownloadWeb=null;
+            if(url!=null&&url.startsWith("blob:")){
+                // Resolve only a visible HTTPS video source, never arbitrary blob bytes.
+                web.evaluateJavascript(BrowserScripts.linkUrl(JSONObject.quote("video")),raw->{
+                    String source=jsResult(raw);
+                    if(source.startsWith("https://"))downloadResolved(web,source,mime,cb);
+                    else cb.finish(false,"Téléchargement blob non disponible sans source HTTPS.");
+                });
+                return;
+            }
+            downloadResolved(web,url,mime,cb);
         });
         web.measure(android.view.View.MeasureSpec.makeMeasureSpec(540,android.view.View.MeasureSpec.EXACTLY),
             android.view.View.MeasureSpec.makeMeasureSpec(960,android.view.View.MeasureSpec.EXACTLY));
@@ -292,7 +310,26 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         String direct=args.optString("url","");
         if(!direct.isEmpty()){downloadResolved(web,direct,args.optString("mime_type",""),cb);return;}
         String selector=args.optString("selector","");if(selector.isEmpty()){cb.finish(false,"URL ou sélecteur requis.");return;}
-        web.evaluateJavascript(BrowserScripts.linkUrl(JSONObject.quote(selector)),raw->{String url=jsResult(raw);if(url.isEmpty())cb.finish(false,"Lien de téléchargement introuvable.");else downloadResolved(web,url,args.optString("mime_type",""),cb);});
+        web.evaluateJavascript(BrowserScripts.linkUrl(JSONObject.quote(selector)),raw->{
+            if(!cb.isActive())return;
+            String url=jsResult(raw);
+            if(!url.isEmpty()){downloadResolved(web,url,args.optString("mime_type",""),cb);return;}
+            // JS-driven download buttons have no href: arm one explicit user-requested click.
+            if(pendingDownloadCallback!=null){cb.finish(false,"Un autre téléchargement est déjà attendu.");return;}
+            pendingDownloadCallback=cb;pendingDownloadWeb=web;
+            web.evaluateJavascript(BrowserScripts.click(JSONObject.quote(selector)),clicked->{
+                if(!"Clic effectué".equals(jsResult(clicked))&&pendingDownloadCallback==cb){
+                    pendingDownloadCallback=null;pendingDownloadWeb=null;
+                    cb.finish(false,"Bouton de téléchargement introuvable.");
+                }
+            });
+            main.postDelayed(()->{
+                if(pendingDownloadCallback==cb){
+                    pendingDownloadCallback=null;pendingDownloadWeb=null;
+                    cb.finish(false,"Aucun téléchargement détecté après le clic.");
+                }
+            },30000L);
+        });
     }
     private void downloadResolved(WebView web,String url,String mime,AgentClient.ResultCallback cb){
         if(!cb.isActive()||!BrowserWebState.alive(web))return;
