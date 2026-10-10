@@ -346,7 +346,14 @@ public final class VideoEditorActivity extends Activity {
     private void export(){
         if(project==null||saving||importing){toast("Attends la fin de l’importation ou de la sauvegarde");return;}if(clips().length()==0){toast("Ajoute une vidéo avant d’exporter");return;}
         String snapshot=project.toString();WorkspaceCommands.IO.execute(()->{try{JSONObject p=new JSONObject(snapshot);boolean exists=new WorkspaceStore(this).file(p.getString("output")).exists();ui.post(()->{if(!alive)return;String message=clips().length()+" plans · "+time(total())+"\n"+project.optInt("resolution",720)+"p · "+project.optString("aspect_ratio","source").replace("source","Original")+"\n"+name(project.optString("output"));
-            if(exists)new AlertDialog.Builder(this).setTitle("Exporter le projet complet").setMessage(message+"\n\nUne vidéo porte déjà ce nom.").setNegativeButton("Annuler",null).setNeutralButton("Remplacer",(d,n)->startExport(true,false)).setPositiveButton("Nouvelle copie",(d,n)->startExport(false,true)).show();
+            if(exists)new AlertDialog.Builder(this).setTitle("Exporter · "+time(total()))
+                .setMessage(message+"\n\nUn MP4 existe déjà. Tu peux l'ouvrir, l'enregistrer ou relancer le rendu.")
+                .setItems(new String[]{"Lire le MP4 existant","Enregistrer sur le téléphone","Partager le MP4",
+                    "Exporter une nouvelle copie","Réexporter et remplacer"},(d,n)->{
+                    if(n<=2)openExportFile(project.optString("output"),n);
+                    else if(n==3)startExport(false,true);
+                    else startExport(true,false);
+                }).setNegativeButton("Annuler",null).show();
             else new AlertDialog.Builder(this).setTitle("Exporter le projet complet").setMessage(message).setNegativeButton("Annuler",null).setPositiveButton("Exporter",(d,n)->startExport(false,false)).show();
         });}catch(Exception e){ui.post(()->toast(e.getMessage()));}});
     }
@@ -356,7 +363,67 @@ public final class VideoEditorActivity extends Activity {
             engine.command(this,"video_editor_project_save",new JSONObjectSafe("project",snapshot).withRevision(revision),(ok,res)->ui.post(()->{saving=false;if(!alive)return;if(!ok){toast(res);return;}try{project=new JSONObject(res).getJSONObject("project");revision=project.optInt("revision");draw();engine.command(this,"video_editor_export",new JSONObject().put("replace",replace),(success,result)->ui.post(()->{if(!success&&alive)new AlertDialog.Builder(this).setTitle("Export impossible").setMessage(result).setPositiveButton("OK",null).show();}));}catch(Exception e){toast(e.getMessage());}}));
         }catch(Exception e){saving=false;toast(e.getMessage());}
     }
-    private void outputMenu(){String s=engine.status().optString("state");if(s.equals("running")||s.equals("preparing")){new AlertDialog.Builder(this).setTitle("Export en cours").setMessage("Le rendu continue avec une notification sur le téléphone. Tu peux quitter cet écran.").setNegativeButton("Continuer",null).setPositiveButton("Annuler l’export",(d,n)->engine.command(this,"video_editor_cancel",new JSONObject(),(ok,res)->{})).show();return;}if(!s.equals("completed"))return;String output=engine.status().optString("output");new AlertDialog.Builder(this).setTitle("Montage complet prêt").setItems(new String[]{"Lire","Enregistrer sur le téléphone","Partager","Vérifier la durée et les pistes"},(d,n)->{try{WorkspaceStore store=new WorkspaceStore(this);if(n==0)startActivity(new Intent(this,MediaPreviewActivity.class).putExtra("path",output));else if(n==1){exportCopyPath=output;startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("video/mp4").putExtra(Intent.EXTRA_TITLE,name(output)),811);}else if(n==2)startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("video/mp4").putExtra(Intent.EXTRA_STREAM,store.uri(output)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"Partager le montage"));else engine.command(this,"video_editor_verify_output",new JSONObject(),(ok,res)->ui.post(()->{if(!alive)return;try{JSONObject result=new JSONObject(res);new AlertDialog.Builder(this).setTitle(result.optBoolean("valid")?"Montage vérifié":"Vérification à reprendre").setMessage("Durée : "+time(result.optLong("duration_ms"))+"\nDurée attendue : "+time(result.optLong("expected_duration_ms"))+"\nVidéo : "+result.optString("width_px")+" × "+result.optString("height_px")+"\nAudio : "+(result.optBoolean("has_audio")?"présent":"absent")).setPositiveButton("OK",null).show();}catch(Exception e){toast(res);}}));}catch(Exception e){toast(e.getMessage());}}).show();}
+
+    /** Header Export and bottom finished export always share the same file actions. */
+    private void openExportFile(String output,int action){
+        try{
+            WorkspaceStore store=new WorkspaceStore(this);
+            java.io.File file=store.file(output);
+            if(!file.isFile()||file.length()<1000){toast("Le MP4 n'existe plus dans Fichiers CHK");return;}
+            if(action==0){
+                startActivity(new Intent(this,MediaPreviewActivity.class).putExtra("path",output));
+            }else if(action==1){
+                exportCopyPath=output;
+                startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                    .addCategory(Intent.CATEGORY_OPENABLE).setType("video/mp4")
+                    .putExtra(Intent.EXTRA_TITLE,name(output)),811);
+            }else if(action==2){
+                startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND)
+                    .setType("video/mp4")
+                    .putExtra(Intent.EXTRA_STREAM,store.uri(output))
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"Partager le montage"));
+            }
+        }catch(Exception e){toast(e.getMessage());}
+    }
+    private void outputMenu(){
+        String state=engine.status().optString("state");
+        if(state.equals("running")||state.equals("preparing")){
+            new AlertDialog.Builder(this).setTitle("Export en cours")
+                .setMessage("Le rendu continue dans l'application. Tu peux quitter cet écran.")
+                .setNegativeButton("Continuer",null)
+                .setPositiveButton("Annuler l’export",(d,n)->
+                    engine.command(this,"video_editor_cancel",new JSONObject(),(ok,res)->{})).show();
+            return;
+        }
+        String output=state.equals("completed")?engine.status().optString("output")
+            :project==null?"":project.optString("output");
+        if(output.isEmpty())return;
+        new AlertDialog.Builder(this).setTitle("Montage MP4")
+            .setItems(new String[]{"Lire","Enregistrer sur le téléphone","Partager",
+                "Vérifier la durée, les pistes et les images"},(d,n)->{
+                if(n<3)openExportFile(output,n);
+                else engine.command(this,"video_editor_verify_output",new JSONObject(),
+                    (ok,res)->ui.post(()->{
+                        if(!alive)return;
+                        if(!ok){toast(res);return;}
+                        try{
+                            JSONObject v=new JSONObject(res);
+                            int count=v.optInt("verified_video_segments");
+                            int unverified=v.optInt("unverified_video_segments");
+                            new AlertDialog.Builder(this)
+                                .setTitle(v.optBoolean("valid")?"MP4 contrôlé":"MP4 à vérifier")
+                                .setMessage("Durée : "+time(v.optLong("duration_ms"))+
+                                    "\nAttendue : "+time(v.optLong("expected_duration_ms"))+
+                                    "\nImage : "+v.optString("width_px")+" × "+v.optString("height_px")+
+                                    "\nAudio : "+(v.optBoolean("has_audio")?"présent":"absent")+
+                                    "\nPlans vérifiés : "+count+
+                                    (unverified>0?"\nPlans non vérifiés : "+unverified:"")+
+                                    "\nPlans noirs : "+v.optJSONArray("black_video_segments"))
+                                .setPositiveButton("OK",null).show();
+                        }catch(Exception e){toast(e.getMessage());}
+                    }));
+            }).setNegativeButton("Fermer",null).show();
+    }
     private interface TextResult{void done(String text);}
     private void prompt(String label,String initial,TextResult result){EditText e=new EditText(this);e.setText(initial);new AlertDialog.Builder(this).setTitle(label).setView(e).setNegativeButton("Annuler",null).setPositiveButton("Appliquer",(d,n)->result.done(e.getText().toString().trim())).show();}
     private void showProjects(){
