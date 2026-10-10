@@ -342,16 +342,18 @@ public final class CutStudioActivity extends Activity {
         LinearLayout head=panel();head.addView(text("Planning de publication",18,INK,true));
         head.addView(text("Rappels Android locaux. Les plateformes doivent confirmer l'envoi. X : publication manuelle, sans programmation native dans ce module.",12,MUTED,false));
         List<JSONObject> entries=CutStudioStore.list(this);
-        head.addView(text(entries.size()+" programmations enregistrées",13,0xff69e2c6,true));
+        head.addView(text(entries.size()+" fiches de publication enregistrées",13,0xff69e2c6,true));
         for(JSONObject j:entries){
             LinearLayout p=panel();
             long at=j.optLong("at");boolean done=j.optBoolean("published");
-            String state=done?"Publié (confirmé manuellement)":
-                at<=System.currentTimeMillis()?"À publier":"Programmé (rappel local)";
+            boolean manualX="x".equals(j.optString("platform"));
+            String state=done?"Publié (confirmé manuellement)":manualX
+                ?"Prêt à publier sur X (sans programmation)"
+                :at<=System.currentTimeMillis()?"À publier":"Programmé (rappel local)";
             p.addView(text(j.optString("platform").toUpperCase(Locale.ROOT)+
                 " · "+j.optString("account"),14,0xff69e2c6,true));
             p.addView(text(j.optString("title"),15,INK,true));
-            p.addView(text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM,
+            if(!manualX)p.addView(text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM,
                 DateFormat.SHORT,Locale.FRANCE).format(new Date(at)),13,MUTED,false));
             p.addView(text(state+" · "+j.optString("path"),12,MUTED,false));
             button("Ouvrir le réseau + copier les métadonnées",p,()->openPlatform(j));
@@ -359,11 +361,23 @@ public final class CutStudioActivity extends Activity {
             button("Modifier",p,()->scheduleEditor(j.optString("path"),j));
             button("Dupliquer",p,()->scheduleEditor(j.optString("path"),copyForDuplicate(j)));
             button(done?"Annuler la validation":"Valider : publié",p,()->{
-                try{CutStudioStore.published(this,j.optString("id"),!done);render(2);}
-                catch(Exception e){toast(e.getMessage());}
+                if(done){
+                    try{CutStudioStore.published(this,j.optString("id"),false);render(2);}
+                    catch(Exception e){toast(e.getMessage());}
+                    return;
+                }
+                new AlertDialog.Builder(this).setTitle("Confirmer la publication")
+                    .setMessage("As-tu vérifié que la vidéo est réellement publiée sur "
+                        +j.optString("platform").toUpperCase(Locale.ROOT)
+                        +" ? Une fiche locale ne prouve pas la publication.")
+                    .setNegativeButton("Pas encore",null)
+                    .setPositiveButton("Oui, publiée",(d,w)->{
+                        try{CutStudioStore.published(this,j.optString("id"),true);render(2);}
+                        catch(Exception e){toast(e.getMessage());}
+                    }).show();
             });
-            button("Supprimer la programmation",p,()->new AlertDialog.Builder(this)
-                .setTitle("Supprimer le rappel ?").setMessage("Le fichier MP4 sera conservé.")
+            button(manualX?"Supprimer la fiche X":"Supprimer la programmation",p,()->new AlertDialog.Builder(this)
+                .setTitle(manualX?"Supprimer le brouillon X ?":"Supprimer le rappel ?").setMessage("Le fichier MP4 sera conservé.")
                 .setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(d,n)->{
                     try{CutStudioStore.remove(this,j.optString("id"));render(2);}
                     catch(Exception e){toast(e.getMessage());}
@@ -374,8 +388,8 @@ public final class CutStudioActivity extends Activity {
         try{
             JSONObject clone=new JSONObject(item.toString());clone.remove("id");
             clone.put("published",false);
-            clone.put("at",Math.max(System.currentTimeMillis()+3600000L,
-                item.optLong("at")+86400000L));
+            clone.put("at","x".equals(item.optString("platform"))?0L:
+                Math.max(System.currentTimeMillis()+3600000L,item.optLong("at")+86400000L));
             return clone;
         }catch(Exception ignored){return null;}
     }
@@ -422,8 +436,8 @@ public final class CutStudioActivity extends Activity {
             toast("Métadonnées collées : vérifier avant de programmer");
         });
         Calendar selected=Calendar.getInstance();
-        selected.setTimeInMillis(existing!=null?existing.optLong("at",
-            System.currentTimeMillis()+86400000L):System.currentTimeMillis()+86400000L);
+        selected.setTimeInMillis(existing!=null&&existing.optLong("at",0)>System.currentTimeMillis()
+            ?existing.optLong("at"):System.currentTimeMillis()+86400000L);
         Button date=button("Date : "+android.text.format.DateFormat.getDateFormat(this).format(selected.getTime()),
             form,()->{});
         Button time=button("Heure : "+android.text.format.DateFormat.getTimeFormat(this).format(selected.getTime()),
@@ -438,6 +452,16 @@ public final class CutStudioActivity extends Activity {
             time.setText("Heure : "+
                 android.text.format.DateFormat.getTimeFormat(this).format(selected.getTime()));
         },selected.get(Calendar.HOUR_OF_DAY),selected.get(Calendar.MINUTE),true).show());
+        network.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent,View view,int position,long id){
+                boolean manualX=position==3;
+                date.setVisibility(manualX?View.GONE:View.VISIBLE);
+                time.setVisibility(manualX?View.GONE:View.VISIBLE);
+                if(position>=2&&account.getSelectedItemPosition()==1)account.setSelection(0);
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent){}
+        });
+        form.addView(text("YouTube, TikTok et Instagram : rappel local. X : publication immédiate, sans date ni programmation.",12,MUTED,false));
         android.widget.ScrollView scroll=new android.widget.ScrollView(this);
         scroll.addView(form);
         AlertDialog dialog=new AlertDialog.Builder(this)
@@ -452,11 +476,13 @@ public final class CutStudioActivity extends Activity {
                     .put("title",title.getText().toString().trim())
                     .put("description",description.getText().toString().trim())
                     .put("hashtags",hashtags.getText().toString().trim())
-                    .put("at",selected.getTimeInMillis())
+                    .put("at",network.getSelectedItemPosition()==3?0L:selected.getTimeInMillis())
                     .put("published",existing!=null&&existing.has("id")&&existing.optBoolean("published"));
                 if(existing!=null&&existing.has("id"))row.put("id",existing.getString("id"));
                 CutStudioStore.save(this,row);dialog.dismiss();render(2);
-                toast("Programmation enregistrée. Valide sur le réseau après publication.");
+                toast(network.getSelectedItemPosition()==3
+                    ?"Fiche X prête. Publie sur X puis confirme.":
+                    "Rappel local enregistré. Vérifie ensuite la plateforme.");
             }catch(Exception ex){toast("Programmation : "+ex.getMessage());}
         }));
         dialog.show();

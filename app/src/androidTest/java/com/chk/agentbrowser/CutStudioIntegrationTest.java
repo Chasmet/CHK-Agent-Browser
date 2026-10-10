@@ -119,4 +119,60 @@ public final class CutStudioIntegrationTest {
         }
     }
 
+
+    @Test public void xDraftHasNoDateAndCannotPretendToBeScheduled() throws Exception {
+        android.content.Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        WorkspaceStore files=new WorkspaceStore(ctx);
+        try{files.mkdir("CutVideo");}catch(java.io.IOException e){
+            assertTrue(files.file("CutVideo").isDirectory());
+        }
+        String folder="CutVideo/test_x_"+UUID.randomUUID().toString().substring(0,8);
+        files.mkdir(folder);
+        String path=folder+"/cut_01.mp4";
+        assertTrue(files.file(path).createNewFile());
+        String id=null,remoteId=null;
+        try {
+            JSONObject x=new JSONObject().put("path",path).put("platform","x")
+                .put("account","chknoirshadow").put("title","Clip X")
+                .put("description","À partager").put("hashtags","#clip")
+                .put("at",0L).put("published",false);
+            CutStudioStore.save(ctx,x);
+            id=x.getString("id");
+            assertEquals(0L,findEntry(ctx,id).getLong("at"));
+            assertFalse(findEntry(ctx,id).getBoolean("published"));
+            // Une commande distante X n'a pas à inventer une heure de programmation.
+            JSONObject remote=new JSONObject().put("request_id",UUID.randomUUID().toString())
+                .put("path",path).put("platform","x").put("account","chknoirshadow")
+                .put("title","Clip X distant").put("hashtags","#clip");
+            String json=new org.json.JSONArray().put(remote).toString();
+            JSONObject receipt=CutStudioStore.importFromAgent(ctx,json);
+            remoteId=receipt.getJSONArray("ids").getString(0);
+            assertEquals(0L,findEntry(ctx,remoteId).getLong("at"));
+            assertFalse(receipt.getBoolean("platform_publication_confirmed"));
+            assertEquals(remoteId,CutStudioStore.importFromAgent(ctx,json)
+                .getJSONArray("ids").getString(0));
+            JSONObject nonX=new JSONObject(x.toString()).put("platform","youtube")
+                .put("id",UUID.randomUUID().toString());
+            try {
+                CutStudioStore.save(ctx,nonX);
+                fail("YouTube doit toujours exiger une date future");
+            } catch(IllegalArgumentException expected){}
+            JSONObject qgX=new JSONObject(x.toString()).put("account","qg")
+                .put("id",UUID.randomUUID().toString());
+            try {
+                CutStudioStore.save(ctx,qgX);
+                fail("QG ne prend pas en charge X");
+            } catch(IllegalArgumentException expected){}
+        }finally{
+            if(id!=null)CutStudioStore.remove(ctx,id);
+            if(remoteId!=null)CutStudioStore.remove(ctx,remoteId);
+            files.file(path).delete();files.file(folder).delete();
+        }
+    }
+
+    private static JSONObject findEntry(android.content.Context ctx,String id) {
+        for(JSONObject row:CutStudioStore.list(ctx))
+            if(id.equals(row.optString("id")))return row;
+        throw new AssertionError("Fiche Cut absente : "+id);
+    }
 }
