@@ -40,7 +40,7 @@ public final class VideoEditorIntegrationTest {
         try{frameProbe.setDataSource(store.file(output).getAbsolutePath());
             for(int i=0;i<7;i++){
                 android.graphics.Bitmap frame=frameProbe.getScaledFrameAtTime((i*3000L+1500L)*1000,
-                    android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC,48,48);
+                    android.media.MediaMetadataRetriever.OPTION_CLOSEST,48,48);
                 assertNotNull("Missing frame for cut "+(i+1),frame);
                 int lit=0;
                 for(int y=0;y<frame.getHeight();y+=4)for(int x=0;x<frame.getWidth();x+=4){
