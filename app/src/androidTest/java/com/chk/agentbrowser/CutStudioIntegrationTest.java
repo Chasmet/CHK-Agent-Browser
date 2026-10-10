@@ -68,4 +68,55 @@ public final class CutStudioIntegrationTest {
             browser.finish();
         });
     }
+    @Test public void agentSchedulesAreAtomicAndIdempotent() throws Exception {
+        android.content.Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        WorkspaceStore workspace=new WorkspaceStore(ctx);
+        try{workspace.mkdir("CutVideo");}catch(java.io.IOException e){
+            assertTrue(workspace.file("CutVideo").isDirectory());
+        }
+        String folder="CutVideo/test_mcp_"+UUID.randomUUID().toString().substring(0,8);
+        workspace.mkdir(folder);
+        String video=folder+"/cut_01.mp4";
+        assertTrue(workspace.file(video).createNewFile());
+        String unique=UUID.randomUUID().toString();
+        String identifier=null;
+        try{
+            long next=System.currentTimeMillis()+86400000L;
+            JSONObject task=new JSONObject().put("request_id",unique)
+                .put("path",video).put("platform","youtube")
+                .put("account","chknoirshadow").put("title","Extrait à publier")
+                .put("description","Test").put("hashtags","#shorts")
+                .put("at",next).put("visibility","public");
+            String json=new org.json.JSONArray().put(task).toString();
+            JSONObject first=CutStudioStore.importFromAgent(ctx,json);
+            identifier=first.getJSONArray("ids").getString(0);
+            assertEquals(1,first.getInt("imported"));
+            assertFalse(first.getBoolean("platform_publication_confirmed"));
+            assertEquals(identifier,CutStudioStore.importFromAgent(ctx,json)
+                .getJSONArray("ids").getString(0));
+            int count=0;
+            for(JSONObject row:CutStudioStore.list(ctx))
+                if(identifier.equals(row.optString("id")))count++;
+            assertEquals("Relancer un import ne doit pas dupliquer le rappel",1,count);
+            JSONObject illegal=new JSONObject(task.toString())
+                .put("request_id",UUID.randomUUID().toString())
+                .put("path","CutVideo/absent.mp4");
+            try{
+                CutStudioStore.importFromAgent(ctx,
+                    new org.json.JSONArray().put(task).put(illegal).toString());
+                fail("L'importation partielle doit être interdite");
+            }catch(IllegalArgumentException expected){}
+            task.put("published",true);
+            try{CutStudioStore.importFromAgent(ctx,new org.json.JSONArray().put(task).toString());
+                fail("La validation de publication à distance doit être interdite");
+            }catch(IllegalArgumentException expected){}
+            assertEquals(1,CutStudioStore.list(ctx).stream()
+                .filter(row->unique.equals(row.optString("request_id"))||
+                    identifier.equals(row.optString("id"))).count());
+        }finally{
+            if(identifier!=null)CutStudioStore.remove(ctx,identifier);
+            workspace.file(video).delete();workspace.file(folder).delete();
+        }
+    }
+
 }
