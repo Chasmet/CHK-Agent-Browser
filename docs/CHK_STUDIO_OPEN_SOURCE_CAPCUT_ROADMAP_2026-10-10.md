@@ -15,7 +15,7 @@ Vidéo fournie « 1000152739.mp4 » : durée ~37,5 s.
 1. Aperçu plein écran immersif : *même* ExoPlayer/PlayerView et position conservée, barre de lecture, scrubbing, plan précédent/suivant, fermeture et retour timeline.
 2. Export supérieur unifié : si le MP4 existe, accès direct « Lire / Enregistrer sur le téléphone / Partager », ou nouvelle copie/remplacement. Bandeau inférieur emploie les mêmes actions.
 3. Zoom +/- de la timeline, en plus du pincement.
-4. 4 filtres vidéo GPU Media3 supplémentaires : Vibrant, Cinéma doux, Désaturé, Sépia. Disponibles dans les options du plan, calculés via la bibliothèque open source AndroidX Media3 utilisée par l'export et l'aperçu.
+4. 4 filtres vidéo GPU Media3 supplémentaires : Vibrant, Cinéma doux, Désaturé, Sépia. Disponibles dans les options du plan et calculés par Media3 Transformer à l'export. Prévisualisation temps réel des effets reportée : des changements GPU répétés ont perturbé les recherches rapides entre clips dans l'émulateur.
 5. Préservation des projets, fichiers sources et de l'ancien export ; édition locale.
 
 ## Outils open source étudiés, à intégrer de manière progressive
