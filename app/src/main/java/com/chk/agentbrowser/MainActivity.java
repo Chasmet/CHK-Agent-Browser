@@ -186,8 +186,19 @@ public class MainActivity extends Activity {
                 if(deliverPendingUpload(v,callback))return true;
                 if(fileCallback!=null)fileCallback.onReceiveValue(null);
                 fileCallback=callback;
-                try{startActivityForResult(params.createIntent(),FILE_REQUEST);return true;}
-                catch(Exception e){fileCallback=null;toast("Sélection de fichiers impossible");return false;}
+                Runnable androidPicker=()->{
+                    try{startActivityForResult(params.createIntent(),FILE_REQUEST);}
+                    catch(Exception e){
+                        if(fileCallback==callback){fileCallback=null;callback.onReceiveValue(null);}
+                        toast("Sélection Android indisponible");
+                    }
+                };
+                try{
+                    WorkspaceMediaChooser.show(MainActivity.this,params,uris->{
+                        if(fileCallback==callback){fileCallback=null;callback.onReceiveValue(uris);}
+                    },androidPicker);
+                    return true;
+                }catch(Exception e){androidPicker.run();return true;}
             }
         });
         web.setDownloadListener((url,userAgent,contentDisposition,mimeType,length)->{
