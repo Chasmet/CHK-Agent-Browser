@@ -190,7 +190,7 @@ public final class CutStudioActivity extends Activity {
             source=uri;sourceName=name;sourceDurationMs=duration;
             render(0);message("Vidéo prête : "+name);
         }catch(Exception ex){toast("Vidéo non prise en charge : "+ex.getMessage());}
-        finally{m.release();}
+        finally{try{m.release();}catch(Exception ignored){}}
     }
     private void chooseWorkspace(String folder){
         if(workspace==null)return;
