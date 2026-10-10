@@ -93,7 +93,7 @@ public final class VideoEditorIntegrationTest {
             for(int repeat=0;repeat<35;repeat++){
                 final CountDownLatch latch=new CountDownLatch(1);AtomicInteger status=new AtomicInteger(-1);
                 getInstrumentation().runOnMainSync(()->android.view.PixelCopy.request(view,image,result->{
-                    status.set(result);latch.countDown();},new Handler(android.os.Looper.getMainLooper())));
+                    status.set(result);latch.countDown();},new android.os.Handler(android.os.Looper.getMainLooper())));
                 assertTrue(latch.await(10,TimeUnit.SECONDS));
                 if(status.get()==android.view.PixelCopy.SUCCESS){
                     int bright=0;
