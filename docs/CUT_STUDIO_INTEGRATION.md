@@ -30,7 +30,28 @@
 2. Le programme est consultable avec `browser_files_read_text` sur `CutVideo/publications.json`.
 3. Pour charger le MP4 sur un réseau, ouvrir sa page avec `browser_open_url`, consulter le formulaire réel avec `browser_read_page`, puis utiliser `browser_upload_workspace_file` avec **le chemin exact** du morceau et le **domaine attendu**.
 4. Compléter le formulaire avec les métadonnées de la fiche via les outils de navigation. Vérifier le résultat réel de la plateforme avant d'annoncer une publication. Ne jamais cocher « Publié » par simple supposition.
-5. Le connecteur existant ne fournit pas encore de commande MCP dédiée pour piloter à distance l'écran de découpage natif, ni de publication par API. Ne pas présenter ces fonctionnalités comme actives.
+5. **Programmer directement depuis ChatGPT via le MCP existant :** appeler `browser_files_write_text` avec `path="CutVideo/schedule_inbox.json"`, `overwrite=true` et un `text` JSON décrivant entre 1 et 25 publications. Dans ce cas précis, l'écriture est interprétée comme une **commande native transactionnelle** de planification, et non comme la création d'un fichier brouillon. Le retour donne `imported`, `ids`, `state=scheduled_local_reminder` et `platform_publication_confirmed=false`. Les programmations apparaissent immédiatement dans l'onglet Cut et dans `CutVideo/publications.json`. Aucun nouvel endpoint Render n'est ajouté.
+6. Exemple de contenu `text` (horodatage futur **en millisecondes Unix**) :
+
+```json
+{
+  "entries": [{
+    "request_id": "clip-001-youtube",
+    "path": "CutVideo/lot_123/cut_01.mp4",
+    "platform": "youtube",
+    "account": "chknoirshadow",
+    "title": "Mon clip",
+    "description": "Nouvel extrait",
+    "hashtags": "#shorts",
+    "visibility": "public",
+    "at": 1893456000000
+  }]
+}
+```
+
+7. Avant chaque envoi : lister les véritables MP4 dans `CutVideo`, contrôler leurs métadonnées, proposer des heures adaptées au fuseau horaire voulu. Le même `request_id` rend une relance **idempotente** (mise à jour sans doublon). L'importation valide **l'intégralité du lot** avant enregistrement : chemin MP4 local existant, compte/réseau autorisé, date future, métadonnées limitées à 100 caractères et 5 hashtags. Une entrée invalide annule tout le lot. `published=true` est refusé dans les imports automatiques.
+8. Le connecteur ne pilote **pas encore la découpe native** via une commande spécifique : l'utilisateur peut découper depuis l'onglet ou l'agent peut exploiter l'éditeur vidéo MCP existant si approprié. Une **programmation locale n'équivaut jamais à une programmation distante sur YouTube ou TikTok**, et les outils existants n'accordent pas d'accès OAuth. Pour publier réellement : naviguer, transférer le fichier, régler les champs, confirmer sur le site et recueillir une preuve vérifiable. Sur X, préparer puis publier au moment voulu (pas de programmation automatisée intégrée).
+
 
 ## Conservation et architecture
 - Cut Vidéo d'origine : **inchangé**.
