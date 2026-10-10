@@ -44,19 +44,21 @@ public final class BrowserJsUploader {
         if(selector==null||selector.length()>340||selector.isEmpty()){result.finish(false,"Sélecteur invalide");return;}
         if(!result.isActive()||!BrowserWebState.alive(web))return;
         final String document=web.getUrl();
+        final String expectedHost=document==null?null:Uri.parse(document).getHost();
         final String token=java.util.UUID.randomUUID().toString();
         final String stage="var s=window.__chkStage;if(!s||s.token!=="+JSONObject.quote(token)+")return 'STAGE_LOST';";
         Context app=context.getApplicationContext();
         IO.execute(()->{
             boolean ok=false;String message;
             try{
-                String init="(function(){try{if(location.href!=="+JSONObject.quote(document)+")return 'PAGE_CHANGED';var el=document.querySelector("+JSONObject.quote(selector)+");"
+                String init="(function(){try{if(location.protocol!=='https:'||location.hostname!=="+JSONObject.quote(expectedHost)+")return 'PAGE_CHANGED';var el=document.querySelector("+JSONObject.quote(selector)+");"
                     +"if(!el){var all=document.querySelectorAll('iframe');for(var i=0;i<all.length;i++){try{el=all[i].contentDocument.querySelector("+JSONObject.quote(selector)+");if(el)break;}catch(e){}}}"
                     +"if(!el||el.type!=='file'||el.disabled)return 'CHAMP_FICHIER_ABSENT';"
                     +"if("+uris.length+">1&&!el.multiple)return 'CHAMP_NON_MULTIPLE';"
                     +"window.__chkStage={token:"+JSONObject.quote(token)+",input:el,files:[]};return 'READY';"
                     +"}catch(e){return 'ERROR:'+e.message;}})()";
-                if(!"READY".equals(eval(web,init,result)))throw new Exception("Champ fichier indisponible ou non compatible");
+                String initialized=eval(web,init,result);
+                if(!"READY".equals(initialized))throw new Exception("Champ fichier indisponible ou non compatible : "+initialized);
                 long total=0;
                 for(int i=0;i<uris.length;i++){
                     Uri uri=uris[i];
