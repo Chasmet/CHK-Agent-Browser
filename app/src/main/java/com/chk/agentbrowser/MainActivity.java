@@ -537,7 +537,7 @@ public class MainActivity extends Activity {
     private void startMcpUpload(WebView web,JSONObject args,AgentClient.ResultCallback callback){
         String selector=args.optString("selector","");
         JSONArray files=args.optJSONArray("files");
-        if(selector.isEmpty()||selector.length()>=350){callback.finish(false,"Sélecteur de fichier invalide.");return;}
+        if(selector.isEmpty()||selector.length()>=350){callback.finish(false,"Sélecteur fichier invalide.");return;}
         String expected=args.optString("expected_host","");
         String host=web.getUrl()==null?null:Uri.parse(web.getUrl()).getHost();
         if(host==null||(!expected.isEmpty()&&!expected.equalsIgnoreCase(host))){
@@ -545,21 +545,9 @@ public class MainActivity extends Activity {
         }
         BrowserTransferManager.prepareUploads(this,files,agentClient.deviceTokenForTransfers(),(ok,uris,message)->{
             if(!ok){callback.finish(false,message);return;}
-            if(pendingUploadCallback!=null){callback.finish(false,"Une autre importation est déjà en cours.");return;}
-            pendingUploadUris=uris;pendingUploadCallback=callback;pendingUploadSelector=selector;pendingUploadWeb=web;
-            web.evaluateJavascript(BrowserScripts.fileClick(JSONObject.quote(selector)),raw->{
-                String result=fromJavascript(raw);
-                if(!"Sélecteur fichier ouvert".equals(result)&&pendingUploadCallback==callback){
-                    pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;pendingUploadSelector="";
-                    callback.finish(false,result);
-                }
-            });
-            transferHandler.postDelayed(()->{
-                if(pendingUploadCallback==callback){
-                    pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;pendingUploadSelector="";
-                    callback.finish(false,"Le site n'a pas ouvert son sélecteur de fichiers.");
-                }
-            },7000L);
+            // Native HTML input selection is often blocked from off-screen JavaScript clicks.
+            // Populate only this owner-approved file input directly with the staged CHK media.
+            BrowserJsUploader.upload(this,web,selector,uris,callback);
         });
     }
     private void startMcpDownload(WebView web,JSONObject args,AgentClient.ResultCallback callback){
