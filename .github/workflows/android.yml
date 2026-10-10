@@ -1,7 +1,7 @@
 name: CHK Agent Browser - APK Android et Releases
 on:
   push:
-    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009, agent/mobile-studio-20261009, agent/general-audit-20261010, feature/cut-studio-20261010]
+    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009, agent/mobile-studio-20261009, agent/general-audit-20261010, feature/cut-studio-20261010, 'feature/cut-*']
   workflow_dispatch:
 permissions:
   contents: write
