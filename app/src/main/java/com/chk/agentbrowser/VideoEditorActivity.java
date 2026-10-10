@@ -88,8 +88,9 @@ public final class VideoEditorActivity extends Activity {
         canvas.addView(fullscreenButton,fullButtonLayout);
         fullscreenButton.setOnClickListener(v->openFullscreen());
         player=new ExoPlayer.Builder(this).build();
-        // Media3 needs an effect list before prepare() for live GPU filtering.
-        player.setVideoEffects(Collections.emptyList());
+        // Keep ExoPlayer's direct decoder output while seeking on multi-clip projects.
+        // GPU filters are applied by Transformer on export; hot-swapping live GL
+        // effects can stall hardware decoders during fast clip boundary seeks.
         audioPlayer=new ExoPlayer.Builder(this).build();
         viewer.setPlayer(player);
         player.addListener(new Player.Listener(){
@@ -317,8 +318,6 @@ public final class VideoEditorActivity extends Activity {
         if(c==null)return;
         player.setPlaybackSpeed((float)c.optDouble("speed",1));
         player.setVolume(project.optBoolean("mute_original",audio().length()>0)||c.optBoolean("mute",false)?0:1);
-        try{player.setVideoEffects(VideoEditorEngine.previewEffects(c.optString("filter","aucun")));}
-        catch(Exception e){android.util.Log.w("ChkStudio","Filtre aperçu indisponible",e);}
         selected=i;updateCaption();
     }
     private void updateCaption(){
@@ -365,13 +364,12 @@ public final class VideoEditorActivity extends Activity {
         if(project==null||saving||importing){toast("Attends la fin de l’importation ou de la sauvegarde");return;}if(clips().length()==0){toast("Ajoute une vidéo avant d’exporter");return;}
         String snapshot=project.toString();WorkspaceCommands.IO.execute(()->{try{JSONObject p=new JSONObject(snapshot);boolean exists=new WorkspaceStore(this).file(p.getString("output")).exists();ui.post(()->{if(!alive)return;String message=clips().length()+" plans · "+time(total())+"\n"+project.optInt("resolution",720)+"p · "+project.optString("aspect_ratio","source").replace("source","Original")+"\n"+name(project.optString("output"));
             if(exists)new AlertDialog.Builder(this).setTitle("Exporter · "+time(total()))
-                .setMessage(message+"\n\nUn MP4 existe déjà. Tu peux l'ouvrir, l'enregistrer ou relancer le rendu.")
-                .setItems(new String[]{"Lire le MP4 existant","Enregistrer sur le téléphone","Partager le MP4",
-                    "Nouvelle copie","Remplacer"},(d,n)->{
-                    if(n<=2)openExportFile(project.optString("output"),n);
-                    else if(n==3)startExport(false,true);
-                    else startExport(true,false);
-                }).setNegativeButton("Annuler",null).show();
+                .setMessage(message+"\n\nUn MP4 existe déjà. Choisis l'action voulue.")
+                .setItems(new String[]{"Lire le MP4 existant","Enregistrer sur le téléphone",
+                    "Partager le MP4"},(d,n)->openExportFile(project.optString("output"),n))
+                .setNeutralButton("Remplacer",(d,n)->startExport(true,false))
+                .setPositiveButton("Nouvelle copie",(d,n)->startExport(false,true))
+                .setNegativeButton("Annuler",null).show();
             else new AlertDialog.Builder(this).setTitle("Exporter le projet complet").setMessage(message).setNegativeButton("Annuler",null).setPositiveButton("Exporter",(d,n)->startExport(false,false)).show();
         });}catch(Exception e){ui.post(()->toast(e.getMessage()));}});
     }
