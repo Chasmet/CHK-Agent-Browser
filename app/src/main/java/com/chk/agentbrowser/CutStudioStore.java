@@ -70,6 +70,74 @@ public final class CutStudioStore {
             if(item!=null)alarm(context,item);
         }
     }
+    /**
+     * Entrée MCP sans nouvel endpoint Render : browser_files_write_text sur
+     * CutVideo/schedule_inbox.json déclenche une importation transactionnelle.
+     * Aucun réseau social n'est publié automatiquement.
+     */
+    public static synchronized JSONObject importFromAgent(Context context, String payload) throws Exception {
+        if(payload==null||payload.length()>65536)
+            throw new IllegalArgumentException("Planning JSON limité à 64 Ko");
+        String input=payload.trim();
+        JSONArray requests=input.startsWith("[")?new JSONArray(input):
+            new JSONObject(input).getJSONArray("entries");
+        if(requests.length()==0||requests.length()>25)
+            throw new IllegalArgumentException("Entre 1 et 25 programmations par envoi");
+        JSONArray incoming=new JSONArray(), identifiers=new JSONArray();
+        java.util.HashSet<String> ids=new java.util.HashSet<>();
+        JSONArray previous=all(context);
+        for(int i=0;i<requests.length();i++){
+            JSONObject request=requests.getJSONObject(i);
+            if(request.optBoolean("published",false))
+                throw new IllegalArgumentException("Une publication ne peut pas être validée par import distant");
+            String path=request.getString("path");
+            String platform=request.getString("platform");
+            String account=request.optString("account","chknoirshadow");
+            long at=request.getLong("at");
+            String requestId=request.optString("request_id","");
+            if(requestId.length()>128)throw new IllegalArgumentException("request_id trop long");
+            String unique=requestId.isEmpty()
+                ?path+"|"+platform+"|"+account+"|"+at
+                :"request:"+requestId;
+            String id=UUID.nameUUIDFromBytes(("chkcut:"+unique)
+                .getBytes(StandardCharsets.UTF_8)).toString();
+            if(!ids.add(id))throw new IllegalArgumentException("Identifiant dupliqué dans l'envoi");
+            JSONObject row=new JSONObject()
+                .put("id",id)
+                .put("path",path)
+                .put("platform",platform)
+                .put("account",account)
+                .put("visibility",request.optString("visibility","public"))
+                .put("title",request.getString("title").trim())
+                .put("description",request.optString("description","").trim())
+                .put("hashtags",request.optString("hashtags","").trim())
+                .put("at",at)
+                .put("published",false);
+            for(int p=0;p<previous.length();p++){
+                JSONObject prior=previous.optJSONObject(p);
+                if(prior!=null&&id.equals(prior.optString("id"))&&prior.optBoolean("published"))
+                    throw new IllegalArgumentException("Publication déjà validée : modification distante interdite");
+            }
+            validate(context,row);
+            incoming.put(row);identifiers.put(id);
+        }
+        // Tous les éléments sont validés AVANT d'écrire : aucun lot partiel.
+        JSONArray merged=new JSONArray();
+        for(int i=0;i<previous.length();i++){
+            JSONObject row=previous.optJSONObject(i);
+            if(row!=null&&!ids.contains(row.optString("id")))merged.put(row);
+        }
+        for(int i=0;i<incoming.length();i++)merged.put(incoming.getJSONObject(i));
+        persist(context,merged);
+        for(int i=0;i<incoming.length();i++)alarm(context,incoming.getJSONObject(i));
+        return new JSONObject()
+            .put("imported",incoming.length())
+            .put("ids",identifiers)
+            .put("state","scheduled_local_reminder")
+            .put("platform_publication_confirmed",false)
+            .put("planning_file",FOLDER+"/publications.json");
+    }
+
     private static void validate(Context context,JSONObject entry) throws Exception {
         String path=entry.optString("path","");
         if(!path.startsWith(FOLDER+"/")||!path.endsWith(".mp4")||
