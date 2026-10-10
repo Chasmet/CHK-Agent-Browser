@@ -88,6 +88,8 @@ public final class VideoEditorActivity extends Activity {
         canvas.addView(fullscreenButton,fullButtonLayout);
         fullscreenButton.setOnClickListener(v->openFullscreen());
         player=new ExoPlayer.Builder(this).build();
+        // Media3 needs an effect list before prepare() for live GPU filtering.
+        player.setVideoEffects(Collections.emptyList());
         audioPlayer=new ExoPlayer.Builder(this).build();
         viewer.setPlayer(player);
         player.addListener(new Player.Listener(){
@@ -312,6 +314,8 @@ public final class VideoEditorActivity extends Activity {
         if(c==null)return;
         player.setPlaybackSpeed((float)c.optDouble("speed",1));
         player.setVolume(project.optBoolean("mute_original",audio().length()>0)||c.optBoolean("mute",false)?0:1);
+        try{player.setVideoEffects(VideoEditorEngine.previewEffects(c.optString("filter","aucun")));}
+        catch(Exception e){android.util.Log.w("ChkStudio","Filtre aperçu indisponible",e);}
         selected=i;updateCaption();
     }
     private void updateCaption(){
@@ -332,7 +336,18 @@ public final class VideoEditorActivity extends Activity {
     private void trim(boolean sound,int index){JSONObject c=(sound?audio():clips()).optJSONObject(index);if(c==null||saving||importing)return;String path=c.optString("path");WorkspaceCommands.IO.execute(()->{try{long sourceDuration=MediaInspection.info(this,path).optLong("duration_ms");ui.post(()->{if(!alive)return;LinearLayout box=MobileUi.column(this);box.setPadding(dp(20),dp(10),dp(20),dp(12));TextView bounds=MobileUi.text(this,"",14,MobileUi.TEXT);box.addView(bounds);SeekBar begin=new SeekBar(this),end=new SeekBar(this);begin.setMax((int)sourceDuration);end.setMax((int)sourceDuration);begin.setProgress((int)c.optLong("start_ms"));end.setProgress((int)(c.optLong("start_ms")+c.optLong("duration_ms")));box.addView(MobileUi.text(this,"Début",12,MobileUi.MUTED));box.addView(begin);box.addView(MobileUi.text(this,"Fin",12,MobileUi.MUTED));box.addView(end);Runnable update=()->bounds.setText(time(begin.getProgress())+" → "+time(end.getProgress()));SeekBar.OnSeekBarChangeListener listener=new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar bar,int progress,boolean user){update.run();}public void onStartTrackingTouch(SeekBar b){}public void onStopTrackingTouch(SeekBar b){}};begin.setOnSeekBarChangeListener(listener);end.setOnSeekBarChangeListener(listener);update.run();
             AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Découper · "+name(path)).setView(box).setNegativeButton("Annuler",null).setNeutralButton("Tout le média",(d,n)->{remember();try{c.put("start_ms",0).put("duration_ms",sourceDuration);save();}catch(Exception e){toast(e.getMessage());}}).setPositiveButton("Appliquer",null).create();dialog.setOnShowListener(d->dialog.getButton(-1).setOnClickListener(v->{if(end.getProgress()-begin.getProgress()<500){toast("Garde au moins 0,5 seconde");return;}try{remember();c.put("start_ms",begin.getProgress()).put("duration_ms",end.getProgress()-begin.getProgress());save();dialog.dismiss();}catch(Exception e){toast(e.getMessage());}}));dialog.show();
         });}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
-    private void filter(){String[] labels={"Original","Noir et blanc","Cinéma","Chaud","Froid","Contraste","Nuit","Vintage","Fondu noir 0,18 s","Retirer le fondu"};String[] keys={"aucun","noir","cinema","chaud","froid","contraste","nuit","vintage"};new AlertDialog.Builder(this).setTitle("Filtres du plan").setItems(labels,(d,n)->{if(n<8)put(clip(),"filter",keys[n]);else put(clip(),"fade_ms",n==8?180:0);}).show();}
+    private void filter(){
+        String[] labels={"Original","Noir et blanc","Cinéma","Chaud","Froid",
+            "Contraste","Nuit","Vintage","Vibrant (couleurs +)","Cinéma doux",
+            "Désaturé","Sépia","Fondu noir 0,18 s","Fondu noir 0,35 s","Retirer le fondu"};
+        String[] keys={"aucun","noir","cinema","chaud","froid","contraste",
+            "nuit","vintage","vibrant","doux","desature","sepia"};
+        new AlertDialog.Builder(this).setTitle("Filtres · GPU Media3")
+            .setItems(labels,(d,n)->{
+                if(n<keys.length)put(clip(),"filter",keys[n]);
+                else put(clip(),"fade_ms",n==12?180:n==13?350:0);
+            }).show();
+    }
     private void caption(){if(clip()==null)return;prompt("Texte du plan",clip().optString("text",""),text->put(clip(),"text",text));}
     private void speed(){new AlertDialog.Builder(this).setTitle("Vitesse du plan").setItems(new String[]{"0,25×","0,5×","1×","1,5×","2×","4×"},(d,n)->put(clip(),"speed",new double[]{.25,.5,1,1.5,2,4}[n])).show();}
     private void rotation(){new AlertDialog.Builder(this).setTitle("Rotation du plan").setItems(new String[]{"0°","90°","180°","−90°"},(d,n)->put(clip(),"rotation",new int[]{0,90,180,-90}[n])).show();}
@@ -349,7 +364,7 @@ public final class VideoEditorActivity extends Activity {
             if(exists)new AlertDialog.Builder(this).setTitle("Exporter · "+time(total()))
                 .setMessage(message+"\n\nUn MP4 existe déjà. Tu peux l'ouvrir, l'enregistrer ou relancer le rendu.")
                 .setItems(new String[]{"Lire le MP4 existant","Enregistrer sur le téléphone","Partager le MP4",
-                    "Exporter une nouvelle copie","Réexporter et remplacer"},(d,n)->{
+                    "Nouvelle copie","Remplacer"},(d,n)->{
                     if(n<=2)openExportFile(project.optString("output"),n);
                     else if(n==3)startExport(false,true);
                     else startExport(true,false);
