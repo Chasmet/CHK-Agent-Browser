@@ -15,6 +15,10 @@ final class StudioTimeline extends View {
     private Listener listener;private final ScaleGestureDetector zoom;
     StudioTimeline(Context context){super(context);setFocusable(true);setContentDescription("Timeline du projet : toucher un plan ou glisser sur la règle pour déplacer le curseur");zoom=new ScaleGestureDetector(context,new ScaleGestureDetector.SimpleOnScaleGestureListener(){@Override public boolean onScale(ScaleGestureDetector d){scale=Math.max(.3f,Math.min(16,scale*d.getScaleFactor()));requestLayout();invalidate();return true;}});}
     void setListener(Listener value){listener=value;}
+    void zoomBy(float factor){
+        scale=Math.max(.3f,Math.min(16,scale*factor));
+        fitted=true;requestLayout();invalidate();
+    }
     void setProject(JSONObject value,int clip){project=value;selected=clip;generation++;total=0;JSONArray clips=project.optJSONArray("clips");Set<String> currentKeys=new HashSet<>();if(clips!=null)for(int i=0;i<clips.length();i++){JSONObject c=clips.optJSONObject(i);total+=duration(c);final int ticket=generation;String path=c.optString("path");long at=c.optLong("start_ms");String key=path+":"+at;currentKeys.add(key);if(!thumbnails.containsKey(key))ThumbnailLoader.load(getContext(),path,at,true,new ThumbnailLoader.Result(){public boolean current(){return ticket==generation;}public void ready(Bitmap b){thumbnails.put(key,b);invalidate();}});}thumbnails.keySet().retainAll(currentKeys);if(!fitted&&total>0){scale=Math.max(.3f,Math.min(16,(getResources().getDisplayMetrics().widthPixels-dp(60))/(total*dp(30)/1000)));fitted=true;}requestLayout();invalidate();}
     @Override protected void onDetachedFromWindow(){generation++;super.onDetachedFromWindow();}
     void position(long value){position=value;invalidate();}
