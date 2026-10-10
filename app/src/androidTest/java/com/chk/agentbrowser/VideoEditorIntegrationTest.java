@@ -30,9 +30,28 @@ public final class VideoEditorIntegrationTest {
     private void awaitExport()throws Exception{String state="";for(int i=0;i<1200;i++){JSONObject current=invoke("video_editor_status",new JSONObject());state=current.getString("state");if(!state.equals("running")&&!state.equals("preparing"))break;Thread.sleep(500);}assertEquals(VideoEditorEngine.get().status().toString(),"completed",state);}
     @Test public void testMutedSpeedExportDoesNotDeadlock()throws Exception{String output="muted-speed-"+UUID.randomUUID()+".mp4";invoke("video_editor_project_save",new JSONObject().put("project",project(output).put("mute_original",true)));invoke("video_editor_export",new JSONObject());awaitExport();JSONObject verified=invoke("video_editor_verify_output",new JSONObject());assertTrue(verified.toString(),verified.getBoolean("valid"));assertFalse(verified.getBoolean("has_audio"));assertEquals(1500,verified.getLong("expected_duration_ms"));store.file(output).delete();}
     @Test public void testCompleteSevenClipPortraitExportAndReplacement()throws Exception{
-        String output="complete-"+UUID.randomUUID()+".mp4";JSONObject p=project(output).put("aspect_ratio","9:16");JSONArray clips=new JSONArray();for(int i=0;i<7;i++)clips.put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",3000).put("text",i==0?"Projet complet":""));JSONArray tracks=new JSONArray();for(int i=0;i<7;i++)tracks.put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",3000));p.put("clips",clips).put("audio",tracks).put("mute_original",true);invoke("video_editor_project_save",new JSONObject().put("project",p));
+        String output="complete-"+UUID.randomUUID()+".mp4";JSONObject p=project(output).put("aspect_ratio","9:16");JSONArray clips=new JSONArray();for(int i=0;i<7;i++)clips.put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",3000).put("fade_ms",180).put("filter",i%2==0?"froid":"cinema").put("text",i==0?"Projet complet":""));JSONArray tracks=new JSONArray();for(int i=0;i<7;i++)tracks.put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",3000));p.put("clips",clips).put("audio",tracks).put("mute_original",true);invoke("video_editor_project_save",new JSONObject().put("project",p));
         try(FileOutputStream old=new FileOutputStream(store.file(output))){old.write("Old completed video must survive a rejected export".getBytes("UTF-8"));}long oldSize=store.file(output).length();CountDownLatch rejected=new CountDownLatch(1);AtomicBoolean accepted=new AtomicBoolean(true);VideoEditorEngine.get().command(context,"video_editor_export",new JSONObject(),(ok,res)->{accepted.set(ok);rejected.countDown();});assertTrue(rejected.await(30,TimeUnit.SECONDS));assertFalse(accepted.get());assertEquals(oldSize,store.file(output).length());
-        invoke("video_editor_export",new JSONObject().put("replace",true));awaitExport();JSONObject verified=invoke("video_editor_verify_output",new JSONObject());assertTrue(verified.toString(),verified.getBoolean("valid"));assertEquals(21000,verified.getLong("expected_duration_ms"));assertTrue(Math.abs(21000-verified.getLong("duration_ms"))<500);assertTrue(verified.getBoolean("has_audio"));assertEquals("480",verified.getString("width_px"));assertTrue(Integer.parseInt(verified.getString("height_px"))>850);store.file(output).delete();
+        invoke("video_editor_export",new JSONObject().put("replace",true));awaitExport();JSONObject verified=invoke("video_editor_verify_output",new JSONObject());assertTrue(verified.toString(),verified.getBoolean("valid"));assertEquals(21000,verified.getLong("expected_duration_ms"));assertTrue(Math.abs(21000-verified.getLong("duration_ms"))<500);assertTrue(verified.getBoolean("has_audio"));assertEquals("480",verified.getString("width_px"));assertTrue(Integer.parseInt(verified.getString("height_px"))>850);
+        assertEquals("Every segment should have a visible decoded frame",7,verified.getInt("verified_video_segments"));
+        assertEquals("Black export after the first clip must be rejected",0,verified.getJSONArray("black_video_segments").length());
+        // Read actual MP4 midpoints; metadata/duration alone cannot catch a 50-second black export.
+        android.media.MediaMetadataRetriever frameProbe=new android.media.MediaMetadataRetriever();
+        try{frameProbe.setDataSource(store.file(output).getAbsolutePath());
+            for(int i=0;i<7;i++){
+                android.graphics.Bitmap frame=frameProbe.getScaledFrameAtTime((i*3000L+1500L)*1000,
+                    android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC,48,48);
+                assertNotNull("Missing frame for cut "+(i+1),frame);
+                int lit=0;
+                for(int y=0;y<frame.getHeight();y+=4)for(int x=0;x<frame.getWidth();x+=4){
+                    int rgb=frame.getPixel(x,y);
+                    if(android.graphics.Color.red(rgb)+android.graphics.Color.green(rgb)+android.graphics.Color.blue(rgb)>75)lit++;
+                }
+                frame.recycle();
+                assertTrue("Exported cut "+(i+1)+" is black at its midpoint",lit>3);
+            }
+        }finally{frameProbe.release();}
+        store.file(output).delete();
     }
     @Test public void testExportDialogOffersReplacementAndCopy()throws Exception{
         String output="dialog-"+UUID.randomUUID()+".mp4";try(FileOutputStream old=new FileOutputStream(store.file(output))){old.write(new byte[1024]);}invoke("video_editor_project_save",new JSONObject().put("project",project(output)));
