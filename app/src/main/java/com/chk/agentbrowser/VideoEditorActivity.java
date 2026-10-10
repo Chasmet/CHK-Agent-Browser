@@ -273,10 +273,70 @@ public final class VideoEditorActivity extends Activity {
     private void outputMenu(){String s=engine.status().optString("state");if(s.equals("running")||s.equals("preparing")){new AlertDialog.Builder(this).setTitle("Export en cours").setMessage("Le rendu continue avec une notification sur le téléphone. Tu peux quitter cet écran.").setNegativeButton("Continuer",null).setPositiveButton("Annuler l’export",(d,n)->engine.command(this,"video_editor_cancel",new JSONObject(),(ok,res)->{})).show();return;}if(!s.equals("completed"))return;String output=engine.status().optString("output");new AlertDialog.Builder(this).setTitle("Montage complet prêt").setItems(new String[]{"Lire","Enregistrer sur le téléphone","Partager","Vérifier la durée et les pistes"},(d,n)->{try{WorkspaceStore store=new WorkspaceStore(this);if(n==0)startActivity(new Intent(this,MediaPreviewActivity.class).putExtra("path",output));else if(n==1){exportCopyPath=output;startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("video/mp4").putExtra(Intent.EXTRA_TITLE,name(output)),811);}else if(n==2)startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("video/mp4").putExtra(Intent.EXTRA_STREAM,store.uri(output)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"Partager le montage"));else engine.command(this,"video_editor_verify_output",new JSONObject(),(ok,res)->ui.post(()->{if(!alive)return;try{JSONObject result=new JSONObject(res);new AlertDialog.Builder(this).setTitle(result.optBoolean("valid")?"Montage vérifié":"Vérification à reprendre").setMessage("Durée : "+time(result.optLong("duration_ms"))+"\nDurée attendue : "+time(result.optLong("expected_duration_ms"))+"\nVidéo : "+result.optString("width_px")+" × "+result.optString("height_px")+"\nAudio : "+(result.optBoolean("has_audio")?"présent":"absent")).setPositiveButton("OK",null).show();}catch(Exception e){toast(res);}}));}catch(Exception e){toast(e.getMessage());}}).show();}
     private interface TextResult{void done(String text);}
     private void prompt(String label,String initial,TextResult result){EditText e=new EditText(this);e.setText(initial);new AlertDialog.Builder(this).setTitle(label).setView(e).setNegativeButton("Annuler",null).setPositiveButton("Appliquer",(d,n)->result.done(e.getText().toString().trim())).show();}
-    private void projectMenu(){if(project==null)return;new AlertDialog.Builder(this).setTitle("Projet").setItems(new String[]{"Renommer","Destination MP4","Nouveau montage","Sauvegarder une copie du projet","Ouvrir un projet JSON","Charger Alpha Omega"},(d,n)->{switch(n){case 0:prompt("Nom",project.optString("name"),t->put(project,"name",t));break;case 1:prompt("Destination dans Fichiers",project.optString("output"),t->put(project,"output",t));break;case 2:new AlertDialog.Builder(this).setTitle("Commencer un nouveau montage ?").setMessage("Conserve une copie avant de remplacer le projet actuel.").setNegativeButton("Annuler",null).setPositiveButton("Nouveau",(x,y)->{try{remember();project=new JSONObject().put("name","Nouveau montage").put("output","Montage-"+System.currentTimeMillis()+".mp4").put("clips",new JSONArray()).put("audio",new JSONArray());save();}catch(Exception ignored){}}).show();break;case 3:WorkspaceCommands.IO.execute(()->{try{new WorkspaceStore(this).writeText("Projet-"+System.currentTimeMillis()+".json",project.toString(2),false);ui.post(()->toast("Projet enregistré dans Fichiers"));}catch(Exception e){ui.post(()->toast(e.getMessage()));}});break;case 4:chooseFolder("project","",0);break;case 5:engine.command(this,"video_editor_preset_alpha_omega",new JSONObject(),(ok,res)->ui.post(()->{if(ok)engine.command(this,"video_editor_project_read",new JSONObject(),(yes,r)->ui.post(()->{try{project=new JSONObject(r);revision=project.optInt("revision");draw();preview();}catch(Exception ignored){}}));else toast(res);}));break;}}).show();}
+    private void showProjects(){
+        startActivity(new Intent(this,StudioProjectsActivity.class)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        finish();
+    }
+    private void replaceProjectFromCommand(boolean ok,String response){
+        ui.post(()->{
+            if(!alive)return;
+            if(!ok){toast(response);return;}
+            try{
+                JSONObject data=new JSONObject(response),fresh=data.optJSONObject("project");
+                if(fresh==null)throw new IllegalArgumentException("Projet inaccessible");
+                project=fresh;revision=project.optInt("revision",0);
+                undo.clear();redo.clear();selected=0;
+                draw();preview();
+            }catch(Exception e){toast(e.getMessage());}
+        });
+    }
+    private void projectMenu(){
+        if(project==null)return;
+        new AlertDialog.Builder(this).setTitle("Studio · Projets")
+            .setItems(new String[]{"Tous mes projets","Renommer ce projet","Destination MP4",
+                "Nouveau montage (conserver l'ancien)","Dupliquer ce projet",
+                "Sauvegarder une copie JSON","Ouvrir un projet JSON","Charger Alpha Omega"},
+                (d,n)->{
+                    switch(n){
+                        case 0:showProjects();break;
+                        case 1:prompt("Nom",project.optString("name"),t->put(project,"name",t));break;
+                        case 2:prompt("Destination dans Fichiers",project.optString("output"),t->put(project,"output",t));break;
+                        case 3:engine.command(this,"video_editor_project_new",new JSONObject(),
+                            this::replaceProjectFromCommand);break;
+                        case 4:engine.command(this,"video_editor_project_duplicate",
+                            new JSONObjectSafe("id",project.optString("project_id")),
+                            this::replaceProjectFromCommand);break;
+                        case 5:WorkspaceCommands.IO.execute(()->{
+                            try{new WorkspaceStore(this).writeText("Projet-"+System.currentTimeMillis()+".json",project.toString(2),false);
+                                ui.post(()->toast("Copie JSON enregistrée dans Fichiers"));
+                            }catch(Exception e){ui.post(()->toast(e.getMessage()));}
+                        });break;
+                        case 6:chooseFolder("project","",0);break;
+                        case 7:engine.command(this,"video_editor_preset_alpha_omega",new JSONObject(),
+                            this::replaceProjectFromCommand);break;
+                    }
+                }).show();
+    }
     private void addMenu(String kind){if(project==null||saving||importing)return;importKind=kind;new AlertDialog.Builder(this).setTitle("Ajouter "+(kind.equals("video")?"une vidéo":"un audio")).setItems(new String[]{"Depuis le téléphone","Depuis Fichiers CHK"},(d,n)->{if(n==0)startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(kind+"/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true),810);else chooseFolder(kind,"",0);}).show();}
     private void chooseFolder(String kind,String folder,int page){WorkspaceCommands.IO.execute(()->{try{WorkspaceStore store=new WorkspaceStore(this);JSONObject batch=store.list(folder,"",page);JSONArray rows=batch.getJSONArray("items");ArrayList<String> names=new ArrayList<>(),paths=new ArrayList<>();if(!folder.isEmpty()){names.add("‹ Parent");paths.add("..");}for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);String p=row.getString("path");if(row.getBoolean("directory")||kind.equals("project")&&p.endsWith(".json")||row.getString("mime_type").startsWith(kind+"/")){names.add((row.getBoolean("directory")?"▱ ":"")+row.getString("name"));paths.add(p);}}if(batch.optInt("next_offset",-1)>=0){names.add("Suite ›");paths.add("#next");}ui.post(()->{if(!alive)return;new AlertDialog.Builder(this).setTitle("Fichiers / "+folder).setItems(names.toArray(new String[0]),(d,n)->{String p=paths.get(n);if(p.equals(".."))chooseFolder(kind,folder.contains("/")?folder.substring(0,folder.lastIndexOf('/')):"",0);else if(p.equals("#next"))chooseFolder(kind,folder,page+50);else{try{if(store.file(p).isDirectory())chooseFolder(kind,p,0);else addFile(kind,p);}catch(Exception e){toast(e.getMessage());}}}).setNegativeButton("Fermer",null).show();});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
-    private void addFile(String kind,String path){if(saving||importing)return;WorkspaceCommands.IO.execute(()->{try{if(kind.equals("project")){WorkspaceStore store=new WorkspaceStore(this);StringBuilder body=new StringBuilder();int offset=0;do{JSONObject page=store.readText(path,offset);body.append(page.getString("text"));offset=page.getInt("next_offset");}while(offset>=0);String json=body.toString();ui.post(()->{try{remember();project=new JSONObject(json);save();}catch(Exception e){toast(e.getMessage());}});return;}JSONObject metadata=MediaInspection.info(this,path);long duration=metadata.optLong("duration_ms",0);if(duration<500)throw new Exception("Durée du média indisponible ou trop courte");ui.post(()->{try{remember();JSONObject c=new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration);if(kind.equals("video"))clips().put(c);else{long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().getJSONObject(i).optLong("duration_ms");if(remaining<500){toast("Ajoute une vidéo ou raccourcis l’audio précédent");return;}c.put("duration_ms",Math.min(duration,remaining));JSONArray a=audio();a.put(c);project.put("audio",a);}selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
+    private void addFile(String kind,String path){if(saving||importing)return;WorkspaceCommands.IO.execute(()->{try{if(kind.equals("project")){WorkspaceStore store=new WorkspaceStore(this);StringBuilder body=new StringBuilder();int offset=0;do{JSONObject page=store.readText(path,offset);body.append(page.getString("text"));offset=page.getInt("next_offset");}while(offset>=0);String json=body.toString();ui.post(()->{
+                    try{
+                        JSONObject imported=new JSONObject(json);
+                        engine.command(this,"video_editor_project_new",new JSONObject(),(ok,result)->ui.post(()->{
+                            if(!alive)return;
+                            if(!ok){toast(result);return;}
+                            try{
+                                JSONObject fresh=new JSONObject(result).getJSONObject("project");
+                                imported.put("project_id",fresh.getString("project_id"));
+                                imported.put("revision",fresh.getInt("revision"));
+                                imported.put("created_at",fresh.getLong("created_at"));
+                                project=imported;revision=fresh.getInt("revision");
+                                undo.clear();redo.clear();selected=0;save();
+                            }catch(Exception e){toast(e.getMessage());}
+                        }));
+                    }catch(Exception e){toast("Fichier projet JSON invalide : "+e.getMessage());}
+                });return;}JSONObject metadata=MediaInspection.info(this,path);long duration=metadata.optLong("duration_ms",0);if(duration<500)throw new Exception("Durée du média indisponible ou trop courte");ui.post(()->{try{remember();JSONObject c=new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration);if(kind.equals("video"))clips().put(c);else{long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().getJSONObject(i).optLong("duration_ms");if(remaining<500){toast("Ajoute une vidéo ou raccourcis l’audio précédent");return;}c.put("duration_ms",Math.min(duration,remaining));JSONArray a=audio();a.put(c);project.put("audio",a);}selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
         if(request==811&&result==RESULT_OK&&data!=null&&data.getData()!=null){android.net.Uri target=data.getData();String path=exportCopyPath;WorkspaceCommands.IO.execute(()->{try(java.io.InputStream in=new java.io.FileInputStream(new WorkspaceStore(this).file(path));java.io.OutputStream out=getContentResolver().openOutputStream(target,"w")){if(out==null)throw new java.io.IOException("Destination indisponible");byte[] buffer=new byte[65536];int count;while((count=in.read(buffer))!=-1)out.write(buffer,0,count);ui.post(()->toast("Montage complet enregistré sur le téléphone"));}catch(Exception e){ui.post(()->toast(e.getMessage()));}});return;}
         if(request!=810||result!=RESULT_OK||data==null||project==null)return;String kind=importKind;ArrayList<android.net.Uri> uris=new ArrayList<>();if(data.getClipData()!=null)for(int i=0;i<Math.min(20,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)uris.add(data.getData());if(uris.isEmpty())return;importing=true;status.setText("Importation de "+uris.size()+" média(s)…");
