@@ -229,7 +229,7 @@ public final class VideoEditorEngine {
     }
     /** Inspect actual decoded MP4 frames in the middle of every clip.
      * Metadata-only validation previously approved exports with 50 s of black.
-     * Compare against the corresponding source so an intentionally dark scene
+     * Seek exact clip midpoints, not just nearest keyframes (which coincide with fades).\n     * Compare against the corresponding source so an intentionally dark scene
      * is not automatically rejected. This protects the final existing MP4. */
     private JSONObject inspectRenderedClips(Context context,File render,JSONObject project)throws Exception{
         JSONArray clips=project.optJSONArray("clips");
@@ -257,12 +257,12 @@ public final class VideoEditorEngine {
                     long srcAt=(clip.optLong("start_ms",0)+duration/2)*1000;
                     if(android.os.Build.VERSION.SDK_INT>=27){
                         rendered=output.getScaledFrameAtTime(at*1000,
-                            MediaMetadataRetriever.OPTION_CLOSEST_SYNC,64,64);
+                            MediaMetadataRetriever.OPTION_CLOSEST,64,64);
                         original=source.getScaledFrameAtTime(srcAt,
-                            MediaMetadataRetriever.OPTION_CLOSEST_SYNC,64,64);
+                            MediaMetadataRetriever.OPTION_CLOSEST,64,64);
                     }else{
-                        rendered=output.getFrameAtTime(at*1000,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
-                        original=source.getFrameAtTime(srcAt,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                        rendered=output.getFrameAtTime(at*1000,MediaMetadataRetriever.OPTION_CLOSEST);
+                        original=source.getFrameAtTime(srcAt,MediaMetadataRetriever.OPTION_CLOSEST);
                     }
                     if(rendered==null||original==null){unverifiable++;continue;}
                     checked++;
