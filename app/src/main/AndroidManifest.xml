@@ -30,6 +30,13 @@
                 <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
             </intent-filter>
         </receiver>
+        <receiver android:name=".CutStudioReminderReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+        <activity android:name=".CutStudioActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".StudioProjectsActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".VideoEditorActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".MediaPreviewActivity" android:exported="false" />
