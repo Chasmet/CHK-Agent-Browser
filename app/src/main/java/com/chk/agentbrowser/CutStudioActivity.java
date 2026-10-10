@@ -252,7 +252,10 @@ public final class CutStudioActivity extends Activity {
             render(1);return;
         }
         long[] times=segments.get(segmentIndex);
-        String name=String.format(Locale.US,"cut_%02d.mp4",segmentIndex+1);
+        String base=sourceName.replaceAll("\\.[^.]+$","").replaceAll("[^A-Za-z0-9_-]","_");
+        if(base.isEmpty())base="clip";
+        if(base.length()>36)base=base.substring(0,36);
+        String name=String.format(Locale.US,"%s_%02d.mp4",base,segmentIndex+1);
         File dest=new File(outputDir,name);
         pendingTemp=new File(outputDir,"temp_"+UUID.randomUUID()+".mp4");
         try{
@@ -400,6 +403,24 @@ public final class CutStudioActivity extends Activity {
             existing==null?"":existing.optString("description"),false);
         EditText hashtags=field(form,"Hashtags · maximum 5","#video #shorts",
             existing==null?"#video #shorts":existing.optString("hashtags"),false);
+        button("Coller un bloc de métadonnées ChatGPT",form,()->{
+            ClipboardManager manager=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+            if(manager==null||!manager.hasPrimaryClip()||manager.getPrimaryClip()==null)return;
+            CharSequence raw=manager.getPrimaryClip().getItemAt(0).coerceToText(this);
+            if(raw==null||raw.length()==0)return;
+            String[] lines=raw.toString().trim().split("\\n");
+            StringBuilder body=new StringBuilder(),tags=new StringBuilder();
+            boolean hasTitle=false;
+            for(String line:lines){
+                String v=line.trim().replaceFirst("(?i)^(titre|description|hashtags?)\\s*:\\s*","");
+                if(v.isEmpty())continue;
+                if(v.startsWith("#")){if(tags.length()>0)tags.append(" ");tags.append(v);}
+                else if(!hasTitle){title.setText(v);hasTitle=true;}
+                else{if(body.length()>0)body.append(" ");body.append(v);}
+            }
+            description.setText(body.toString());hashtags.setText(tags.toString());
+            toast("Métadonnées collées : vérifier avant de programmer");
+        });
         Calendar selected=Calendar.getInstance();
         selected.setTimeInMillis(existing!=null?existing.optLong("at",
             System.currentTimeMillis()+86400000L):System.currentTimeMillis()+86400000L);
