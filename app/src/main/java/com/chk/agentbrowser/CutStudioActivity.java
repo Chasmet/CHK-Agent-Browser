@@ -417,9 +417,11 @@ public final class CutStudioActivity extends Activity {
             time.setText("Heure : "+
                 android.text.format.DateFormat.getTimeFormat(this).format(selected.getTime()));
         },selected.get(Calendar.HOUR_OF_DAY),selected.get(Calendar.MINUTE),true).show());
+        android.widget.ScrollView scroll=new android.widget.ScrollView(this);
+        scroll.addView(form);
         AlertDialog dialog=new AlertDialog.Builder(this)
             .setTitle(existing!=null&&existing.has("id")?"Modifier le planning":"Nouvelle programmation")
-            .setView(form).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",null).create();
+            .setView(scroll).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",null).create();
         dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             try{
                 JSONObject row=new JSONObject().put("path",path)
