@@ -66,7 +66,7 @@ public final class StudioProjectsActivity extends Activity {
         root.addView(search,new LinearLayout.LayoutParams(-1,dp(48)));
         search.addTextChangedListener(new TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int count,int after){}
-            public void onTextChanged(CharSequence s,int start,int before,int count){render();}
+            public void onTextChanged(CharSequence s,int start,int before,int count){visibleLimit=40;render();}
             public void afterTextChanged(Editable s){}
         });
         LinearLayout tabs=line();tabs.setPadding(dp(12),dp(2),dp(12),0);
@@ -80,7 +80,7 @@ public final class StudioProjectsActivity extends Activity {
         TextView sort=label("Plus récents ▾",12,SOFT,false);
         sort.setGravity(Gravity.CENTER_VERTICAL);countBar.addView(sort);
         sort.setOnClickListener(v->new AlertDialog.Builder(this).setItems(new String[]{"Plus récents","Plus anciens"},(d,n)->{
-            newestFirst=n==0;render();}).show());
+            newestFirst=n==0;visibleLimit=40;render();}).show());
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         rows=new LinearLayout(this);rows.setOrientation(LinearLayout.VERTICAL);
@@ -96,6 +96,7 @@ public final class StudioProjectsActivity extends Activity {
         renderTabs();
     }
     private boolean newestFirst=true;
+    private int visibleLimit=40;
     @Override protected void onResume(){super.onResume();refresh();}
     @Override protected void onDestroy(){alive=false;super.onDestroy();}
     private int dp(int n){return MobileUi.dp(this,n);}
@@ -109,7 +110,7 @@ public final class StudioProjectsActivity extends Activity {
     private TextView tabLabel(String name,LinearLayout parent,int type){
         TextView t=label(name,14,INK,false);t.setGravity(Gravity.CENTER);
         parent.addView(t,new LinearLayout.LayoutParams(0,-1,1));
-        t.setOnClickListener(v->{tab=type;renderTabs();render();});return t;
+        t.setOnClickListener(v->{tab=type;visibleLimit=40;renderTabs();render();});return t;
     }
     private void renderTabs(){
         if(localTab==null)return;
@@ -138,19 +139,28 @@ public final class StudioProjectsActivity extends Activity {
         if(rows==null)return;rows.removeAllViews();
         JSONArray entries=cached[tab==2?1:0];String query=search==null?"":search.getText().toString().toLowerCase(Locale.ROOT).trim();
         long week=System.currentTimeMillis()-7L*24*60*60*1000;
-        int[] order=new int[entries.length()];for(int i=0;i<order.length;i++)order[i]=newestFirst?i:order.length-1-i;
-        int total=0;
-        for(int at:order){
+        int matched=0,displayed=0;
+        // Build at most one page of views. The metadata list itself can contain
+        // thousands of drafts without freezing the phone or decoding every cover.
+        for(int order=0;order<entries.length();order++){
+            int at=newestFirst?order:entries.length()-order-1;
             JSONObject item=entries.optJSONObject(at);if(item==null)continue;
             if(tab==1&&item.optLong("updated_at")<week)continue;
             if(!item.optString("name").toLowerCase(Locale.ROOT).contains(query))continue;
-            addRow(item,tab==2);total++;
+            matched++;
+            if(displayed<visibleLimit){addRow(item,tab==2);displayed++;}
         }
-        count.setText(total+" projet"+(total==1?"":"s")+(tab==2?" dans la corbeille":tab==1?" récent"+(total==1?"":"s"):" local"+(total==1?"":"aux")));
-        if(total==0){
-            TextView empty=label(tab==2?"Corbeille vide":"Aucun projet trouvé.\nCrée un montage pour commencer.",15,SOFT,false);
+        count.setText(matched+" projet"+(matched==1?"":"s")+(tab==2?" dans la corbeille":tab==1?" récent"+(matched==1?"":"s"):" locaux"));
+        if(matched==0){
+            TextView empty=label(tab==2?"Corbeille vide":"Aucun projet trouvé.\\nCrée un montage pour commencer.",15,SOFT,false);
             empty.setGravity(Gravity.CENTER);empty.setPadding(dp(12),dp(70),dp(12),dp(40));
             rows.addView(empty,new LinearLayout.LayoutParams(-1,-2));
+        }else if(displayed<matched){
+            TextView more=label("Afficher les projets suivants ("+displayed+" / "+matched+")  ↓",13,TEAL,true);
+            more.setGravity(Gravity.CENTER);more.setPadding(dp(8),dp(18),dp(8),dp(18));
+            more.setTag("studio_projects_more");
+            rows.addView(more,new LinearLayout.LayoutParams(-1,dp(64)));
+            more.setOnClickListener(v->{visibleLimit+=40;render();});
         }
     }
     private void addRow(JSONObject item,boolean deleted){
