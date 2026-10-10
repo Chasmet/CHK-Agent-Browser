@@ -209,17 +209,92 @@ public final class VideoEditorEngine {
             boolean correctDuration=expectedMs>0&&durationMs>=0&&Math.abs(durationMs-expectedMs)<=500;
             float ratio=ratio(project.optString("aspect_ratio","source"));
             boolean correctAspect=ratio==0 || (displayWidth!=null&&displayHeight!=null&&Math.abs(Float.parseFloat(displayWidth)/Float.parseFloat(displayHeight)-ratio)<0.015f);
-            boolean valid=picture&&(!(audioCount>0)||sound)&&correctDuration&&sourcesPresent&&correctAspect;
+            JSONObject frames=inspectRenderedClips(context,file,project);
+            boolean noBlackCuts=frames.getJSONArray("black_video_segments").length()==0;
+            boolean valid=picture&&(!(audioCount>0)||sound)&&correctDuration&&sourcesPresent&&correctAspect&&noBlackCuts;
             result.put("duration_ms",durationMs).put("has_video",picture)
                 .put("has_audio",sound).put("width_px",displayWidth).put("height_px",displayHeight)
                 .put("encoded_width_px",width).put("encoded_height_px",height).put("rotation_degrees",rotation)
                 .put("duration_matches_project",correctDuration)
-                .put("aspect_ratio_matches_project",correctAspect).put("valid",valid);
+                .put("aspect_ratio_matches_project",correctAspect)
+                .put("verified_video_segments",frames.getInt("verified_video_segments"))
+                .put("unverified_video_segments",frames.getInt("unverified_video_segments"))
+                .put("black_video_segments",frames.getJSONArray("black_video_segments"))
+                .put("valid",valid);
             if(!valid)result.put("reason","Contrôler la durée, les pistes et les sources du projet");
             return result;
         }catch(Exception ex){
             return result.put("reason","Métadonnées MP4 illisibles : "+ex.getClass().getSimpleName());
         }finally{retriever.release();}
+    }
+    /** Inspect actual decoded MP4 frames in the middle of every clip.
+     * Metadata-only validation previously approved exports with 50 s of black.
+     * Compare against the corresponding source so an intentionally dark scene
+     * is not automatically rejected. This protects the final existing MP4. */
+    private JSONObject inspectRenderedClips(Context context,File render,JSONObject project)throws Exception{
+        JSONArray clips=project.optJSONArray("clips");
+        JSONArray black=new JSONArray();
+        int checked=0,unverifiable=0;
+        if(clips==null||clips.length()<2)return new JSONObject()
+            .put("verified_video_segments",0).put("unverified_video_segments",0)
+            .put("black_video_segments",black);
+        MediaMetadataRetriever output=new MediaMetadataRetriever();
+        long timelineMs=0;
+        try{
+            output.setDataSource(render.getAbsolutePath());
+            WorkspaceStore store=new WorkspaceStore(context);
+            for(int i=0;i<clips.length();i++){
+                JSONObject clip=clips.getJSONObject(i);
+                long duration=clip.optLong("duration_ms",10000);
+                double speed=clip.optDouble("speed",1);
+                long realDuration=Math.round(duration/speed);
+                long at=timelineMs+realDuration/2;
+                timelineMs+=realDuration;
+                MediaMetadataRetriever source=new MediaMetadataRetriever();
+                android.graphics.Bitmap rendered=null,original=null;
+                try{
+                    source.setDataSource(store.file(clip.getString("path")).getAbsolutePath());
+                    long srcAt=(clip.optLong("start_ms",0)+duration/2)*1000;
+                    if(android.os.Build.VERSION.SDK_INT>=27){
+                        rendered=output.getScaledFrameAtTime(at*1000,
+                            MediaMetadataRetriever.OPTION_CLOSEST_SYNC,64,64);
+                        original=source.getScaledFrameAtTime(srcAt,
+                            MediaMetadataRetriever.OPTION_CLOSEST_SYNC,64,64);
+                    }else{
+                        rendered=output.getFrameAtTime(at*1000,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                        original=source.getFrameAtTime(srcAt,MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                    }
+                    if(rendered==null||original==null){unverifiable++;continue;}
+                    checked++;
+                    float sourceBrightness=sampleBrightness(original);
+                    float renderedBrightness=sampleBrightness(rendered);
+                    if(sourceBrightness>24f&&renderedBrightness<4f)
+                        black.put(i+1);
+                }catch(Exception ex){
+                    android.util.Log.w("ChkVideoExport","Image segment "+(i+1)+" non vérifiable",ex);
+                    unverifiable++;
+                }finally{
+                    if(rendered!=null)rendered.recycle();
+                    if(original!=null)original.recycle();
+                    source.release();
+                }
+            }
+        }finally{output.release();}
+        return new JSONObject().put("verified_video_segments",checked)
+            .put("unverified_video_segments",unverifiable)
+            .put("black_video_segments",black);
+    }
+    private static float sampleBrightness(android.graphics.Bitmap picture){
+        int w=picture.getWidth(),h=picture.getHeight();
+        long sum=0,count=0;
+        for(int y=0;y<h;y+=Math.max(1,h/16))
+            for(int x=0;x<w;x+=Math.max(1,w/16)){
+                int c=picture.getPixel(x,y);
+                sum+=android.graphics.Color.red(c)+android.graphics.Color.green(c)
+                    +android.graphics.Color.blue(c);
+                count++;
+            }
+        return count==0?0f:sum/(3f*count);
     }
     public JSONObject load(Context context)throws Exception{
         return StudioProjectLibrary.active(context);
@@ -459,11 +534,22 @@ public final class VideoEditorEngine {
                     transformer=null;percent=99;
                     WorkspaceCommands.IO.execute(()->{
                         if(!"running".equals(state))return;
-                        if(activeOutput==null||!activeOutput.isFile()||activeOutput.length()<1000||(!replace&&finalOutput.exists())||!activeOutput.renameTo(finalOutput)){
-                            state="failed";error="Impossible de finaliser le MP4";if(activeOutput!=null)activeOutput.delete();
-                        }else{
-                            try{persistNamed(context,"video_last_export.json",project);}catch(Exception ex){error="MP4 créé ; historique du rendu non sauvegardé";}
+                        try{
+                            if(activeOutput==null||!activeOutput.isFile()||activeOutput.length()<1000)
+                                throw new IllegalStateException("Rendu MP4 absent ou incomplet");
+                            JSONObject visual=inspectRenderedClips(context,activeOutput,project);
+                            if(visual.getJSONArray("black_video_segments").length()>0)
+                                throw new IllegalStateException("Export rejeté : images noires dans les cuts "
+                                    +visual.getJSONArray("black_video_segments")
+                                    +". L'ancien clip est conservé.");
+                            if((!replace&&finalOutput.exists())||!activeOutput.renameTo(finalOutput))
+                                throw new IllegalStateException("Impossible de finaliser le MP4");
+                            try{persistNamed(context,"video_last_export.json",project);}
+                            catch(Exception ex){error="MP4 créé ; historique du rendu non sauvegardé";}
                             state="completed";percent=100;
+                        }catch(Exception ex){
+                            state="failed";error=ex.getMessage();
+                            if(activeOutput!=null)activeOutput.delete();
                         }
                     });
                  }
