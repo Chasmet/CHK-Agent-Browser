@@ -42,8 +42,10 @@ public final class BrowserJsUploader {
         }
         if(uris==null||uris.length<1||uris.length>8){result.finish(false,"1 à 8 fichiers requis");return;}
         if(selector==null||selector.length()>340||selector.isEmpty()){result.finish(false,"Sélecteur invalide");return;}
-        if(!result.isActive()||!BrowserWebState.alive(web))return;
+        if(!result.isActive())return;
+        if(!BrowserWebState.alive(web)){result.finish(false,"L'onglet est fermé. Rouvre la page avant de relancer l'importation.");return;}
         final String document=web.getUrl();
+        final long documentVersion=BrowserWebState.documentVersion(web);
         final String token=java.util.UUID.randomUUID().toString();
         final String stage="var s=window.__chkStage;if(!s||s.token!=="+JSONObject.quote(token)+")return 'STAGE_LOST';";
         Context app=context.getApplicationContext();
@@ -56,7 +58,8 @@ public final class BrowserJsUploader {
                     +"if("+uris.length+">1&&!el.multiple)return 'CHAMP_NON_MULTIPLE';"
                     +"window.__chkStage={token:"+JSONObject.quote(token)+",input:el,files:[]};return 'READY';"
                     +"}catch(e){return 'ERROR:'+e.message;}})()";
-                if(!"READY".equals(eval(web,init,result)))throw new Exception("Champ fichier indisponible ou non compatible");
+                String initialState=eval(web,init,result,documentVersion);
+                if(!"READY".equals(initialState))throw new Exception(initialError(initialState));
                 long total=0;
                 for(int i=0;i<uris.length;i++){
                     Uri uri=uris[i];
@@ -74,7 +77,7 @@ public final class BrowserJsUploader {
                     if(mime==null)mime="application/octet-stream";
                     String create="(function(){"+stage
                         +"s.files.push({name:"+JSONObject.quote(name)+",mime:"+JSONObject.quote(mime)+",chunks:[]});return 'READY';})()";
-                    if(!"READY".equals(eval(web,create,result)))throw new Exception("État de transfert perdu");
+                    if(!"READY".equals(eval(web,create,result,documentVersion)))throw new Exception("La page ou le champ fichier a changé pendant le transfert. Relance l'importation.");
                     try(InputStream stream=app.getContentResolver().openInputStream(uri)){
                         if(stream==null)throw new Exception("Fichier non lisible");
                         byte[] buffer=new byte[CHUNK];
@@ -89,7 +92,7 @@ public final class BrowserJsUploader {
                                 +"var b=new Uint8Array(bin.length);for(var j=0;j<bin.length;j++)b[j]=bin.charCodeAt(j);"
                                 +"s.files["+i+"].chunks.push(b);return 'READY';"
                                 +"}catch(e){return 'ERROR:'+e.message;}})()";
-                            if(!"READY".equals(eval(web,append,result)))throw new Exception("Bloc média refusé par la page");
+                            if(!"READY".equals(eval(web,append,result,documentVersion)))throw new Exception("Bloc média refusé par la page");
                         }
                     }
                 }
@@ -102,32 +105,45 @@ public final class BrowserJsUploader {
                     +"var f=s.input.files;"
                     +"var r=JSON.stringify({ok:f.length===s.files.length,count:f.length,names:Array.from(f).map(function(x){return x.name;})});"
                     +"delete window.__chkStage;return r;}catch(e){delete window.__chkStage;return JSON.stringify({ok:false,error:e.message});}})()";
-                JSONObject finalResult=new JSONObject(eval(web,finish,result));
+                JSONObject finalResult=new JSONObject(eval(web,finish,result,documentVersion));
                 ok=finalResult.optBoolean("ok")&&finalResult.optInt("count")==uris.length;
                 message=ok?"Fichiers CHK injectés dans le champ du site : "+finalResult.toString()
                     :"Le champ n'a pas confirmé les médias : "+finalResult.toString();
             }catch(Exception e){
                 message="Transfert direct impossible : "+(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());
-                try{eval(web,"(function(){if(window.__chkStage&&window.__chkStage.token==="+JSONObject.quote(token)+")delete window.__chkStage;return 'OK';})()",null);}catch(Exception ignored){}
+                try{eval(web,"(function(){if(window.__chkStage&&window.__chkStage.token==="+JSONObject.quote(token)+")delete window.__chkStage;return 'OK';})()",null,-1);}catch(Exception ignored){}
             }
             boolean success=ok;String response=message;
             MAIN.post(()->result.finish(success,response));
         });
     }
 
+    private static String initialError(String state){
+        if("PAGE_CHANGED".equals(state))return "La page a changé pendant le transfert. Relance l'importation sur la bonne page.";
+        if("CHAMP_NON_MULTIPLE".equals(state))return "Ce champ accepte un seul fichier. Sélectionne un seul média.";
+        if("CHAMP_FICHIER_ABSENT".equals(state))return "Champ fichier absent ou désactivé. Ouvre d'abord le formulaire d'importation du site.";
+        return "Champ fichier indisponible ou non compatible";
+    }
+
     /** Evaluate on WebView UI thread; do not block it while awaiting results. */
-    private static String eval(WebView web,String script,AgentClient.ResultCallback active)throws Exception{
+    private static String eval(WebView web,String script,AgentClient.ResultCallback active,long documentVersion)throws Exception{
         CountDownLatch done=new CountDownLatch(1);
         AtomicReference<String> result=new AtomicReference<>("");
+        AtomicReference<Exception> failure=new AtomicReference<>();
         MAIN.post(()->{
-            if(!BrowserWebState.alive(web)||(active!=null&&!active.isActive())){done.countDown();return;}
-            try{web.evaluateJavascript(script,raw->{
+            try{
+                if(!BrowserWebState.alive(web))throw new Exception("L'onglet a été fermé pendant le transfert.");
+                if(active!=null&&!active.isActive())throw new Exception("Commande arrêtée ou expirée.");
+                if(documentVersion>=0&&BrowserWebState.documentVersion(web)!=documentVersion)
+                    throw new Exception("La page a changé pendant le transfert. Relance l'importation sur la bonne page.");
+                web.evaluateJavascript(script,raw->{
                 try{result.set(new JSONArray("["+raw+"]").getString(0));}
                 catch(Exception e){result.set("");}
                 done.countDown();
-            });}catch(Exception e){result.set("");done.countDown();}
+            });}catch(Exception e){failure.set(e);done.countDown();}
         });
         if(!done.await(20,TimeUnit.SECONDS))throw new Exception("Délai WebView dépassé");
+        if(failure.get()!=null)throw failure.get();
         return result.get();
     }
 }
