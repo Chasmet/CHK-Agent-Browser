@@ -1,9 +1,11 @@
+ACTUALISATION CUT STUDIO — X sans programmation : fiche prête à publier immédiatement, sans date/heure ni alarme Android. L'import MCP accepte X sans horodatage. Une publication ne passe à « Publié » qu'après confirmation explicite. Les rappels YouTube/TikTok/Instagram restent locaux et ne sont pas des programmations certifiées sur les réseaux.
+
 NOUVEAU — Cut Vidéo directement dans CHK Agent Browser.
 
 - Nouvel onglet Cut dans la navigation mobile, sans modifier l'application Cut Vidéo autonome.
 - Découpe MP4 hors ligne : 15, 30, 60, 90 secondes ou personnalisée, début/fin, exports séquentiels Media3.
 - Bibliothèque des extraits dans Fichiers CHK/CutVideo ; lecture et partage des MP4.
-- Programmation de rappels Android et métadonnées par réseau (YouTube, TikTok, Instagram, X).
+- Rappels Android locaux pour YouTube, TikTok et Instagram ; fiche de publication immédiate sans rappel pour X.
 - Liens directs vers les outils de création des réseaux via la WebView existante, formulaires validables sur place.
 - Copie des métadonnées et import depuis le presse-papiers ; gestion multi-comptes CHKNOIRSHADOW et QG.
 - Suivi local « Programmé », « À publier », « Publié » ; l'état Publié est une validation manuelle, pas une garantie API.
