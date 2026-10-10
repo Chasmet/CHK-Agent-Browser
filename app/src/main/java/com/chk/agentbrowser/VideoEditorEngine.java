@@ -379,7 +379,9 @@ public final class VideoEditorEngine {
             if(!filter.equals("aucun")&&!filter.equals("noir")&&!filter.equals("vintage")
                     &&!filter.equals("chaud")&&!filter.equals("froid")
                     &&!filter.equals("cinema")&&!filter.equals("contraste")
-                    &&!filter.equals("nuit"))throw new IllegalArgumentException("Filtre inconnu: "+filter);
+                    &&!filter.equals("nuit")&&!filter.equals("vibrant")
+                    &&!filter.equals("doux")&&!filter.equals("desature")
+                    &&!filter.equals("sepia"))throw new IllegalArgumentException("Filtre inconnu: "+filter);
             long fade=c.optLong("fade_ms",0);
             if(fade<0||fade>Math.min(1500,duration/3))throw new IllegalArgumentException("Effet de fondu invalide");
             double speed=c.optDouble("speed",1);
@@ -435,6 +437,11 @@ public final class VideoEditorEngine {
           case "cinema":effects.add(new Contrast(.13f));break;
           case "contraste":effects.add(new Contrast(.32f));break;
           case "nuit":effects.add(new RgbAdjustment.Builder().setRedScale(.8f).setGreenScale(.87f).setBlueScale(1.04f).build());break;
+          case "vibrant":effects.add(new HslAdjustment.Builder().adjustSaturation(22f).build());break;
+          case "doux":effects.add(new HslAdjustment.Builder().adjustLightness(6f).adjustSaturation(-8f).build());break;
+          case "desature":effects.add(new HslAdjustment.Builder().adjustSaturation(-42f).build());break;
+          case "sepia":effects.add((RgbMatrix)(timeUs,useHdr)->
+              new float[]{.393f,.349f,.272f,0,.769f,.686f,.534f,0,.189f,.168f,.131f,0,0,0,0,1});break;
           default:break;
         }
         if(fade>0){
@@ -461,6 +468,11 @@ public final class VideoEditorEngine {
         if(localMs<fadeMs)return Math.max(0f,(float)localMs/fadeMs);
         if(localMs>durationMs-fadeMs)return Math.max(0f,(float)(durationMs-localMs)/fadeMs);
         return 1f;
+    }
+    /** AndroidX Media3 open-source GPU filters, shared by live preview and MP4 export.
+     * Fades are export-only and handled on each clip timeline. */
+    public static List<androidx.media3.common.Effect> previewEffects(String name){
+        return effects(name,1000,0);
     }
     /** Ratios are independent from container and codec support. */
     public static float ratio(String value){
