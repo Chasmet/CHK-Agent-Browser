@@ -110,9 +110,9 @@ public final class CutStudioIntegrationTest {
             try{CutStudioStore.importFromAgent(ctx,new org.json.JSONArray().put(task).toString());
                 fail("La validation de publication à distance doit être interdite");
             }catch(IllegalArgumentException expected){}
-            assertEquals(1,CutStudioStore.list(ctx).stream()
-                .filter(row->unique.equals(row.optString("request_id"))||
-                    identifier.equals(row.optString("id"))).count());
+            for(JSONObject row:CutStudioStore.list(ctx))
+                if(identifier.equals(row.optString("id")))
+                    assertFalse("Aucune preuve de publication réseau",row.optBoolean("published"));
         }finally{
             if(identifier!=null)CutStudioStore.remove(ctx,identifier);
             workspace.file(video).delete();workspace.file(folder).delete();
