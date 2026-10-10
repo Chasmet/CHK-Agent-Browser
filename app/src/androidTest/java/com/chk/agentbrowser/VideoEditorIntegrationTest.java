@@ -40,8 +40,74 @@ public final class VideoEditorIntegrationTest {
     }
     @Test public void testCatalogCopyAndRatioValidation()throws Exception{String folder="catalog-"+UUID.randomUUID();store.mkdir(folder);String destination=folder+"/duplicate.mov";WorkspaceCatalog.copy(context,source,destination);assertEquals(store.file(source).length(),store.file(destination).length());JSONObject catalog=WorkspaceCatalog.query(context,folder,"video","","date",0);assertEquals(1,catalog.getJSONArray("items").length());assertEquals(1,catalog.getJSONObject("counts").getInt("video"));try{WorkspaceCatalog.copy(context,source,destination);fail("Copy must refuse overwrite");}catch(IOException expected){}assertEquals(16f/9f,VideoEditorEngine.ratio("16:9"),0.0001f);assertEquals(2.35f,VideoEditorEngine.ratio("2.35:1"),0.0001f);try{VideoEditorEngine.ratio("NaN:1");fail("NaN ratio accepted");}catch(IllegalArgumentException expected){}store.file(destination).delete();store.file(folder).delete();}
     @Test public void testStudioAndMobileLayoutSnapshots()throws Exception{context.getSharedPreferences("update_monitor",0).edit().putBoolean("enabled",false).commit();MainActivity main=(MainActivity)getInstrumentation().startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));getInstrumentation().waitForIdleSync();getInstrumentation().runOnMainSync(()->main.findViewById(R.id.back).performClick());Thread.sleep(1500);snapshot(main,"browser");getInstrumentation().runOnMainSync(()->main.findViewById(R.id.nav_files).performClick());for(int attempt=0;attempt<100;attempt++){AtomicBoolean loaded=new AtomicBoolean();getInstrumentation().runOnMainSync(()->loaded.set(main.getWindow().getDecorView().findViewWithTag("files_storage")!=null));if(loaded.get())break;Thread.sleep(200);}getInstrumentation().runOnMainSync(()->assertNotNull("File categories must load",main.getWindow().getDecorView().findViewWithTag("files_storage")));snapshot(main,"files");getInstrumentation().runOnMainSync(()->main.finish());invoke("video_editor_project_save",new JSONObject().put("project",project("UI-"+UUID.randomUUID()+".mp4")));VideoEditorActivity studio=(VideoEditorActivity)getInstrumentation().startActivitySync(new Intent(context,VideoEditorActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));Thread.sleep(1500);
-        java.lang.reflect.Field preview=VideoEditorActivity.class.getDeclaredField("player");preview.setAccessible(true);androidx.media3.transformer.CompositionPlayer player=(androidx.media3.transformer.CompositionPlayer)preview.get(studio);AtomicInteger playback=new AtomicInteger();for(int i=0;i<80;i++){getInstrumentation().runOnMainSync(()->playback.set(player.getPlaybackState()));if(playback.get()==androidx.media3.common.Player.STATE_READY)break;Thread.sleep(250);}assertEquals("Composition preview must be ready",androidx.media3.common.Player.STATE_READY,playback.get());
+        java.lang.reflect.Field preview=VideoEditorActivity.class.getDeclaredField("player");preview.setAccessible(true);androidx.media3.exoplayer.ExoPlayer player=(androidx.media3.exoplayer.ExoPlayer)preview.get(studio);AtomicInteger playback=new AtomicInteger();for(int i=0;i<80;i++){getInstrumentation().runOnMainSync(()->playback.set(player.getPlaybackState()));if(playback.get()==androidx.media3.common.Player.STATE_READY)break;Thread.sleep(250);}assertEquals("Composition preview must be ready",androidx.media3.common.Player.STATE_READY,playback.get());
         snapshot(studio,"studio");getInstrumentation().runOnMainSync(()->studio.finish());}
+    @Test public void testSevenPreviewClipsSeekAcrossBoundaries()throws Exception{
+        String output="preview-seven-"+UUID.randomUUID()+".mp4";
+        JSONObject draft=project(output).put("aspect_ratio","9:16");
+        JSONArray pieces=new JSONArray();
+        for(int n=0;n<7;n++)pieces.put(new JSONObject().put("path",source).put("start_ms",0)
+            .put("duration_ms",2000).put("filter",n%2==0?"cinema":"froid"));
+        draft.put("clips",pieces).put("audio",new JSONArray());
+        invoke("video_editor_project_save",new JSONObject().put("project",draft));
+        VideoEditorActivity studio=(VideoEditorActivity)getInstrumentation().startActivitySync(
+            new Intent(context,VideoEditorActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        java.lang.reflect.Field pf=VideoEditorActivity.class.getDeclaredField("player");pf.setAccessible(true);
+        androidx.media3.exoplayer.ExoPlayer player=(androidx.media3.exoplayer.ExoPlayer)pf.get(studio);
+        try{
+            for(int n=0;n<70;n++){AtomicInteger count=new AtomicInteger();
+                getInstrumentation().runOnMainSync(()->count.set(player.getMediaItemCount()));
+                if(count.get()==7)break;Thread.sleep(150);
+            }
+            AtomicInteger count=new AtomicInteger();
+            getInstrumentation().runOnMainSync(()->count.set(player.getMediaItemCount()));
+            assertEquals("All 7 videos must be in the preview playlist",7,count.get());
+            for(int target:new int[]{0,2,4,6,1}){
+                getInstrumentation().runOnMainSync(()->player.seekTo(target,500));
+                boolean correct=false;
+                for(int n=0;n<80;n++){AtomicInteger current=new AtomicInteger(-1);
+                    AtomicInteger state=new AtomicInteger(-1);
+                    getInstrumentation().runOnMainSync(()->{current.set(player.getCurrentMediaItemIndex());state.set(player.getPlaybackState());});
+                    if(current.get()==target&&state.get()==androidx.media3.common.Player.STATE_READY){correct=true;break;}
+                    Thread.sleep(150);
+                }
+                assertTrue("Timeline preview seek failed for clip "+(target+1),correct);
+                Thread.sleep(250);
+                assertPreviewHasPixels(studio);
+            }
+        }finally{getInstrumentation().runOnMainSync(()->studio.finish());}
+    }
+    private void assertPreviewHasPixels(VideoEditorActivity studio)throws Exception{
+        AtomicReference<android.view.SurfaceView> ref=new AtomicReference<>();
+        getInstrumentation().runOnMainSync(()->{
+            try{java.lang.reflect.Field v=VideoEditorActivity.class.getDeclaredField("viewer");
+                v.setAccessible(true);android.view.View surface=((androidx.media3.ui.PlayerView)v.get(studio)).getVideoSurfaceView();
+                if(surface instanceof android.view.SurfaceView)ref.set((android.view.SurfaceView)surface);
+            }catch(Exception e){throw new RuntimeException(e);}
+        });
+        assertNotNull("Video preview surface missing",ref.get());
+        android.view.SurfaceView view=ref.get();android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(
+            Math.max(1,view.getWidth()),Math.max(1,view.getHeight()),android.graphics.Bitmap.Config.ARGB_8888);
+        boolean lit=false;
+        try{
+            for(int repeat=0;repeat<35;repeat++){
+                final CountDownLatch latch=new CountDownLatch(1);AtomicInteger status=new AtomicInteger(-1);
+                getInstrumentation().runOnMainSync(()->android.view.PixelCopy.request(view,image,result->{
+                    status.set(result);latch.countDown();},new Handler(android.os.Looper.getMainLooper())));
+                assertTrue(latch.await(10,TimeUnit.SECONDS));
+                if(status.get()==android.view.PixelCopy.SUCCESS){
+                    int bright=0;
+                    for(int y=0;y<image.getHeight();y+=6)for(int x=0;x<image.getWidth();x+=6){
+                        int c=image.getPixel(x,y);
+                        if(android.graphics.Color.red(c)+android.graphics.Color.green(c)+android.graphics.Color.blue(c)>80)bright++;
+                    }
+                    if(bright>30){lit=true;break;}
+                }
+                Thread.sleep(150);
+            }
+        }finally{image.recycle();}
+        assertTrue("Black preview after seeking: expected real decoded frames",lit);
+    }
     private void snapshot(android.app.Activity activity,String name)throws Exception{
         AtomicReference<android.graphics.Bitmap> output=new AtomicReference<>();AtomicReference<android.view.SurfaceView> surface=new AtomicReference<>();getInstrumentation().runOnMainSync(()->{android.view.View decor=activity.getWindow().getDecorView();android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(decor.getWidth(),decor.getHeight(),android.graphics.Bitmap.Config.ARGB_8888);decor.draw(new android.graphics.Canvas(image));output.set(image);if(activity instanceof VideoEditorActivity){try{java.lang.reflect.Field field=VideoEditorActivity.class.getDeclaredField("viewer");field.setAccessible(true);android.view.View view=((androidx.media3.ui.PlayerView)field.get(activity)).getVideoSurfaceView();if(view instanceof android.view.SurfaceView)surface.set((android.view.SurfaceView)view);}catch(Exception e){throw new RuntimeException(e);}}});
         android.graphics.Bitmap image=output.get();if(surface.get()!=null){android.view.SurfaceView view=surface.get();AtomicInteger copied=new AtomicInteger(-1);android.graphics.Bitmap frame=android.graphics.Bitmap.createBitmap(view.getWidth(),view.getHeight(),android.graphics.Bitmap.Config.ARGB_8888);for(int attempt=0;attempt<40;attempt++){CountDownLatch frameReady=new CountDownLatch(1);getInstrumentation().runOnMainSync(()->android.view.PixelCopy.request(view,frame,result->{copied.set(result);frameReady.countDown();},new android.os.Handler(android.os.Looper.getMainLooper())));assertTrue(frameReady.await(15,TimeUnit.SECONDS));if(copied.get()==android.view.PixelCopy.SUCCESS)break;Thread.sleep(300);}assertEquals("Actual video surface must be readable",android.view.PixelCopy.SUCCESS,copied.get());int lit=0;for(int y=0;y<frame.getHeight();y+=4)for(int x=0;x<frame.getWidth();x+=4){int color=frame.getPixel(x,y);if(android.graphics.Color.red(color)+android.graphics.Color.green(color)+android.graphics.Color.blue(color)>70)lit++;}assertTrue("Composition preview must display video pixels",lit>20);int[] location=new int[2];getInstrumentation().runOnMainSync(()->view.getLocationInWindow(location));new android.graphics.Canvas(image).drawBitmap(frame,location[0],location[1],null);frame.recycle();}
