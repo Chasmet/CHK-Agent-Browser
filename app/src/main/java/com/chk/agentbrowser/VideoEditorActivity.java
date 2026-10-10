@@ -35,6 +35,11 @@ public final class VideoEditorActivity extends Activity {
     private TextView title,clock,status,play,format;
 
     private androidx.media3.ui.PlayerView viewer;
+    private FrameLayout previewCanvas;
+    private Dialog fullscreenDialog;
+    private SeekBar fullscreenSeek;
+    private TextView fullscreenClock, fullscreenPlay;
+    private boolean fullscreenScrubbing;
     private ExoPlayer player, audioPlayer;
     private boolean alive,scrubbing,saving;
     private int selected,previewGeneration,revision;
@@ -42,6 +47,11 @@ public final class VideoEditorActivity extends Activity {
     private final Runnable ticker=new Runnable(){public void run(){
         if(!alive)return;
         if(player!=null&&!scrubbing){long pos=timelinePosition();timeline.position(pos);if(player.isPlaying()&&audioPlayer!=null&&audioPlayer.getMediaItemCount()>0&&Math.abs(audioTimelinePosition()-pos)>350)seekAudio(pos);String value=time(pos)+" / "+time(total());if(!clock.getText().toString().equals(value))clock.setText(value);String icon=player.isPlaying()?"Ⅱ":"▶";if(!play.getText().toString().equals(icon))play.setText(icon);}
+        if(fullscreenDialog!=null&&fullscreenDialog.isShowing()&&player!=null){
+            if(fullscreenClock!=null)fullscreenClock.setText(time(timelinePosition())+" / "+time(total()));
+            if(fullscreenPlay!=null)fullscreenPlay.setText(player.isPlaying()?"Ⅱ":"▶");
+            if(fullscreenSeek!=null&&!fullscreenScrubbing)fullscreenSeek.setProgress((int)Math.min(Integer.MAX_VALUE,timelinePosition()));
+        }
         long now=android.os.SystemClock.elapsedRealtime();if(!saving&&!importing&&project!=null&&now-lastProjectCheck>2500){lastProjectCheck=now;engine.command(VideoEditorActivity.this,"video_editor_project_read",new JSONObject(),(ok,value)->ui.post(()->{if(!alive||saving||importing||!ok)return;try{JSONObject fresh=new JSONObject(value);if(fresh.optInt("revision")!=revision){project=fresh;revision=fresh.optInt("revision");undo.clear();redo.clear();draw();preview();}}catch(Exception ignored){}}));}
         JSONObject s=engine.status();String state=s.optString("state");
         status.setVisibility(importing||state.equals("running")||state.equals("preparing")||state.equals("failed")||state.equals("completed")?View.VISIBLE:View.GONE);
@@ -57,7 +67,7 @@ public final class VideoEditorActivity extends Activity {
         title=MobileUi.text(this,"Studio ▾",13,MobileUi.TEXT);title.setPadding(dp(3),0,dp(3),0);title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));title.setOnClickListener(v->projectMenu());
         quality=chip("720p ▾");quality.setTextSize(12);quality.setBackground(MobileUi.bg(this,0xff292b30));header.addView(quality,new LinearLayout.LayoutParams(dp(64),dp(40)));quality.setOnClickListener(v->qualityMenu());
         TextView export=chip("Exporter");export.setTag("export_project");export.setTextSize(13);export.setTextColor(0xff061a18);export.setTypeface(null,android.graphics.Typeface.BOLD);export.setBackground(MobileUi.bg(this,0xff20d4d3));LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(dp(84),dp(40));ep.leftMargin=dp(6);header.addView(export,ep);export.setOnClickListener(v->export());
-        FrameLayout canvas=new FrameLayout(this);canvas.setBackgroundColor(0xff000000);root.addView(canvas,new LinearLayout.LayoutParams(-1,0,1));viewer=(androidx.media3.ui.PlayerView)getLayoutInflater().inflate(R.layout.studio_player,canvas,false);canvas.addView(viewer,new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER));
+        FrameLayout canvas=new FrameLayout(this);previewCanvas=canvas;canvas.setBackgroundColor(0xff000000);root.addView(canvas,new LinearLayout.LayoutParams(-1,0,1));viewer=(androidx.media3.ui.PlayerView)getLayoutInflater().inflate(R.layout.studio_player,canvas,false);canvas.addView(viewer,new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER));
         canvas.addOnLayoutChangeListener((v,left,top,right,bottom,oldLeft,oldTop,oldRight,oldBottom)->applyPreviewFrame());
         TextView empty=MobileUi.text(this,"＋\nAjouter une vidéo",17,MobileUi.MUTED);empty.setGravity(Gravity.CENTER);empty.setTag("empty");canvas.addView(empty,new FrameLayout.LayoutParams(-1,-1));empty.setOnClickListener(v->addMenu("video"));
         previewHint=MobileUi.text(this,"Chargement de l’aperçu…",13,0xffdde2ec);
@@ -68,6 +78,15 @@ public final class VideoEditorActivity extends Activity {
         previewCaption.setShadowLayer(dp(2),0,dp(2),0xff000000);
         FrameLayout.LayoutParams cap=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);cap.bottomMargin=dp(20);
         viewer.addView(previewCaption,cap);
+        TextView fullscreenButton=chip("⛶");
+        fullscreenButton.setTag("studio_fullscreen");
+        fullscreenButton.setTextSize(25);
+        fullscreenButton.setContentDescription("Aperçu plein écran");
+        fullscreenButton.setBackground(MobileUi.bg(this,0x99000000));
+        FrameLayout.LayoutParams fullButtonLayout=new FrameLayout.LayoutParams(dp(52),dp(52),Gravity.RIGHT|Gravity.TOP);
+        fullButtonLayout.setMargins(0,dp(6),dp(8),0);
+        canvas.addView(fullscreenButton,fullButtonLayout);
+        fullscreenButton.setOnClickListener(v->openFullscreen());
         player=new ExoPlayer.Builder(this).build();
         audioPlayer=new ExoPlayer.Builder(this).build();
         viewer.setPlayer(player);
@@ -119,7 +138,7 @@ public final class VideoEditorActivity extends Activity {
     private String name(String path){return path.substring(path.lastIndexOf('/')+1);}
     private boolean editable(){if(project==null||saving||importing){toast("Sauvegarde en cours…");return false;}String s=engine.status().optString("state");if(s.equals("running")||s.equals("preparing")){toast("Attends la fin de l’export ou annule-le");return false;}if(clip()==null){toast("Ajoute puis sélectionne une vidéo");return false;}return true;}
     private void remember(){undo.addLast(project.toString());while(undo.size()>30)undo.removeFirst();redo.clear();}
-    private void draw(){if(!alive||project==null)return;applyPreviewFrame();title.setText(project.optString("name","Studio")+" ▾");format.setText(project.optString("aspect_ratio","source").replace("source","Original"));quality.setText(project.optInt("resolution",720)+"p ▾");scope.setText("✓ Projet complet · "+time(total()));selected=Math.max(0,Math.min(selected,clips().length()-1));timeline.setProject(project,selected);clock.setText(time(timelinePosition())+" / "+time(total()));((ViewGroup)viewer.getParent()).findViewWithTag("empty").setVisibility(clips().length()==0?View.VISIBLE:View.GONE);}
+    private void draw(){if(!alive||project==null)return;applyPreviewFrame();title.setText(project.optString("name","Studio")+" ▾");format.setText(project.optString("aspect_ratio","source").replace("source","Original"));quality.setText(project.optInt("resolution",720)+"p ▾");scope.setText("✓ Projet complet · "+time(total()));selected=Math.max(0,Math.min(selected,clips().length()-1));timeline.setProject(project,selected);clock.setText(time(timelinePosition())+" / "+time(total()));previewCanvas.findViewWithTag("empty").setVisibility(clips().length()==0?View.VISIBLE:View.GONE);}
     private void save(){saving=true;String fallback=undo.peekLast();JSONObject snapshot;try{snapshot=new JSONObject(project.toString());}catch(Exception e){return;}
         engine.command(this,"video_editor_project_save",new JSONObjectSafe("project",snapshot).withRevision(revision),(ok,res)->ui.post(()->{saving=false;if(!alive)return;if(ok){try{revision=new JSONObject(res).getJSONObject("project").optInt("revision");project.put("revision",revision);}catch(Exception ignored){}draw();preview();}else{toast(res);try{if(fallback!=null)project=new JSONObject(fallback);}catch(Exception ignored){}draw();}}));
     }
@@ -142,6 +161,73 @@ public final class VideoEditorActivity extends Activity {
         }
         viewer.setResizeMode(ratio>0&&"crop".equals(project.optString("aspect_mode","fit"))
             ?AspectRatioFrameLayout.RESIZE_MODE_ZOOM:AspectRatioFrameLayout.RESIZE_MODE_FIT);
+    }
+    /** Fullscreen reuses the SAME ExoPlayer and PlayerView. No second decoder, no lost position. */
+    private void openFullscreen(){
+        if(fullscreenDialog!=null&&fullscreenDialog.isShowing())return;
+        if(viewer==null||player==null||project==null)return;
+        pausePreview();
+        if(viewer.getParent() instanceof ViewGroup)((ViewGroup)viewer.getParent()).removeView(viewer);
+        Dialog dialog=new Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        fullscreenDialog=dialog;
+        LinearLayout screen=new LinearLayout(this);screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setBackgroundColor(android.graphics.Color.BLACK);
+        FrameLayout stage=new FrameLayout(this);
+        screen.addView(stage,new LinearLayout.LayoutParams(-1,0,1));
+        stage.addView(viewer,new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER));
+        stage.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->applyPreviewFrame());
+        TextView close=chip("×  Quitter le plein écran");close.setTag("studio_fullscreen_close");
+        close.setContentDescription("Quitter le plein écran");
+        close.setTextSize(15);close.setBackground(MobileUi.bg(this,0x99000000));
+        FrameLayout.LayoutParams closePosition=new FrameLayout.LayoutParams(-2,dp(48),Gravity.TOP|Gravity.LEFT);
+        closePosition.setMargins(dp(10),dp(8),0,0);
+        stage.addView(close,closePosition);
+        close.setOnClickListener(v->dialog.dismiss());
+        LinearLayout controls=new LinearLayout(this);
+        controls.setOrientation(LinearLayout.VERTICAL);
+        controls.setPadding(dp(12),dp(8),dp(12),dp(16));
+        controls.setBackgroundColor(0xff15161a);
+        screen.addView(controls,new LinearLayout.LayoutParams(-1,dp(118)));
+        fullscreenSeek=new SeekBar(this);fullscreenSeek.setTag("studio_fullscreen_seek");
+        fullscreenSeek.setMax((int)Math.min(Integer.MAX_VALUE,total()));
+        fullscreenSeek.setProgress((int)timelinePosition());
+        controls.addView(fullscreenSeek,new LinearLayout.LayoutParams(-1,dp(48)));
+        fullscreenSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            @Override public void onStartTrackingTouch(SeekBar b){fullscreenScrubbing=true;pausePreview();}
+            @Override public void onProgressChanged(SeekBar b,int progress,boolean fromUser){
+                if(fromUser){seekPreview(progress);if(fullscreenClock!=null)fullscreenClock.setText(time(progress)+" / "+time(total()));}
+            }
+            @Override public void onStopTrackingTouch(SeekBar b){fullscreenScrubbing=false;}
+        });
+        LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);
+        controls.addView(actions,new LinearLayout.LayoutParams(-1,dp(52)));
+        TextView prev=chip("⏮");prev.setContentDescription("Plan précédent");actions.addView(prev,new LinearLayout.LayoutParams(dp(54),-1));
+        prev.setOnClickListener(v->{pausePreview();seekPreview(start(Math.max(0,selected-1)));});
+        fullscreenPlay=chip("▶");fullscreenPlay.setTag("studio_fullscreen_play");
+        fullscreenPlay.setContentDescription("Lire ou mettre en pause");actions.addView(fullscreenPlay,new LinearLayout.LayoutParams(dp(54),-1));
+        fullscreenPlay.setOnClickListener(v->{if(player.isPlaying())pausePreview();else playPreview();});
+        TextView next=chip("⏭");next.setContentDescription("Plan suivant");actions.addView(next,new LinearLayout.LayoutParams(dp(54),-1));
+        next.setOnClickListener(v->{pausePreview();seekPreview(start(Math.min(clips().length()-1,selected+1)));});
+        fullscreenClock=MobileUi.text(this,time(timelinePosition())+" / "+time(total()),13,0xffffffff);
+        fullscreenClock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        actions.addView(fullscreenClock,new LinearLayout.LayoutParams(0,-1,1));
+        dialog.setContentView(screen);
+        dialog.setOnDismissListener(d->{
+            if(viewer.getParent() instanceof ViewGroup)((ViewGroup)viewer.getParent()).removeView(viewer);
+            previewCanvas.addView(viewer,0,new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER));
+            fullscreenDialog=null;fullscreenSeek=null;fullscreenClock=null;fullscreenPlay=null;fullscreenScrubbing=false;
+            applyPreviewFrame();
+        });
+        dialog.show();
+        Window window=dialog.getWindow();
+        if(window!=null){
+            window.setLayout(-1,-1);
+            window.getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        }
+        applyPreviewFrame();
     }
     /** Reliable source-frame preview. The native export remains the final authority for effects. */
     private void preview(){
@@ -346,6 +432,6 @@ public final class VideoEditorActivity extends Activity {
     }
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("export_copy_path",exportCopyPath);}
     @Override protected void onPause(){pausePreview();super.onPause();}
-    @Override protected void onDestroy(){alive=false;previewGeneration++;ui.removeCallbacksAndMessages(null);if(player!=null)player.release();if(audioPlayer!=null)audioPlayer.release();super.onDestroy();}
+    @Override protected void onDestroy(){alive=false;previewGeneration++;ui.removeCallbacksAndMessages(null);if(fullscreenDialog!=null)fullscreenDialog.dismiss();if(player!=null)player.release();if(audioPlayer!=null)audioPlayer.release();super.onDestroy();}
     private static final class JSONObjectSafe extends JSONObject{JSONObjectSafe(String key,Object value){try{put(key,value);}catch(Exception ignored){}}JSONObjectSafe withRevision(int revision){try{put("expected_revision",revision);}catch(Exception ignored){}return this;}}
 }
