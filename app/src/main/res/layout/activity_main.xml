@@ -28,6 +28,7 @@
         <TextView android:id="@+id/nav_browser" style="@style/BottomButton" android:text="Navigateur" android:drawableTop="@drawable/ic_nav_browser" android:drawablePadding="3dp" android:contentDescription="Espace Navigateur" />
         <TextView android:id="@+id/nav_files" style="@style/BottomButton" android:text="Fichiers" android:drawableTop="@drawable/ic_nav_files" android:drawablePadding="3dp" android:contentDescription="Espace Fichiers" />
         <TextView android:id="@+id/nav_video" style="@style/BottomButton" android:text="Studio" android:drawableTop="@drawable/ic_nav_video" android:drawablePadding="3dp" android:contentDescription="Éditeur vidéo" />
+        <TextView android:id="@+id/nav_cut" style="@style/BottomButton" android:text="Cut" android:drawableTop="@drawable/ic_nav_cut" android:drawablePadding="3dp" android:contentDescription="Cut Vidéo et programmation" />
         <TextView android:id="@+id/nav_notes" style="@style/BottomButton" android:text="Notes" android:drawableTop="@drawable/ic_nav_notes" android:drawablePadding="3dp" android:contentDescription="Espace Notes" />
     </LinearLayout>
 </LinearLayout>
