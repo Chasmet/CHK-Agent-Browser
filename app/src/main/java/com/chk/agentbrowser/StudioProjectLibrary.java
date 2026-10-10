@@ -142,7 +142,16 @@ final class StudioProjectLibrary {
         if(!from.isFile())throw new java.io.IOException("Projet introuvable");
         if(target.exists())throw new java.io.IOException("Une copie est déjà dans la corbeille");
         if(!from.renameTo(target))throw new java.io.IOException("Impossible de déplacer vers la corbeille");
-        if(id.equals(now.optString("project_id")))create(app,blank());
+        if(id.equals(now.optString("project_id"))){
+            // Do not call active() here: it would re-import the trashed draft.
+            JSONObject fresh=blank();
+            String freshId=UUID.randomUUID().toString();
+            fresh.put("project_id",freshId).put("created_at",System.currentTimeMillis())
+                .put("updated_at",System.currentTimeMillis())
+                .put("revision",now.optInt("revision",0)+1);
+            write(entry(app,freshId,false),fresh);
+            write(new File(app.getFilesDir(),ACTIVE),fresh);
+        }
     }
     static void restore(Context app,String id)throws Exception{
         File source=entry(app,id,true),target=entry(app,id,false);
