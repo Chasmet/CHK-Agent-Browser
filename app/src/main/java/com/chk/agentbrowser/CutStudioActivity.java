@@ -201,7 +201,7 @@ public final class CutStudioActivity extends Activity {
             for(File f:all)
                 if(f.isDirectory()||(f.isFile()&&f.getName().toLowerCase(Locale.ROOT).endsWith(".mp4")))
                     entries.add(f);
-            entries.sort((a,b)->a.isDirectory()==b.isDirectory()?
+            java.util.Collections.sort(entries,(a,b)->a.isDirectory()==b.isDirectory()?
                 a.getName().compareToIgnoreCase(b.getName()):(a.isDirectory()?-1:1));
             String[] names=new String[entries.size()];
             for(int i=0;i<entries.size();i++)names[i]=
