@@ -105,7 +105,8 @@ public final class BrowserMediaUploadTest {
             CountDownLatch uploaded=new CountDownLatch(1);
             AtomicBoolean success=new AtomicBoolean(true);
             AtomicReference<String> message=new AtomicReference<>("");
-            instrumentation.runOnMainSync(()->BrowserJsUploader.upload(app,web,"#media",new Uri[]{store.uri(path)},(ok,result)->{
+            Uri source=store.uri(path);
+            instrumentation.runOnMainSync(()->BrowserJsUploader.upload(app,web,"#media",new Uri[]{source},(ok,result)->{
                 success.set(ok);message.set(result);uploaded.countDown();
             }));
             loadPage(instrumentation,web,url,"second");
