@@ -93,7 +93,7 @@ public final class CutStudioStore {
             throw new IllegalArgumentException("5 hashtags maximum");
         if(text(entry).length()>100)
             throw new IllegalArgumentException("Titre, description et hashtags : 100 caractères maximum");
-        if(entry.optLong("at",0)<=System.currentTimeMillis()&&!entry.optBoolean("published",false))
+        if(!"x".equals(platform)&&entry.optLong("at",0)<=System.currentTimeMillis()&&!entry.optBoolean("published",false))
             throw new IllegalArgumentException("Choisir une date de publication future");
     }
     public static String text(JSONObject j){
@@ -132,7 +132,7 @@ public final class CutStudioStore {
         if(id.isEmpty())return;
         cancel(context,id);
         long at=j.optLong("at",0);
-        if(j.optBoolean("published")||at<=System.currentTimeMillis())return;
+        if(j.optBoolean("published")||"x".equals(j.optString("platform"))||at<=System.currentTimeMillis())return;
         AlarmManager manager=(AlarmManager)context.getSystemService(Context.ALARM_SERVICE);
         if(manager==null)return;
         PendingIntent pi=intent(context,id,PendingIntent.FLAG_UPDATE_CURRENT);

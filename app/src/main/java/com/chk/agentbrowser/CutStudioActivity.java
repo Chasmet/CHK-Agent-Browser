@@ -342,16 +342,18 @@ public final class CutStudioActivity extends Activity {
         LinearLayout head=panel();head.addView(text("Planning de publication",18,INK,true));
         head.addView(text("Rappels Android locaux. Les plateformes doivent confirmer l'envoi. X : publication manuelle, sans programmation native dans ce module.",12,MUTED,false));
         List<JSONObject> entries=CutStudioStore.list(this);
-        head.addView(text(entries.size()+" programmations enregistrées",13,0xff69e2c6,true));
+        head.addView(text(entries.size()+" fiches de publication enregistrées",13,0xff69e2c6,true));
         for(JSONObject j:entries){
             LinearLayout p=panel();
             long at=j.optLong("at");boolean done=j.optBoolean("published");
-            String state=done?"Publié (confirmé manuellement)":
-                at<=System.currentTimeMillis()?"À publier":"Programmé (rappel local)";
+            boolean manualX="x".equals(j.optString("platform"));
+            String state=done?"Publié (confirmé manuellement)":manualX
+                ?"Prêt à publier sur X (sans programmation)"
+                :at<=System.currentTimeMillis()?"À publier":"Programmé (rappel local)";
             p.addView(text(j.optString("platform").toUpperCase(Locale.ROOT)+
                 " · "+j.optString("account"),14,0xff69e2c6,true));
             p.addView(text(j.optString("title"),15,INK,true));
-            p.addView(text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM,
+            if(!manualX)p.addView(text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM,
                 DateFormat.SHORT,Locale.FRANCE).format(new Date(at)),13,MUTED,false));
             p.addView(text(state+" · "+j.optString("path"),12,MUTED,false));
             button("Ouvrir le réseau + copier les métadonnées",p,()->openPlatform(j));
@@ -438,6 +440,16 @@ public final class CutStudioActivity extends Activity {
             time.setText("Heure : "+
                 android.text.format.DateFormat.getTimeFormat(this).format(selected.getTime()));
         },selected.get(Calendar.HOUR_OF_DAY),selected.get(Calendar.MINUTE),true).show());
+        network.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent,View view,int position,long id){
+                boolean manualX=position==3;
+                date.setVisibility(manualX?View.GONE:View.VISIBLE);
+                time.setVisibility(manualX?View.GONE:View.VISIBLE);
+                if(position>=2&&account.getSelectedItemPosition()==1)account.setSelection(0);
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent){}
+        });
+        form.addView(text("YouTube, TikTok et Instagram : rappel local à valider sur le site. X : publication immédiate sans programmation.",12,MUTED,false));
         android.widget.ScrollView scroll=new android.widget.ScrollView(this);
         scroll.addView(form);
         AlertDialog dialog=new AlertDialog.Builder(this)
@@ -452,11 +464,13 @@ public final class CutStudioActivity extends Activity {
                     .put("title",title.getText().toString().trim())
                     .put("description",description.getText().toString().trim())
                     .put("hashtags",hashtags.getText().toString().trim())
-                    .put("at",selected.getTimeInMillis())
+                    .put("at",network.getSelectedItemPosition()==3?System.currentTimeMillis():selected.getTimeInMillis())
                     .put("published",existing!=null&&existing.has("id")&&existing.optBoolean("published"));
                 if(existing!=null&&existing.has("id"))row.put("id",existing.getString("id"));
                 CutStudioStore.save(this,row);dialog.dismiss();render(2);
-                toast("Programmation enregistrée. Valide sur le réseau après publication.");
+                toast(network.getSelectedItemPosition()==3
+                    ?"Brouillon X prêt. Publie-le manuellement et confirme ensuite."
+                    :"Rappel local enregistré. Vérifie la programmation sur la plateforme.");
             }catch(Exception ex){toast("Programmation : "+ex.getMessage());}
         }));
         dialog.show();

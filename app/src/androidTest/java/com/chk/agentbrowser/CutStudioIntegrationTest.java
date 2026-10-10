@@ -47,6 +47,13 @@ public final class CutStudioIntegrationTest {
                 .put("id",UUID.randomUUID().toString());
             try{CutStudioStore.save(ctx,tooLong);fail("Long metadata must be rejected");}
             catch(IllegalArgumentException expected){}
+            JSONObject xDraft=new JSONObject(first.toString()).put("platform","x")
+                .put("account","chknoirshadow").put("id",UUID.randomUUID().toString())
+                .put("at",System.currentTimeMillis()-5000L);
+            CutStudioStore.save(ctx,xDraft);
+            assertTrue(CutStudioStore.list(ctx).stream()
+                .anyMatch(x->xDraft.optString("id").equals(x.optString("id"))));
+            CutStudioStore.remove(ctx,xDraft.getString("id"));
             CutStudioStore.remove(ctx,id);
             assertFalse(CutStudioStore.list(ctx).stream().anyMatch(x->id.equals(x.optString("id"))));
         }finally{

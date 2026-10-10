@@ -8,7 +8,7 @@
 - Découpe locale Media3 Transformer par 15 / 30 / 60 / 90 s, ou 1–600 s personnalisés, bornes début/fin, jusqu'à 100 morceaux par lot.
 - Export séquentiel MP4 sans transfert cloud, via fichiers temporaires renommés seulement après achèvement.
 - Bibliothèque `Fichiers CHK/CutVideo/lot_.../cut_XX.mp4`, lecture et partage du fichier.
-- Plusieurs fiches par vidéo, avec compte, réseau, date/heure, visibilité, titre, description et 5 hashtags maximum.
+- Plusieurs fiches par vidéo, avec compte, réseau, visibilité, titre, description et 5 hashtags maximum. Date/heure seulement pour les rappels YouTube, TikTok et Instagram.
 - En cohérence avec le connecteur Cut Vidéo : bloc de métadonnées limité à 100 caractères.
 - Rappels Android restaurés au redémarrage et après mise à jour; états « Programmé », « À publier » et « Publié (confirmé manuellement) ».
 - Ouverture dans les onglets CHK connectés : YouTube Studio, TikTok Upload, Instagram et X.
@@ -21,7 +21,7 @@
 | YouTube | https://studio.youtube.com/ | Programmation réelle dans le formulaire YouTube Studio après transfert |
 | TikTok | https://www.tiktok.com/upload | Import et paramètres selon l'interface proposée au compte |
 | Instagram | https://www.instagram.com/ | Flux de création selon l'interface Web du compte |
-| X | https://x.com/compose/post | Création manuelle d'un post; ce module n'envoie pas automatiquement |
+| X | https://x.com/compose/post | Brouillon prêt à publier manuellement, sans horaire ni programmation |
 
 **Attention :** l'heure saisie dans Cut Studio est un **rappel local**, et non une confirmation de programmation sur le serveur d'un réseau. Le bouton « Publié » est une déclaration humaine, pas une preuve API. Aucun cookie n'est exporté et aucun identifiant de compte n'est stocké dans le module Cut. Les restrictions du site (MFA, CAPTCHAs, limites d'API, refus d'upload WebView) peuvent nécessiter une intervention humaine. Les droits et règles des réseaux restent applicables.
 
