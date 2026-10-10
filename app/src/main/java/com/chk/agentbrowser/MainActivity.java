@@ -419,6 +419,7 @@ public class MainActivity extends Activity {
                             JSONObject details=new JSONObject(content);
                             out.put("text",details.optString("text"));
                             out.put("elements",details.optJSONArray("elements"));
+                            out.put("media",details.optJSONArray("media"));
                             out.put("document_url",details.optString("document_url"));
                             out.put("session_source","visible");
                             out.put("visibility",details.optString("visibility"));
