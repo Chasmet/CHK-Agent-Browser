@@ -91,7 +91,7 @@ public final class CutStudioActivity extends Activity {
     private int dp(float x){return Math.round(x*getResources().getDisplayMetrics().density);}
     private TextView text(String value,int size,int color,boolean bold){
         TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);
-        if(bold)t.setTypeface(null,1);t.setGravity(Gravity.CENTER_VERTICAL);
+        if(bold)t.setTypeface(null,android.graphics.Typeface.BOLD);t.setGravity(Gravity.CENTER_VERTICAL);
         t.setPadding(dp(8),dp(6),dp(8),dp(6));return t;
     }
     private LinearLayout column(){
@@ -126,7 +126,7 @@ public final class CutStudioActivity extends Activity {
         int[] ids={R.id.cut_tab_export,R.id.cut_tab_library,R.id.cut_tab_planning};
         for(int i=0;i<3;i++){
             TextView v=findViewById(ids[i]);v.setTextColor(i==which?0xff69e2c6:INK);
-            v.setTypeface(null,i==which?1:0);
+            v.setTypeface(null,i==which?android.graphics.Typeface.BOLD:android.graphics.Typeface.NORMAL);
         }
         if(which==0)renderCut();else if(which==1)renderLibrary();else renderPlanning();
     }
@@ -224,7 +224,7 @@ public final class CutStudioActivity extends Activity {
         try{
             double size=parse(lengthInput,30),start=parse(startInput,0),
                 end=parse(endInput,sourceDurationMs/1000d);
-            if(!Double.isFinite(size)||!Double.isFinite(start)||!Double.isFinite(end)||
+            if(Double.isNaN(size)||Double.isInfinite(size)||Double.isNaN(start)||Double.isInfinite(start)||Double.isNaN(end)||Double.isInfinite(end)||
                 size<1||size>600||start<0||end<=start||end*1000>sourceDurationMs+50)
                 throw new IllegalArgumentException("Durée, début ou fin invalides");
             long length=Math.round(size*1000),begin=Math.round(start*1000),
