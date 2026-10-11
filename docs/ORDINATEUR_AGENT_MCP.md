@@ -56,7 +56,7 @@ Sans attendre le rafraîchissement du catalogue du connecteur, l’outil existan
 {"tool":"vision","target":"native"}
 ```
 
-Les valeurs `tool` sont `vision`, `pointer`, `files`, `tasks`, `terminal`. Le relais négocie `desktop_version=1` et demande la mise à jour d’un ancien APK avant toute mise en file. La même URL MCP est conservée. Le transport ancien limite `text` à 8 000 caractères ; les nouveaux outils acceptent une requête jusqu’à 60 Ko. Les captures et résultats ne sont jamais tronqués en JSON corrompu.
+Les valeurs `tool` sont `vision`, `pointer`, `files`, `tasks`, `terminal`. Le relais négocie `desktop_version=1` et demande la mise à jour d’un ancien APK avant toute mise en file. La même URL MCP est conservée. Le relais autorise jusqu’à 60 Ko JSON sur ce transport, comme sur les nouveaux outils, pour permettre une tâche de 50 étapes sans changer de connecteur. La saisie ordinaire et le clavier conservent leurs limites existantes. Les captures et résultats ne sont jamais tronqués en JSON corrompu.
 
 ## Vérification
 

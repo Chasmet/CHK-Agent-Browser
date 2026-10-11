@@ -24,7 +24,9 @@ public final class ExternalFilesActivity extends Activity {
         TextView close=MobileUi.action(this,"Retour");box.addView(close);close.setOnClickListener(v->finish());
     }
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==741&&result==RESULT_OK&&data!=null&&data.getData()!=null){
-        try{int flags=data.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);getContentResolver().takePersistableUriPermission(data.getData(),flags);toast("Dossier autorisé.");show();}catch(Exception e){toast("Autorisation persistante indisponible : "+e.getMessage());}
+        try{int flags=data.getFlags();if((flags&Intent.FLAG_GRANT_READ_URI_PERMISSION)==0)throw new Exception("Droit de lecture absent.");
+            if((flags&Intent.FLAG_GRANT_WRITE_URI_PERMISSION)!=0)getContentResolver().takePersistableUriPermission(data.getData(),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            else getContentResolver().takePersistableUriPermission(data.getData(),Intent.FLAG_GRANT_READ_URI_PERMISSION);toast("Dossier autorisé.");show();}catch(Exception e){toast("Autorisation persistante indisponible : "+e.getMessage());}
     }}
     private void toast(String text){Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
 }
