@@ -3,7 +3,6 @@
     <LinearLayout android:id="@+id/space_header" android:layout_width="match_parent" android:layout_height="52dp" android:gravity="center_vertical" android:paddingHorizontal="12dp">
         <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:gravity="center_vertical">
             <TextView android:id="@+id/space_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="CHK Browser" android:textColor="#F1F5FF" android:textSize="18sp" android:textStyle="bold" />
-            <TextView android:id="@+id/connection_badge" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Ton espace de travail" android:textColor="#94A8C1" android:textSize="11sp" android:singleLine="true" />
         </LinearLayout>
         <TextView android:id="@+id/new_tab" style="@style/NavButton" android:text="＋" android:contentDescription="Nouvel onglet" />
     </LinearLayout>
@@ -16,6 +15,7 @@
         <TextView android:id="@+id/go" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
     </LinearLayout>
     <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="3dp" android:max="100" android:progressTint="#69E2C6" android:visibility="gone" />
+    <TextView android:id="@+id/connection_badge" android:layout_width="match_parent" android:layout_height="28dp" android:gravity="center_vertical" android:paddingHorizontal="14dp" android:text="Connexion à ChatGPT en cours…" android:textColor="#94A8C1" android:textSize="12sp" android:singleLine="true" android:ellipsize="end" android:visibility="gone" android:clickable="true" android:focusable="true" android:contentDescription="État de la connexion ChatGPT ; toucher pour ouvrir les réglages" />
     <TextView android:id="@+id/agent_action" android:layout_width="match_parent" android:layout_height="36dp" android:paddingHorizontal="14dp" android:gravity="center_vertical" android:textColor="#D8D8FF" android:background="#292D3C" android:textSize="12sp" android:singleLine="true" android:visibility="gone" android:contentDescription="Action du connecteur en cours" />
     <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
         <FrameLayout android:id="@+id/web_container" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#FFFFFF" />

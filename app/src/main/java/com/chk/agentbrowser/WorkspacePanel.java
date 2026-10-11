@@ -24,22 +24,48 @@ public final class WorkspacePanel {
     private TextView location;
     private EditText search;
     private String folder="",space="files",exportPath="",importFolder="";
-    private int generation,offset;
+    private volatile int generation;
+    private int offset,filesOffset,notesOffset;
     private String category="all",sort="name";
     private boolean grid=true,selectMode;
+    private boolean batchRunning;
+    private String filesQuery="",notesQuery="";
+    private boolean filesSearch,notesSearch,disposed;
     private final java.util.Set<String> selected=new java.util.LinkedHashSet<>();
     private LinearLayout gridRow;private int gridColumn;
     private final android.os.Handler handler=new android.os.Handler();
     private final Runnable filter=()->{offset=0;refresh();};
-    public WorkspacePanel(Activity a,FrameLayout host){this.a=a;this.host=host;}
-    void saveState(android.os.Bundle out){out.putString("workspace_folder",folder);out.putString("workspace_export",exportPath);out.putString("workspace_import",importFolder);out.putString("workspace_import_category",importCategory);out.putString("workspace_category",category);}
-    void restoreState(android.os.Bundle state){if(state==null)return;folder=state.getString("workspace_folder","");exportPath=state.getString("workspace_export","");importFolder=state.getString("workspace_import",folder);importCategory=state.getString("workspace_import_category","all");category=state.getString("workspace_category","all");}
+    public WorkspacePanel(Activity a,FrameLayout host){
+        this.a=a;this.host=host;
+        android.content.SharedPreferences prefs=a.getSharedPreferences("workspace_ui",Activity.MODE_PRIVATE);
+        grid=prefs.getBoolean("grid",true);sort=prefs.getString("sort","name");
+    }
+    private void rememberSearch(){
+        if(search==null)return;
+        if(space.equals("files")){filesQuery=search.getText().toString();filesSearch=search.getVisibility()==View.VISIBLE;filesOffset=offset;}
+        else{notesQuery=search.getText().toString();notesSearch=search.getVisibility()==View.VISIBLE;notesOffset=offset;}
+    }
+    private void rememberDisplay(){a.getSharedPreferences("workspace_ui",Activity.MODE_PRIVATE).edit().putBoolean("grid",grid).putString("sort",sort).apply();}
+    void saveState(android.os.Bundle out){
+        rememberSearch();out.putString("workspace_folder",folder);out.putString("workspace_export",exportPath);out.putString("workspace_import",importFolder);out.putString("workspace_import_category",importCategory);out.putString("workspace_category",category);
+        out.putString("workspace_files_query",filesQuery);out.putString("workspace_notes_query",notesQuery);
+        out.putBoolean("workspace_files_search",filesSearch);out.putBoolean("workspace_notes_search",notesSearch);
+        out.putInt("workspace_files_offset",filesOffset);out.putInt("workspace_notes_offset",notesOffset);
+        out.putBoolean("workspace_grid",grid);out.putString("workspace_sort",sort);
+    }
+    void restoreState(android.os.Bundle state){
+        if(state==null)return;folder=state.getString("workspace_folder","");exportPath=state.getString("workspace_export","");importFolder=state.getString("workspace_import",folder);importCategory=state.getString("workspace_import_category","all");category=state.getString("workspace_category","all");
+        filesQuery=state.getString("workspace_files_query","");notesQuery=state.getString("workspace_notes_query","");
+        filesSearch=state.getBoolean("workspace_files_search",false);notesSearch=state.getBoolean("workspace_notes_search",false);
+        filesOffset=Math.max(0,state.getInt("workspace_files_offset",0));notesOffset=Math.max(0,state.getInt("workspace_notes_offset",0));
+        grid=state.getBoolean("workspace_grid",grid);sort=state.getString("workspace_sort",sort);
+    }
     private int ink(){return space.equals("files")?0xff202124:MobileUi.TEXT;}
     private int muted(){return space.equals("files")?0xff687080:MobileUi.MUTED;}
     private TextView label(String value,int size){return MobileUi.text(a,value,size,ink());}
     private TextView action(String value){TextView v=MobileUi.action(a,value);if(space.equals("files")){v.setTextColor(0xff2468cb);v.setBackground(MobileUi.bg(a,0xffedf3fd));}return v;}
     public void show(String value){
-        space=value;offset=0;generation++;selected.clear();selectMode=false;host.removeAllViews();
+        rememberSearch();handler.removeCallbacks(filter);space=value;offset=space.equals("files")?filesOffset:notesOffset;generation++;selected.clear();selectMode=false;host.removeAllViews();
         FrameLayout frame=new FrameLayout(a);frame.setBackgroundColor(space.equals("files")?0xfffafbff:0xff202124);host.addView(frame,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout root=MobileUi.column(a);frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout toolbar=new LinearLayout(a);toolbar.setGravity(android.view.Gravity.CENTER_VERTICAL);toolbar.setBackgroundColor(space.equals("files")?0xfffafbff:0xff202124);root.addView(toolbar,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,56)));
@@ -47,19 +73,20 @@ public final class WorkspacePanel {
         location=MobileUi.text(a,space.equals("files")?"Mes fichiers":"Mes notes",18,ink());location.setSingleLine(true);location.setPadding(0,0,0,0);toolbar.addView(location,new LinearLayout.LayoutParams(0,-2,1));
         TextView find=UiIcons.button(a,"","search",ink());find.setContentDescription("Rechercher");toolbar.addView(find,new LinearLayout.LayoutParams(MobileUi.dp(a,48),-1));
         TextView more=UiIcons.button(a,"","sort",ink());more.setContentDescription("Options et tri");toolbar.addView(more,new LinearLayout.LayoutParams(MobileUi.dp(a,48),-1));more.setOnClickListener(v->options());
-        search=new EditText(a);search.setSingleLine(true);search.setTextColor(ink());search.setHintTextColor(muted());search.setBackgroundColor(space.equals("files")?0xffedf0f5:0xff30333b);search.setHint(space.equals("files")?"Rechercher dans ce dossier":"Rechercher dans les notes");search.setTextSize(16);search.setPadding(MobileUi.dp(a,16),0,MobileUi.dp(a,16),0);search.setVisibility(View.GONE);root.addView(search,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,52)));
+        search=new EditText(a);search.setTag("workspace_search");search.setSingleLine(true);search.setTextColor(ink());search.setHintTextColor(muted());search.setBackgroundColor(space.equals("files")?0xffedf0f5:0xff30333b);search.setTextSize(16);search.setPadding(MobileUi.dp(a,16),0,MobileUi.dp(a,16),0);search.setText(space.equals("files")?filesQuery:notesQuery);search.setVisibility((space.equals("files")?filesSearch:notesSearch)?View.VISIBLE:View.GONE);root.addView(search,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,52)));
         find.setOnClickListener(v->{search.setVisibility(search.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE);if(search.getVisibility()==View.VISIBLE){search.requestFocus();((android.view.inputmethod.InputMethodManager)a.getSystemService(Activity.INPUT_METHOD_SERVICE)).showSoftInput(search,0);}else{search.setText("");((android.view.inputmethod.InputMethodManager)a.getSystemService(Activity.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(search.getWindowToken(),0);}});
         search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int aft){}public void onTextChanged(CharSequence s,int st,int before,int count){handler.removeCallbacks(filter);handler.postDelayed(filter,180);}public void afterTextChanged(Editable e){}});
         ScrollView sc=new ScrollView(a);root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));list=MobileUi.column(a);list.setTag("workspace_content");list.addView(label("Chargement…",14));list.setPadding(MobileUi.dp(a,10),0,MobileUi.dp(a,10),MobileUi.dp(a,76));sc.addView(list);
         TextView add=MobileUi.action(a,space.equals("files")?"＋  Créer / Importer":"＋  Nouvelle note");add.setTextColor(0xffffffff);add.setBackground(MobileUi.bg(a,0xff087cf0));add.setElevation(MobileUi.dp(a,4));FrameLayout.LayoutParams floating=new FrameLayout.LayoutParams(-2,MobileUi.dp(a,50),android.view.Gravity.BOTTOM|android.view.Gravity.END);floating.setMargins(0,0,MobileUi.dp(a,14),MobileUi.dp(a,14));frame.addView(add,floating);add.setOnClickListener(v->{if(space.equals("files"))createMenu();else openNote("");});refresh();
     }
     public void refresh(){
-        if(list==null||a.isFinishing())return;final int ticket=++generation;String mode=space,p=folder,q=search.getText().toString();int page=offset;
+        if(list==null||disposed||a.isFinishing()||a.isDestroyed())return;final int ticket=++generation;String mode=space,p=folder,q=search.getText().toString(),requestedCategory=category,order=sort;int page=offset;
+        search.setHint(mode.equals("files")?(p.isEmpty()&&category.equals("all")?"Rechercher un fichier ou un dossier":p.isEmpty()?"Rechercher dans "+categoryName(category):"Rechercher ici et dans les sous-dossiers"):"Rechercher dans les notes");
         if(mode.equals("files")&&p.isEmpty()&&category.equals("all")&&q.isEmpty()&&!selectMode){
             list.removeAllViews();location.setText("Mes fichiers");dashboard();return;
         }
-        WorkspaceCommands.IO.execute(()->{try{WorkspaceStore s=new WorkspaceStore(a);JSONObject files=mode.equals("files")?WorkspaceCategoryView.query(a,p,category,q,sort,page):null;JSONArray notes=files==null?s.notes(q,false,page):null;
-            WorkspaceCommands.UI.post(()->{if(a.isFinishing()||ticket!=generation)return;try{list.removeAllViews();
+        WorkspaceCommands.IO.execute(()->{try{WorkspaceStore s=new WorkspaceStore(a);JSONObject files=mode.equals("files")?WorkspaceCategoryView.query(a,p,requestedCategory,q,order,page):null;JSONArray notes=files==null?s.notes(q,false,page):null;
+            WorkspaceCommands.UI.post(()->{if(disposed||a.isFinishing()||a.isDestroyed()||ticket!=generation)return;try{list.removeAllViews();
                 if(files!=null){location.setText(category.equals("all")?(p.isEmpty()?"Mes fichiers":p):categoryName(category));
                     gridRow=null;gridColumn=0;
                     if(selectMode)selectionBar();
@@ -67,7 +94,7 @@ public final class WorkspacePanel {
                     JSONArray rows=files.getJSONArray("items");for(int i=0;i<rows.length();i++)fileRow(rows.getJSONObject(i));if(grid&&gridRow!=null&&gridColumn<3){for(int filler=gridColumn;filler<3;filler++)gridRow.addView(new android.view.View(a),new LinearLayout.LayoutParams(0,1,1));}if(files.optBoolean("truncated"))empty("Affichage limité aux 5 000 premiers éléments analysés.");
                     if(rows.length()==0)empty(q.isEmpty()?"Aucun élément ici. Appuie sur Créer / Importer pour ajouter un dossier ou un fichier.":"Aucun résultat dans cette catégorie.");
                     int next=files.getInt("next_offset");pager(next);
-                }else{for(int i=0;i<notes.length();i++)noteRow(notes.getJSONObject(i));if(notes.length()==0)empty("Une idée à garder ? Crée ta première note.");pager(notes.length()==50?page+50:-1);}
+                }else{for(int i=0;i<notes.length();i++)noteRow(notes.getJSONObject(i));if(notes.length()==0)empty(q.isEmpty()?"Une idée à garder ? Crée ta première note.":"Aucune note ne correspond à ta recherche.");pager(notes.length()==50?page+50:-1);}
             }catch(Exception e){empty("Affichage impossible");}});
         }catch(Exception e){WorkspaceCommands.UI.post(()->{if(ticket==generation){list.removeAllViews();empty(e.getMessage());}});}});
     }
@@ -81,7 +108,7 @@ public final class WorkspacePanel {
             "› "+categoryName(category)+" / "+folder.substring(folder.lastIndexOf('/')+1),13);
         path.setSingleLine(true);line.addView(path,new LinearLayout.LayoutParams(0,-2,1));
         path.setOnClickListener(v->upFolder());
-        TextView toggle=UiIcons.button(a,"",grid?"grid":"sort",0xff2b6fd6);toggle.setContentDescription("Basculer entre grille et liste");line.addView(toggle,new LinearLayout.LayoutParams(MobileUi.dp(a,48),-1));toggle.setOnClickListener(v->{grid=!grid;refresh();});
+        TextView toggle=UiIcons.button(a,"",grid?"grid":"sort",0xff2b6fd6);toggle.setContentDescription("Basculer entre grille et liste");line.addView(toggle,new LinearLayout.LayoutParams(MobileUi.dp(a,48),-1));toggle.setOnClickListener(v->{grid=!grid;rememberDisplay();refresh();});
     }
     private void dashboard(){
         // Accueil : les six catégories uniquement, sans dossiers ni liste brute.
@@ -100,7 +127,34 @@ public final class WorkspacePanel {
         card.setOnClickListener(v->{if(selectMode){if(selected.contains(path))selected.remove(path);else selected.add(path);refresh();}else if(dir){folder=path;offset=0;search.setText("");refresh();}else openFile(path,false);});card.setOnLongClickListener(v->{fileMenu(path);return true;});
         if(!dir&&(mime.startsWith("image/")||mime.startsWith("video/"))){final int ticket=generation;ThumbnailLoader.load(a,path,0,mime.startsWith("video/"),new ThumbnailLoader.Result(){public boolean current(){return ticket==generation&&!a.isFinishing();}public void ready(android.graphics.Bitmap b){thumb.setImageBitmap(b);}});}
     }
-    private void selectionBar(){TextView action=action("✓ "+selected.size()+" sélectionné(s) · actions");list.addView(action);action.setOnClickListener(v->new AlertDialog.Builder(a).setTitle("Sélection").setItems(new String[]{"Copier dans un dossier","Déplacer dans un dossier","Mettre à la corbeille","Terminer la sélection"},(d,n)->{java.util.List<String> paths=new java.util.ArrayList<>(selected);if(n==3){selectMode=false;selected.clear();refresh();}else if(n==2)confirm("Mettre les éléments sélectionnés à la corbeille ?",()->work(()->{WorkspaceStore s=new WorkspaceStore(a);for(String p:paths)s.trash(p);selected.clear();selectMode=false;return paths.size()+" élément(s) dans la corbeille";}));else prompt("Dossier de destination (vide = racine)","",target->work(()->{WorkspaceStore s=new WorkspaceStore(a);int count=0;for(String p:paths){String dest=WorkspacePaths.child(target,p.substring(p.lastIndexOf('/')+1));if(n==0)WorkspaceCatalog.copy(a,p,dest);else s.move(p,dest);count++;}selected.clear();selectMode=false;return count+" élément(s) traité(s)";}));}).show());}
+    private void selectionBar(){
+        TextView action=action("✓ "+selected.size()+" sélectionné(s) · actions");list.addView(action);
+        action.setOnClickListener(v->{
+            if(batchRunning){toast("Opération en cours…");return;}
+            new AlertDialog.Builder(a).setTitle("Sélection").setItems(new String[]{"Copier les fichiers dans un dossier","Déplacer dans un dossier","Mettre à la corbeille","Terminer la sélection"},(d,n)->{
+                java.util.List<String> paths=new java.util.ArrayList<>(selected);
+                if(n==3){selectMode=false;selected.clear();refresh();}
+                else if(n==2)confirm("Mettre les éléments sélectionnés à la corbeille ?",()->selectionBatch(paths,n,""));
+                else prompt("Dossier de destination (vide = racine)","",target->selectionBatch(paths,n,target));
+            }).show();
+        });
+    }
+    private void selectionBatch(java.util.List<String> paths,int operation,String destination){
+        if(batchRunning)return;batchRunning=true;toast("En cours…");
+        WorkspaceCommands.IO.execute(()->{
+            JSONObject report;
+            try{report=WorkspaceBatch.run(a.getApplicationContext(),paths,operation,destination);}
+            catch(Exception e){WorkspaceCommands.UI.post(()->{batchRunning=false;if(!disposed&&!a.isFinishing()&&!a.isDestroyed())toast(e.getMessage());});return;}
+            WorkspaceCommands.UI.post(()->{
+                batchRunning=false;if(disposed||a.isFinishing()||a.isDestroyed())return;
+                JSONArray succeeded=report.optJSONArray("succeeded"),failed=report.optJSONArray("failed");
+                if(space.equals("files")){for(int i=0;i<succeeded.length();i++)selected.remove(succeeded.optString(i));selectMode=!selected.isEmpty();}
+                toast(succeeded.length()+" / "+paths.size()+" élément(s) traité(s)"+
+                    (failed.length()==0?"":" · "+failed.length()+" échec(s) : "+failed.optJSONObject(0).optString("error")));
+                refresh();
+            });
+        });
+    }
     private void noteRow(JSONObject n)throws Exception{
         String id=n.getString("id");TextView v=action((n.getBoolean("pinned")?"★  ":"▤  ")+n.getString("title")+"\n"+android.text.format.DateFormat.format("dd MMM · HH:mm",n.getLong("updated")));v.setTextColor(ink());LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=MobileUi.dp(a,8);list.addView(v,p);v.setOnClickListener(w->openNote(id));
         v.setOnLongClickListener(w->{new AlertDialog.Builder(a).setTitle(n.optString("title")).setItems(new String[]{"Ouvrir","Mettre à la corbeille"},(d,i)->{if(i==0)openNote(id);else confirm("Mettre cette note à la corbeille ?",()->work(()->{new WorkspaceStore(a).deleteNote(id,true,n.getInt("revision"));return "Note dans la corbeille";}));}).show();return true;});
@@ -146,10 +200,10 @@ public final class WorkspacePanel {
             else if(!space.equals("files"))trash();
             else if(i==1)downloads();
             else if(i==2)trash();
-            else if(i==3){grid=!grid;refresh();}
+            else if(i==3){grid=!grid;rememberDisplay();refresh();}
             else if(i==4)new AlertDialog.Builder(a).setTitle("Trier par")
                 .setItems(new String[]{"Nom","Plus récents","Plus volumineux"},(x,n)->{
-                    sort=new String[]{"name","date","size"}[n];offset=0;refresh();
+                    sort=new String[]{"name","date","size"}[n];rememberDisplay();offset=0;refresh();
                 }).show();
             else{selectMode=true;selected.clear();refresh();}
         }).show();
@@ -191,16 +245,20 @@ public final class WorkspacePanel {
     private void trash(){String mode=space;WorkspaceCommands.IO.execute(()->{try{WorkspaceStore s=new WorkspaceStore(a);JSONArray rows=mode.equals("files")?s.trashList():s.notes("",true,0);String[] names=new String[rows.length()];for(int i=0;i<rows.length();i++)names[i]=rows.getJSONObject(i).optString(mode.equals("files")?"path":"title");WorkspaceCommands.UI.post(()->{if(a.isFinishing())return;if(names.length==0){toast("La corbeille est vide");return;}new AlertDialog.Builder(a).setTitle("Toucher pour restaurer").setItems(names,(d,i)->work(()->{JSONObject row=rows.getJSONObject(i);WorkspaceStore store=new WorkspaceStore(a);if(mode.equals("files"))store.restore(row.getString("id"));else store.deleteNote(row.getString("id"),false,row.getInt("revision"));return "Élément restauré";})).setNegativeButton("Fermer",null).show();});}catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}});}
     private void downloads(){
         WorkspaceCommands.IO.execute(()->{
-            File root=a.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-            File[] files=root==null?null:root.listFiles();
+            final java.util.List<String> names=new java.util.ArrayList<>();
+            final java.util.List<String> labels=new java.util.ArrayList<>();
+            try{
+                JSONArray files=new WorkspaceStore(a).downloads();
+                for(int i=0;i<files.length();i++){
+                    JSONObject file=files.getJSONObject(i);names.add(file.getString("name"));
+                    labels.add(file.getString("name")+" · "+android.text.format.Formatter.formatShortFileSize(a,file.getLong("size")));
+                }
+            }catch(Exception e){WorkspaceCommands.UI.post(()->{if(!disposed&&!a.isFinishing()&&!a.isDestroyed())toast(e.getMessage());});return;}
             WorkspaceCommands.UI.post(()->{
-                if(a.isFinishing())return;
-                if(files==null||files.length==0){toast("Aucun téléchargement");return;}
-                java.util.List<String> names=new java.util.ArrayList<>();
-                for(File file:files)if(file.isFile())names.add(file.getName());
-                if(names.isEmpty()){toast("Aucun téléchargement");return;}
-                new AlertDialog.Builder(a).setTitle("Téléchargements · choisir un fichier")
-                    .setItems(names.toArray(new String[0]),(d,i)->{
+                if(disposed||a.isFinishing()||a.isDestroyed())return;
+                if(names.isEmpty()){toast("Aucun téléchargement terminé. Les fichiers en cours apparaîtront à la fin.");return;}
+                new AlertDialog.Builder(a).setTitle("Téléchargements terminés · importer")
+                    .setItems(labels.toArray(new String[0]),(d,i)->{
                         String name=names.get(i);
                         if(needsCategory())chooseCategory(()->importSelectedDownload(name));
                         else importSelectedDownload(name);
@@ -227,16 +285,21 @@ public final class WorkspacePanel {
         offset=0;search.setText("");refresh();
     }
     public boolean back(){
+        if(search!=null&&(search.getVisibility()==View.VISIBLE||search.length()>0)){
+            search.setText("");handler.removeCallbacks(filter);search.setVisibility(View.GONE);search.clearFocus();offset=0;
+            ((android.view.inputmethod.InputMethodManager)a.getSystemService(Activity.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(search.getWindowToken(),0);
+            refresh();return true;
+        }
         if(!space.equals("files"))return false;
         if(selectMode){selectMode=false;selected.clear();refresh();return true;}
         if(folder.isEmpty()&&"all".equals(category))return false;
         upFolder();return true;
     }
     public interface Job{String run()throws Exception;}
-    private void work(Job job){toast("En cours…");WorkspaceCommands.IO.execute(()->{String result;try{result=job.run();}catch(Exception e){result=e.getMessage();}String message=result;WorkspaceCommands.UI.post(()->{if(a.isFinishing())return;toast(message);refresh();});});}
+    private void work(Job job){toast("En cours…");WorkspaceCommands.IO.execute(()->{String result;try{result=job.run();}catch(Exception e){result=e.getMessage();}String message=result;WorkspaceCommands.UI.post(()->{if(disposed||a.isFinishing()||a.isDestroyed())return;toast(message);refresh();});});}
     private interface Name{void done(String text);}
     private void prompt(String title,String value,Name cb){EditText input=new EditText(a);input.setSingleLine(true);input.setText(value);input.selectAll();new AlertDialog.Builder(a).setTitle(title).setView(input).setNegativeButton("Annuler",null).setPositiveButton("Créer / enregistrer",(d,i)->cb.done(input.getText().toString())).show();}
     private void confirm(String title,Runnable action){new AlertDialog.Builder(a).setTitle(title).setMessage("Tu pourras le restaurer depuis Options > Corbeille.").setNegativeButton("Annuler",null).setPositiveButton("Mettre à la corbeille",(d,i)->action.run()).show();}
     private void toast(String s){Toast.makeText(a,s==null?"Opération impossible":s,Toast.LENGTH_SHORT).show();}
-    public void destroy(){generation++;handler.removeCallbacksAndMessages(null);}
+    public void destroy(){disposed=true;generation++;handler.removeCallbacksAndMessages(null);}
 }
