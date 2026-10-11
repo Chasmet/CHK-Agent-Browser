@@ -83,6 +83,8 @@ public final class AgentDesktopIntegrationTest {
     @Test public void webCanvasReceivesTrustedAndroidTouchWithoutCssSelector()throws Exception{
         WebFixture.load(instrumentation,web,"https://desktop.test/canvas","<meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0}canvas{width:100vw;height:90vh;background:skyblue}</style><canvas></canvas><script>window.taps=0;window.moves=0;document.querySelector('canvas').addEventListener('pointerdown',e=>{if(e.isTrusted)taps++});document.querySelector('canvas').addEventListener('pointermove',e=>moves++);</script>","!!document.querySelector('canvas')");
         JSONObject before=state("web");Reply tap=call(pointer(before,"tap",50,50).put("expected_host","desktop.test"));assertTrue(tap.text,tap.ok);assertEquals("1",js("taps"));
+        JSONObject observed=state("web");assertTrue(observed.getJSONArray("controls").length()>0);js("document.querySelector('canvas').setAttribute('aria-label','changed canvas');true");
+        assertFalse(call(pointer(observed,"tap",50,50).put("expected_revision",observed.getString("revision"))).ok);assertEquals("1",js("taps"));
         assertTrue(call(pointer(state("web"),"drag",50,50).put("end_x",180).put("end_y",120).put("duration_ms",350)).ok);assertTrue(Integer.parseInt(js("moves"))>0);
         JSONObject stale=state("web");WebFixture.load(instrumentation,web,"https://desktop.test/canvas","<script>window.taps=0;</script>","typeof taps==='number'");assertFalse(call(pointer(stale,"tap",30,30)).ok);assertEquals("0",js("taps"));
     }

@@ -13,6 +13,11 @@ import org.json.JSONObject;
 final class AgentPointer {
     private AgentPointer(){}
     static void execute(Context app,WebView web,JSONObject p,AgentClient.ResultCallback cb){
+        if(p.optString("target","native").equals("web")){
+            try{AgentVision.target(p,web);AgentVision.observeWeb(app,web,new AgentVision.Observation(){public void ready(JSONObject info){if(cb.isActive())executeReady(app,web,p,cb);}public void failed(String error){if(cb.isActive())cb.finish(false,error);}});}catch(Exception e){cb.finish(false,e.getMessage());}
+        }else executeReady(app,web,p,cb);
+    }
+    private static void executeReady(Context app,WebView web,JSONObject p,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
         try{
             View root=AgentVision.target(p,web);AgentVision.guard(root,p);

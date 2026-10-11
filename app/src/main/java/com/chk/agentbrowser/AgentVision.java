@@ -21,6 +21,8 @@ import java.security.MessageDigest;
 
 /** Coordinates and pixels refer to CHK's own view, never the display of another app. */
 final class AgentVision {
+    private static final java.util.WeakHashMap<WebView,String> webRevisions=new java.util.WeakHashMap<>();
+    private static String script;
     private AgentVision(){}
     static String digest(String s)throws Exception{
         byte[] bytes=MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
@@ -68,12 +70,35 @@ final class AgentVision {
     }
     static void guard(View root,JSONObject p)throws Exception{
         if(!context(root).equals(p.optString("expected_context")))throw new Exception("Écran absent ou remplacé : observe l’écran avant le geste.");
-        if(!p.optString("expected_revision").isEmpty()&&!inspect(root).getString("revision").equals(p.optString("expected_revision")))throw new Exception("L’interface a changé : observe à nouveau avant le geste.");
+        String revision=root instanceof WebView?webRevisions.get((WebView)root):inspect(root).getString("revision");
+        if(!p.optString("expected_revision").isEmpty()&&!p.optString("expected_revision").equals(revision))throw new Exception("L’interface a changé : observe à nouveau avant le geste.");
+    }
+    interface Observation{void ready(JSONObject info);void failed(String error);}
+    static void observeWeb(Context app,WebView web,Observation cb){
+        try{
+            JSONObject initial=inspect(web);String expected=initial.getString("context");
+            if(script==null){try(java.io.InputStream in=app.getAssets().open("agent_vision.js");ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[4096];int n;while((n=in.read(b))!=-1)out.write(b,0,n);script=new String(out.toByteArray(),StandardCharsets.UTF_8);}}
+            web.evaluateJavascript(script,raw->{try{
+                if(!BrowserWebState.alive(web)||!expected.equals(context(web)))throw new Exception("La page a changé pendant l’observation.");
+                JSONObject dom=new JSONObject(new JSONArray("["+raw+"]").getString(0));JSONObject info=inspect(web);
+                float sx=web.getWidth()/(float)Math.max(1,dom.getDouble("css_width")),sy=sx;JSONArray controls=dom.getJSONArray("controls");
+                for(int i=0;i<controls.length();i++){JSONObject bounds=controls.getJSONObject(i).getJSONObject("bounds");bounds.put("x",bounds.getDouble("x")*sx).put("y",bounds.getDouble("y")*sy).put("width",bounds.getDouble("width")*sx).put("height",bounds.getDouble("height")*sy);}
+                String revision=digest(info.getString("revision")+dom.toString());webRevisions.put(web,revision);
+                info.put("controls",controls).put("text",dom.getString("text")).put("controls_truncated",dom.getBoolean("controls_truncated")).put("revision",revision);
+                cb.ready(info);
+            }catch(Exception e){cb.failed(e.getMessage()==null?"Observation web indisponible.":e.getMessage());}});
+        }catch(Exception e){cb.failed(e.getMessage());}
     }
     static void execute(Context app,WebView web,JSONObject p,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
         try{
             View root=target(p,web);JSONObject info=inspect(root);
+            if(root instanceof WebView){observeWeb(app,(WebView)root,new Observation(){public void ready(JSONObject info){if(cb.isActive())capture(app,web,root,p,info,cb);}public void failed(String error){if(cb.isActive())cb.finish(false,error);}});return;}
+            capture(app,web,root,p,info,cb);
+        }catch(Exception e){cb.finish(false,e.getMessage()==null?"Vision indisponible.":e.getMessage());}
+    }
+    private static void capture(Context app,WebView web,View root,JSONObject p,JSONObject info,AgentClient.ResultCallback cb){
+        try{
             if(!p.optBoolean("capture",false)){cb.finish(true,info.toString());return;}
             if(!AgentClient.get(app).isPreviewAllowed())throw new Exception("Active le partage d’aperçus dans Réglages.");
             Window window=root instanceof WebView?null:NativeKeyboard.window();
