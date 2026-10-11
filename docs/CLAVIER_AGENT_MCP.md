@@ -63,6 +63,16 @@ Un lot peut avoir un transport réussi et des champs en échec : lire `succeeded
 
 Quatorze nouveaux tests Android utilisent de vrais EditText/InputConnection, dialogues, listes, Spinner, sauvegarde SQLite de Notes et WebView. Ils couvrent Unicode, curseur, annulation/rétablissement, nombres et limites, écran conservé mais en pause, lots partiels, contrôles protégés/périmés, compatibilité avec Fichiers, annulation de commande, action Entrée, événements web, rejet différé, iframe de même origine, shadow DOM, texte enrichi et vraie touche Android.
 
-Les tests du relais couvrent aussi la déclaration MCP, les limites de requête, l’isolation de la file, la négociation de version et le transport des résultats partiels. La compilation, le lint, les 59 tests Android et la signature Release doivent être attestés dans GitHub Actions avant publication.
+Les tests du relais couvrent aussi la déclaration MCP, les limites de requête, l’isolation de la file, la négociation de version et le transport des résultats partiels.
+
+Vérification terminée le 11 octobre 2026 :
+
+- [Android — construction publiée n°177](https://github.com/Chasmet/CHK-Agent-Browser/actions/runs/38141790820) : compilation et lint réussis ; 59 tests sur émulateur, 0 échec et 0 test ignoré, dont les 14 tests du clavier et les 2 tests d’import HTML. La branche testée n°176 et le commit publié `1fab1c14bc31548ed45a979eed2a2926f111a0e9` ont exactement le même arbre source.
+- [Relais — vérification n°139](https://github.com/Chasmet/Modeliseur-3d/actions/runs/38140128028) : 49 tests Python et 4 tests Node réussis. Le relais déployé correspond au commit `0c6cbb7e435d23c1497a1da997fbfd03597c53ba` ; sa réponse MCP indique `3.3-agent-keyboard` et un téléphone connecté.
+- [Version publique 1.0.177](https://github.com/Chasmet/CHK-Agent-Browser/releases/tag/v1.0.177) : APK signé, vérifié par `apksigner` (signatures v1 et v2 valides). La signature permanente est conservée pour l’installation par-dessus l’application existante.
+- L’APK final téléchargé fait 4 803 999 octets. Son SHA-256 est identique à celui de l’asset public : `6e629be655591aa731ac410f1f3c452a28e5d2fd6a1427b8bf68f388479874f6`.
+- Empreinte SHA-256 du certificat Android extrait de cet APK : `29e4bf6469e65741750b25f7ea50c97e7b538d5ead63bffebfd93cf197dd9335`, identique à la référence permanente vérifiée par le workflow.
+
+Le nouveau moteur devient disponible sur le téléphone après installation de l’APK 1.0.177 depuis les Réglages. À la vérification du relais, l’ancien APK annonçait encore `keyboard_version=0` : la publication et le déploiement du serveur ne signifient pas que la mise à jour Android est déjà installée. Gboard et l’adresse MCP sont conservés.
 
 Références : [InputConnection Android](https://developer.android.com/reference/android/view/inputmethod/InputConnection), [cycle de vie des activités](https://developer.android.com/reference/android/app/Application.ActivityLifecycleCallbacks).
