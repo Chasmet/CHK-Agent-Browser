@@ -38,7 +38,7 @@ Les données temporaires de test ont été mises en corbeille récupérable apr�
 
 La suite Android comporte 45 tests déclarés, dont huit nouveaux parcours : recherche imbriquée et dossiers, formats divers, recherche lors d’un changement d’espace et recréation, lien Cut lors d’une recréation, import d’un téléchargement incomplet, collision dans un déplacement multiple, note vide, indicateur de connexion.
 
-Les tests préexistants couvrent également : saisie/clique et clic unique vérifié, import dans un véritable input HTML, navigation WebView et récupération du moteur, permissions d’aperçu, stockage et fournisseur content://, révisions SQLite, sauvegarde des notes pendant recréation, bibliothèques des projets Studio, lecture/aperçu, rendu MP4 avec audio/ratio/vitesse, annulation/reprise, protection des sources, planification locale Cut, X immédiat et export réel de deux extraits depuis l’inbox MCP.
+Les tests préexistants couvrent également : saisie et clic unique vérifié, import dans un véritable input HTML, navigation WebView et récupération du moteur, permissions d’aperçu, stockage et fournisseur content://, révisions SQLite, sauvegarde des notes pendant recréation, bibliothèques des projets Studio, lecture/aperçu, rendu MP4 avec audio/ratio/vitesse, annulation/reprise, protection des sources, planification locale Cut, X immédiat et export réel de deux extraits depuis l’inbox MCP.
 
 Contrôles exigés avant la publication :
 
@@ -49,6 +49,32 @@ Contrôles exigés avant la publication :
 5. Présence de l’APK attaché à la vraie GitHub Release et réponse de `releases/latest`.
 
 Le conteneur local possède seulement un environnement Java d’exécution, sans javac ni SDK Android. Le téléchargement de Gradle est bloqué par son réseau. Les XML et différences sont vérifiés localement ; la compilation, le lint et l’exécution Android doivent être attestés par GitHub Actions, et non présentés comme ayant réussi localement.
+
+## Résultats attestés — 11 octobre 2026
+
+Les corrections ont été intégrées par la [PR #16](https://github.com/Chasmet/CHK-Agent-Browser/pull/16). Le commit de code testé et publié est `082c209c5f0c1c497eae5715e38f0bebe80cad96`.
+
+La [validation de la branche, exécution #171](https://github.com/Chasmet/CHK-Agent-Browser/actions/runs/38135056432) et la [validation finale sur main, exécution #172](https://github.com/Chasmet/CHK-Agent-Browser/actions/runs/38135648845) ont réussi. Sur main, les rapports Android confirment **45 tests réussis, zéro échec, zéro test ignoré** :
+
+| Suite Android | Tests réussis |
+|---|---:|
+| BrowserMediaUploadTest | 2 |
+| CutStudioIntegrationTest | 4 |
+| CutStudioAutomationIntegrationTest | 2 |
+| GeneralReliabilityTest | 7 |
+| UserExperienceIntegrationTest | 8 |
+| VideoEditorIntegrationTest | 14 |
+| VisibleAgentIntegrationTest | 1 |
+| WorkspaceIntegrationTest | 7 |
+| **Total** | **45** |
+
+Les scripts de validation, la compilation debug, le lint, la compilation Release et la vérification `apksigner` ont tous réussi dans GitHub Actions. La vérification de la signature permanente existante a réussi avant la compilation Release ; l’applicationId reste `com.chk.agentbrowser`.
+
+La [Release publique v1.0.172](https://github.com/Chasmet/CHK-Agent-Browser/releases/tag/v1.0.172) contient **CHK-Agent-Browser-1.0.172.apk**, 4 788 133 octets. La réponse officielle `releases/latest` indique cette version et l’URL attendue par le système de mise à jour intégré.
+
+SHA-256 de l’APK publié : `19fdcec0de3b8d685df07579c1ac425c7f65d61a84c0ba4c0891e549db53811b`.
+
+Installation : **Réglages → Rechercher et télécharger la mise à jour → Installer la mise à jour sur ce téléphone**, puis confirmation par l’installateur Android. Installer par-dessus l’application existante pour conserver les données. L’installation sur le téléphone n’est pas présentée comme ayant été effectuée par ces tests.
 
 ## Limites de couverture
 
