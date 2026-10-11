@@ -15,13 +15,14 @@ import java.util.*;
 /** Only persisted directory grants selected by the owner through Android's document picker. */
 final class ExternalFiles {
     private ExternalFiles(){}
+    private static boolean isTree(Uri uri){java.util.List<String> parts=uri.getPathSegments();return "content".equals(uri.getScheme())&&parts.size()>=2&&"tree".equals(parts.get(0));}
     static String grantId(Uri tree)throws Exception{return AgentVision.digest(tree.toString()).substring(0,16);}
     static JSONArray grants(Context c)throws Exception{
-        JSONArray result=new JSONArray();for(UriPermission grant:c.getContentResolver().getPersistedUriPermissions())if(grant.isReadPermission()&&DocumentsContract.isTreeUri(grant.getUri()))
+        JSONArray result=new JSONArray();for(UriPermission grant:c.getContentResolver().getPersistedUriPermissions())if(grant.isReadPermission()&&isTree(grant.getUri()))
             result.put(new JSONObject().put("id",grantId(grant.getUri())).put("name",DocumentsContract.getTreeDocumentId(grant.getUri())).put("writable",grant.isWritePermission()));return result;
     }
     static Uri tree(Context c,String id,boolean write)throws Exception{
-        for(UriPermission grant:c.getContentResolver().getPersistedUriPermissions())if(grant.isReadPermission()&&DocumentsContract.isTreeUri(grant.getUri())&&grantId(grant.getUri()).equals(id)){
+        for(UriPermission grant:c.getContentResolver().getPersistedUriPermissions())if(grant.isReadPermission()&&isTree(grant.getUri())&&grantId(grant.getUri()).equals(id)){
             if(write&&!grant.isWritePermission())throw new Exception("Ce dossier est autorisé en lecture seule.");return grant.getUri();}
         throw new Exception("Dossier externe non autorisé ou accès révoqué.");
     }

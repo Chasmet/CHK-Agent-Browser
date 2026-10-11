@@ -37,6 +37,12 @@ jobs:
         run: bash validation/check.sh
       - name: Compiler APK debug
         run: ./gradlew --no-daemon assembleDebug lintDebug
+      - name: Afficher les erreurs Android si la vérification échoue
+        if: failure()
+        run: |
+          if test -f app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt; then
+            rg -A 5 ': Error:' app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
+          fi
       - name: Autoriser KVM pour les tests Android
         run: sudo chmod 666 /dev/kvm
       - name: Tester navigateur, Fichiers, Notes et véritable export vidéo sur Android

@@ -20,7 +20,11 @@ final class AgentPointer {
             if(!java.util.Arrays.asList("tap","double_tap","long_press","drag","swipe","back").contains(gesture))throw new Exception("Geste tactile inconnu.");
             if(gesture.equals("back")){
                 if(root instanceof WebView){if(!((WebView)root).canGoBack())throw new Exception("Aucune page précédente.");((WebView)root).goBack();}
-                else NativeKeyboard.activity().onBackPressed();
+                else {
+                    android.view.Window.Callback receiver=NativeKeyboard.window().getCallback();
+                    receiver.dispatchKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_BACK));
+                    receiver.dispatchKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP,android.view.KeyEvent.KEYCODE_BACK));
+                }
                 cb.finish(true,new JSONObject().put("ok",true).put("gesture_sent",true).put("outcome_confirmed",false).toString());return;
             }
             float sx=1,sy=1;if(p.optString("coordinate_space","view").equals("image")){JSONObject state=AgentVision.inspect(root);sx=root.getWidth()/(float)state.getInt("image_width");sy=root.getHeight()/(float)state.getInt("image_height");}

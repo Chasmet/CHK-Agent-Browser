@@ -48,7 +48,7 @@ final class AgentFiles {
     }
     static JSONObject plan(Context c,JSONObject p)throws Exception{
         WorkspaceStore store=new WorkspaceStore(c);JSONArray paths=p.optJSONArray("paths");
-        if(paths==null){String folder=p.optString("folder","");File dir=WorkspacePaths.resolve(new File(c.getFilesDir(),"workspace"),folder,true);File[] found=dir.listFiles();if(found==null)throw new Exception("Dossier introuvable.");Arrays.sort(found,Comparator.comparing(File::getName));paths=new JSONArray();String suffix=p.optString("suffix","").toLowerCase(Locale.ROOT);for(File child:found)if(child.isFile()&&!child.getName().startsWith(".")&&child.getName().toLowerCase(Locale.ROOT).endsWith(suffix))paths.put(WorkspacePaths.child(folder,child.getName()));}
+        if(paths==null){String folder=p.optString("folder","");File dir=WorkspacePaths.resolve(new File(c.getFilesDir(),"workspace"),folder,true);File[] found=dir.listFiles();if(found==null)throw new Exception("Dossier introuvable.");Arrays.sort(found,(a,b)->a.getName().compareTo(b.getName()));paths=new JSONArray();String suffix=p.optString("suffix","").toLowerCase(Locale.ROOT);for(File child:found)if(child.isFile()&&!child.getName().startsWith(".")&&child.getName().toLowerCase(Locale.ROOT).endsWith(suffix))paths.put(WorkspacePaths.child(folder,child.getName()));}
         if(paths.length()<1||paths.length()>500)throw new Exception("Un lot contient de 1 à 500 éléments ; précise paths ou folder/suffix.");
         String mode=p.optString("mode","rename");if(!Arrays.asList("rename","organize","copy","move","trash","transform").contains(mode))throw new Exception("Traitement de fichiers inconnu.");
         JSONArray rows=new JSONArray();HashSet<String> sources=new HashSet<>(),targets=new HashSet<>();
