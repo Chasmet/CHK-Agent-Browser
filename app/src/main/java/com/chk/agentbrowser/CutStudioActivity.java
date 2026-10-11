@@ -213,6 +213,7 @@ public final class CutStudioActivity extends Activity {
             long duration=Long.parseLong(raw==null?"0":raw);
             if(duration<=0)throw new IllegalArgumentException("Durée inconnue");
             source=uri;sourceName=name;sourceDurationMs=duration;
+            CutStudioAutomation.rememberSelected(this,uri,name);
             render(0);message("Vidéo prête : "+name);
         }catch(Exception ex){toast("Vidéo non prise en charge : "+ex.getMessage());}
         finally{try{m.release();}catch(Exception ignored){}}
