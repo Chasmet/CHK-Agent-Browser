@@ -32,8 +32,8 @@ public final class WorkspacePanel {
     private final android.os.Handler handler=new android.os.Handler();
     private final Runnable filter=()->{offset=0;refresh();};
     public WorkspacePanel(Activity a,FrameLayout host){this.a=a;this.host=host;}
-    void saveState(android.os.Bundle out){out.putString("workspace_folder",folder);out.putString("workspace_export",exportPath);out.putString("workspace_import",importFolder);out.putString("workspace_category",category);}
-    void restoreState(android.os.Bundle state){if(state==null)return;folder=state.getString("workspace_folder","");exportPath=state.getString("workspace_export","");importFolder=state.getString("workspace_import",folder);category=state.getString("workspace_category","all");}
+    void saveState(android.os.Bundle out){out.putString("workspace_folder",folder);out.putString("workspace_export",exportPath);out.putString("workspace_import",importFolder);out.putString("workspace_import_category",importCategory);out.putString("workspace_category",category);}
+    void restoreState(android.os.Bundle state){if(state==null)return;folder=state.getString("workspace_folder","");exportPath=state.getString("workspace_export","");importFolder=state.getString("workspace_import",folder);importCategory=state.getString("workspace_import_category","all");category=state.getString("workspace_category","all");}
     private int ink(){return space.equals("files")?0xff202124:MobileUi.TEXT;}
     private int muted(){return space.equals("files")?0xff687080:MobileUi.MUTED;}
     private TextView label(String value,int size){return MobileUi.text(a,value,size,ink());}
@@ -135,7 +135,25 @@ public final class WorkspacePanel {
                     }));
                 }).show();
     }
-    private void options(){new AlertDialog.Builder(a).setTitle("Options").setItems(space.equals("files")?new String[]{"Actualiser","Téléchargements","Corbeille",grid?"Afficher en liste":"Afficher en grille","Trier","Sélectionner plusieurs"}:new String[]{"Actualiser","Corbeille"},(d,i)->{if(i==0)refresh();else if(!space.equals("files"))trash();else if(i==1)downloads();else if(i==2)trash();else if(i==3){grid=!grid;refresh();}else if(i==4)new AlertDialog.Builder(a).setTitle("Trier par").setItems(new String[]{"Nom","Plus récents","Plus volumineux"},(x,n)->{sort=new String[]{"name","date","size"}[n];offset=0;refresh();}).show();else{selectMode=true;selected.clear();refresh();}}).show();}
+    private void options(){
+        boolean home=space.equals("files")&&folder.isEmpty()&&"all".equals(category);
+        String[] choices=!space.equals("files")?new String[]{"Actualiser","Corbeille"}:
+            home?new String[]{"Actualiser","Téléchargements","Corbeille"}:
+            new String[]{"Actualiser","Téléchargements","Corbeille",
+                grid?"Afficher en liste":"Afficher en grille","Trier","Sélectionner plusieurs"};
+        new AlertDialog.Builder(a).setTitle("Options").setItems(choices,(d,i)->{
+            if(i==0)refresh();
+            else if(!space.equals("files"))trash();
+            else if(i==1)downloads();
+            else if(i==2)trash();
+            else if(i==3){grid=!grid;refresh();}
+            else if(i==4)new AlertDialog.Builder(a).setTitle("Trier par")
+                .setItems(new String[]{"Nom","Plus récents","Plus volumineux"},(x,n)->{
+                    sort=new String[]{"name","date","size"}[n];offset=0;refresh();
+                }).show();
+            else{selectMode=true;selected.clear();refresh();}
+        }).show();
+    }
     private void fileMenu(String path){boolean directory=false;try{directory=new WorkspaceStore(a).file(path).isDirectory();}catch(Exception ignored){}final boolean dir=directory;new AlertDialog.Builder(a).setTitle(path.substring(path.lastIndexOf('/')+1)).setItems(dir?new String[]{"Renommer","Déplacer","Mettre à la corbeille"}:new String[]{"Ouvrir","Partager","Exporter vers le téléphone","Renommer","Déplacer","Modifier le texte","Mettre à la corbeille","Copier","Monter dans Studio","Informations du média"},(d,i)->{int choice=dir?new int[]{3,4,6}[i]:i;switch(choice){
         case 0:openFile(path,false);break;case 1:openFile(path,true);break;case 2:exportPicker(path);break;
         case 3:prompt("Nouveau nom",path.substring(path.lastIndexOf('/')+1),name->work(()->{String parent=path.contains("/")?path.substring(0,path.lastIndexOf('/')):"";new WorkspaceStore(a).move(path,WorkspacePaths.child(parent,name));return "Élément renommé";}));break;
@@ -172,26 +190,34 @@ public final class WorkspacePanel {
     private void editText(String path){WorkspaceCommands.IO.execute(()->{try{JSONObject o=new WorkspaceStore(a).readText(path,0);if(o.getInt("next_offset")!=-1)throw new IOException("Édition locale limitée à 12 000 caractères");String body=o.getString("text");WorkspaceCommands.UI.post(()->{if(a.isFinishing())return;EditText input=new EditText(a);input.setText(body);input.setMinLines(8);input.setMaxLines(14);input.setGravity(android.view.Gravity.TOP);new AlertDialog.Builder(a).setTitle("Modifier "+path).setView(input).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,i)->work(()->{WorkspaceStore s=new WorkspaceStore(a);if(!s.readText(path,0).getString("text").equals(body))throw new IOException("Fichier modifié ailleurs : rouvre-le");s.writeText(path,input.getText().toString(),true);return "Document enregistré";})).show();});}catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}});}
     private void trash(){String mode=space;WorkspaceCommands.IO.execute(()->{try{WorkspaceStore s=new WorkspaceStore(a);JSONArray rows=mode.equals("files")?s.trashList():s.notes("",true,0);String[] names=new String[rows.length()];for(int i=0;i<rows.length();i++)names[i]=rows.getJSONObject(i).optString(mode.equals("files")?"path":"title");WorkspaceCommands.UI.post(()->{if(a.isFinishing())return;if(names.length==0){toast("La corbeille est vide");return;}new AlertDialog.Builder(a).setTitle("Toucher pour restaurer").setItems(names,(d,i)->work(()->{JSONObject row=rows.getJSONObject(i);WorkspaceStore store=new WorkspaceStore(a);if(mode.equals("files"))store.restore(row.getString("id"));else store.deleteNote(row.getString("id"),false,row.getInt("revision"));return "Élément restauré";})).setNegativeButton("Fermer",null).show();});}catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}});}
     private void downloads(){
-        if(needsCategory()){chooseCategory(this::downloads);return;}
-        String targetFolder=folder,targetCategory=category;
         WorkspaceCommands.IO.execute(()->{
             File root=a.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
             File[] files=root==null?null:root.listFiles();
             WorkspaceCommands.UI.post(()->{
                 if(a.isFinishing())return;
                 if(files==null||files.length==0){toast("Aucun téléchargement");return;}
-                String[] names=new String[files.length];
-                for(int i=0;i<files.length;i++)names[i]=files[i].getName();
-                new AlertDialog.Builder(a).setTitle("Importer un téléchargement")
-                    .setItems(names,(d,i)->work(()->{
-                        WorkspaceStore s=new WorkspaceStore(a);
-                        String dest=WorkspaceCategoryView.destination(s,targetCategory,targetFolder);
-                        String path=WorkspacePaths.child(dest,FileNames.available(s.file(dest),names[i],null));
-                        return s.importDownload(names[i],path)+" importé";
-                    })).setNegativeButton("Fermer",null).show();
+                java.util.List<String> names=new java.util.ArrayList<>();
+                for(File file:files)if(file.isFile())names.add(file.getName());
+                if(names.isEmpty()){toast("Aucun téléchargement");return;}
+                new AlertDialog.Builder(a).setTitle("Téléchargements · choisir un fichier")
+                    .setItems(names.toArray(new String[0]),(d,i)->{
+                        String name=names.get(i);
+                        if(needsCategory())chooseCategory(()->importSelectedDownload(name));
+                        else importSelectedDownload(name);
+                    }).setNegativeButton("Fermer",null).show();
             });
         });
     }
+    private void importSelectedDownload(String name){
+        String targetFolder=folder,targetCategory=category;
+        work(()->{
+            WorkspaceStore s=new WorkspaceStore(a);
+            String dest=WorkspaceCategoryView.destination(s,targetCategory,targetFolder);
+            String path=WorkspacePaths.child(dest,FileNames.available(s.file(dest),name,null));
+            return s.importDownload(name,path)+" importé";
+        });
+    }
+
     private void upFolder(){
         if(!folder.isEmpty()){
             String parent=folder.contains("/")?folder.substring(0,folder.lastIndexOf('/')):"";
