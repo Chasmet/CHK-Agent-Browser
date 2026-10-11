@@ -232,7 +232,7 @@ public final class CutStudioActivity extends Activity {
             String[] names=new String[entries.size()];
             for(int i=0;i<entries.size();i++)names[i]=
                 (entries.get(i).isDirectory()?"▣  ":"▶  ")+entries.get(i).getName();
-            new AlertDialog.Builder(this).setTitle(folder.isEmpty()?"Fichiers CHK":folder)
+            new AgentDialog.Builder(this).setTitle(folder.isEmpty()?"Fichiers CHK":folder)
                 .setItems(names,(d,n)->{
                     File f=entries.get(n);String relative=folder.isEmpty()?f.getName():folder+"/"+f.getName();
                     if(f.isDirectory())chooseWorkspace(relative);
@@ -442,7 +442,7 @@ public final class CutStudioActivity extends Activity {
                     catch(Exception e){toast(e.getMessage());}
                     return;
                 }
-                new AlertDialog.Builder(this).setTitle("Confirmer la publication")
+                new AgentDialog.Builder(this).setTitle("Confirmer la publication")
                     .setMessage("As-tu vérifié que la vidéo est réellement publiée sur "
                         +j.optString("platform").toUpperCase(Locale.ROOT)
                         +" ? Une fiche locale ne prouve pas la publication.")
@@ -452,7 +452,7 @@ public final class CutStudioActivity extends Activity {
                         catch(Exception e){toast(e.getMessage());}
                     }).show();
             });
-            button(manualX?"Supprimer la fiche X":"Supprimer la programmation",p,()->new AlertDialog.Builder(this)
+            button(manualX?"Supprimer la fiche X":"Supprimer la programmation",p,()->new AgentDialog.Builder(this)
                 .setTitle(manualX?"Supprimer le brouillon X ?":"Supprimer le rappel ?").setMessage("Le fichier MP4 sera conservé.")
                 .setNegativeButton("Annuler",null).setPositiveButton("Supprimer",(d,n)->{
                     try{CutStudioStore.remove(this,j.optString("id"));render(2);}
@@ -518,16 +518,16 @@ public final class CutStudioActivity extends Activity {
             form,()->{});
         Button time=button("Heure : "+android.text.format.DateFormat.getTimeFormat(this).format(selected.getTime()),
             form,()->{});
-        date.setOnClickListener(v->new DatePickerDialog(this,(picker,y,m,d)->{
+        date.setOnClickListener(v->AgentDialog.watch(new DatePickerDialog(this,(picker,y,m,d)->{
             selected.set(y,m,d);date.setText("Date : "+
                 android.text.format.DateFormat.getDateFormat(this).format(selected.getTime()));
         },selected.get(Calendar.YEAR),selected.get(Calendar.MONTH),
-            selected.get(Calendar.DAY_OF_MONTH)).show());
-        time.setOnClickListener(v->new TimePickerDialog(this,(picker,h,m)->{
+            selected.get(Calendar.DAY_OF_MONTH))).show());
+        time.setOnClickListener(v->AgentDialog.watch(new TimePickerDialog(this,(picker,h,m)->{
             selected.set(Calendar.HOUR_OF_DAY,h);selected.set(Calendar.MINUTE,m);
             time.setText("Heure : "+
                 android.text.format.DateFormat.getTimeFormat(this).format(selected.getTime()));
-        },selected.get(Calendar.HOUR_OF_DAY),selected.get(Calendar.MINUTE),true).show());
+        },selected.get(Calendar.HOUR_OF_DAY),selected.get(Calendar.MINUTE),true)).show());
         network.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
             @Override public void onItemSelected(android.widget.AdapterView<?> parent,View view,int position,long id){
                 boolean manualX=position==3;
@@ -540,7 +540,7 @@ public final class CutStudioActivity extends Activity {
         form.addView(text("YouTube, TikTok et Instagram : rappel local. X : publication immédiate, sans date ni programmation.",12,MUTED,false));
         android.widget.ScrollView scroll=new android.widget.ScrollView(this);
         scroll.addView(form);
-        AlertDialog dialog=new AlertDialog.Builder(this)
+        AlertDialog dialog=new AgentDialog.Builder(this)
             .setTitle(existing!=null&&existing.has("id")?"Modifier le planning":"Nouvelle programmation")
             .setView(scroll).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",null).create();
         dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{

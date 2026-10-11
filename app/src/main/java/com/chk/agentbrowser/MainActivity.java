@@ -116,7 +116,7 @@ public class MainActivity extends Activity {
         pref.edit().putLong("last_attempt",now).apply();
         new UpdateManager(this).check((message,release)->{
             if(isFinishing()||isDestroyed()||release==null)return;
-            new AlertDialog.Builder(this).setTitle("Nouvelle version "+release.version)
+            new AgentDialog.Builder(this).setTitle("Nouvelle version "+release.version)
                 .setMessage("Télécharger une mise à jour officielle depuis GitHub ?")
                 .setNegativeButton("Plus tard",null)
                 .setPositiveButton("Télécharger",(d,w)->{
@@ -188,7 +188,7 @@ public class MainActivity extends Activity {
                 if(v==current){if(home!=null)home.page(url);if(!address.hasFocus())address.setText(home!=null&&home.isHome(url)?"google.com":url);refreshTabs();saveTabs();}
             }
         });
-        web.setOnLongClickListener(v->{WebView.HitTestResult hit=web.getHitTestResult();if(hit==null||hit.getExtra()==null||!(hit.getType()==WebView.HitTestResult.SRC_ANCHOR_TYPE||hit.getType()==WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE))return false;String link=hit.getExtra();if(!link.startsWith("https://"))return false;new AlertDialog.Builder(this).setTitle("Lien").setMessage(link).setItems(new String[]{"Ouvrir dans un nouvel onglet","Copier le lien","Partager"},(d,i)->{if(i==0)newTab(link);else if(i==1){((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Lien",link));toast("Lien copié");}else startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,link),"Partager le lien"));}).show();return true;});
+        web.setOnLongClickListener(v->{WebView.HitTestResult hit=web.getHitTestResult();if(hit==null||hit.getExtra()==null||!(hit.getType()==WebView.HitTestResult.SRC_ANCHOR_TYPE||hit.getType()==WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE))return false;String link=hit.getExtra();if(!link.startsWith("https://"))return false;new AgentDialog.Builder(this).setTitle("Lien").setMessage(link).setItems(new String[]{"Ouvrir dans un nouvel onglet","Copier le lien","Partager"},(d,i)->{if(i==0)newTab(link);else if(i==1){((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Lien",link));toast("Lien copié");}else startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,link),"Partager le lien"));}).show();return true;});
         web.setWebChromeClient(new WebChromeClient(){
             @Override public void onShowCustomView(View view,CustomViewCallback callback){
                 if(fullScreenVideo!=null){callback.onCustomViewHidden();return;}
@@ -229,7 +229,7 @@ public class MainActivity extends Activity {
         });
         web.setDownloadListener((url,userAgent,contentDisposition,mimeType,length)->{
             if(!url.startsWith("https://")){toast("Téléchargement HTTPS uniquement");return;}
-            new AlertDialog.Builder(this).setTitle("Télécharger ce fichier ?")
+            new AgentDialog.Builder(this).setTitle("Télécharger ce fichier ?")
                 .setMessage("Enregistrer dans les téléchargements de l'application ?")
                 .setNegativeButton("Annuler",null)
                 .setPositiveButton("Télécharger",(d,w)->startDownload(url,userAgent,contentDisposition,mimeType)).show();
@@ -307,7 +307,7 @@ public class MainActivity extends Activity {
 
     }
     private void library(){
-        new AlertDialog.Builder(this).setTitle("Bibliothèque")
+        new AgentDialog.Builder(this).setTitle("Bibliothèque")
         .setItems(new String[]{"Favoris","Historique"},(d,i)->showList(i==0?"favorites":"history"))
         .setNegativeButton("Fermer",null).show();
     }
@@ -316,20 +316,20 @@ public class MainActivity extends Activity {
         if(rows.length()==0){toast("Aucun élément");return;}
         String[] names=new String[rows.length()];
         for(int i=0;i<rows.length();i++){JSONObject o=rows.optJSONObject(i);names[i]=o==null?"":o.optString("title",o.optString("url"));}
-        new AlertDialog.Builder(this).setTitle(key.equals("favorites")?"Favoris":"Historique")
+        new AgentDialog.Builder(this).setTitle(key.equals("favorites")?"Favoris":"Historique")
         .setItems(names,(d,i)->{JSONObject o=rows.optJSONObject(i);if(o!=null&&current!=null)current.loadUrl(o.optString("url"));})
         .setNegativeButton("Fermer",null).show();
     }
     private void readPage(){
         if(current==null)return;
-        new AlertDialog.Builder(this).setTitle("Lire la page")
+        new AgentDialog.Builder(this).setTitle("Lire la page")
         .setMessage("Extraire le texte de la page sur ce téléphone ? Aucun texte ne sera envoyé automatiquement.")
         .setNegativeButton("Annuler",null).setPositiveButton("Lire",(d,w)->
             current.evaluateJavascript("(document.body && document.body.innerText || '').slice(0,12000)",result->{
                 String content;
                 try{content=new JSONArray("["+result+"]").getString(0);}catch(Exception e){content="Lecture impossible";}
                 final String copied=content;
-                new AlertDialog.Builder(this).setTitle("Texte de la page").setMessage(content.isEmpty()?"Page vide":content)
+                new AgentDialog.Builder(this).setTitle("Texte de la page").setMessage(content.isEmpty()?"Page vide":content)
                     .setPositiveButton("Copier",(dialog,which)->{
                         ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE))
                         .setPrimaryClip(ClipData.newPlainText("Texte de page",copied));toast("Texte copié");
@@ -379,6 +379,7 @@ public class MainActivity extends Activity {
         final JSONObject parameters=args;
         String extra="";
         if(WorkspaceCommands.handles(action))extra="Utiliser l’espace Fichiers et Notes : "+action;
+        else if(KeyboardCommands.handles(action,args))extra="Utiliser le clavier agent pour inspecter ou remplir les champs";
         else switch(action){
             case "read_page":extra="Lire le texte actuellement visible dans la page";break;
             case "tabs":extra="Lister les onglets et leurs adresses";break;
@@ -410,7 +411,7 @@ public class MainActivity extends Activity {
             return;
         }
         String page=current.getUrl()==null?"Aucune page":current.getUrl();
-        new AlertDialog.Builder(this)
+        new AgentDialog.Builder(this)
             .setTitle("Autoriser l'action MCP ?")
             .setMessage(extra+"\n\nPage actuelle : "+page+
                 "\n\nVérifie l'action avant de l'autoriser. Aucun clic ou saisie n'est automatique.")
@@ -430,6 +431,11 @@ public class MainActivity extends Activity {
             public void finish(boolean ok,String result){transferHandler.post(()->{if(!isDestroyed())finishAgentAction(ok);});originalCallback.finish(ok,result);}
         };
         if(!agentClient.isEnabled()){callback.finish(false,"MCP désactivé par le propriétaire.");return;}
+        if(KeyboardCommands.handles(action,args)){
+            boolean nativeTarget;try{String target=KeyboardCommands.parameters(action,args).optString("target","web");nativeTarget=target.equals("native")||(target.equals("auto")&&NativeKeyboard.prefersNative());}catch(Exception e){callback.finish(false,e.getMessage());return;}
+            if(!nativeTarget){showSpace("browser");if(home!=null)home.revealWeb();showAgentAction("keyboard");}
+            KeyboardCommands.run(this,current,action,args,callback);return;
+        }
         if(WorkspaceCommands.handles(action)){
             WorkspaceCommands.run(this,action,args,new AgentClient.ResultCallback(){
                 public boolean isActive(){return callback.isActive();}
@@ -681,8 +687,8 @@ public class MainActivity extends Activity {
     private int agentActionGeneration;
     private void showAgentAction(String action){
         agentActionGeneration++;TextView banner=findViewById(R.id.agent_action);String label;
-        switch(action){case "open_url":label="Navigation";break;case "click":case "click_verified":label="Clic sur la page";break;case "type":label="Saisie dans un formulaire";break;case "scroll":label="Défilement";break;case "read_page":label="Lecture de la page";break;case "upload_file":label="Importation du fichier";break;case "download_file":label="Téléchargement";break;default:label="Vérification de la page";}
-        banner.setText("●  ChatGPT · "+label);banner.setVisibility(View.VISIBLE);banner.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Navigation visible").setMessage("Les actions du connecteur s’exécutent dans cet onglet. Tu peux arrêter le connecteur depuis Réglages.").setNegativeButton("Fermer",null).setPositiveButton("Réglages",(d,n)->startActivity(new Intent(this,SettingsActivity.class))).show());
+        switch(action){case "open_url":label="Navigation";break;case "click":case "click_verified":label="Clic sur la page";break;case "type":case "keyboard":label="Saisie dans un formulaire";break;case "scroll":label="Défilement";break;case "read_page":label="Lecture de la page";break;case "upload_file":label="Importation du fichier";break;case "download_file":label="Téléchargement";break;default:label="Vérification de la page";}
+        banner.setText("●  ChatGPT · "+label);banner.setVisibility(View.VISIBLE);banner.setOnClickListener(v->new AgentDialog.Builder(this).setTitle("Navigation visible").setMessage("Les actions du connecteur s’exécutent dans cet onglet. Tu peux arrêter le connecteur depuis Réglages.").setNegativeButton("Fermer",null).setPositiveButton("Réglages",(d,n)->startActivity(new Intent(this,SettingsActivity.class))).show());
     }
     private void finishAgentAction(boolean ok){int ticket=agentActionGeneration;TextView banner=findViewById(R.id.agent_action);if(banner.getVisibility()!=View.VISIBLE)return;banner.setText(ok?"✓  ChatGPT · action effectuée":"!  ChatGPT · action à vérifier");transferHandler.postDelayed(()->{if(ticket==agentActionGeneration)banner.setVisibility(View.GONE);},2200);}
     private void showSpace(String space){
@@ -704,16 +710,16 @@ public class MainActivity extends Activity {
         activeSpace=space;updatePageError();
     }
     private void browserMenu(){
-        if(!activeSpace.equals("browser")){new AlertDialog.Builder(this).setTitle("Espace de travail").setItems(new String[]{"Réglages","Revenir au navigateur"},(d,i)->{if(i==0)startActivity(new Intent(this,SettingsActivity.class));else showSpace("browser");}).show();return;}
-        new AlertDialog.Builder(this).setTitle("Actions de la page").setItems(new String[]{"Actualiser","Page suivante",store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris","Favoris et historique","Rechercher dans la page","Partager le lien","Enregistrer la page dans Notes","Lire / copier le texte","Taille du texte","Mode lecture plein écran","Réglages","Nouvel onglet"},(d,i)->{
+        if(!activeSpace.equals("browser")){new AgentDialog.Builder(this).setTitle("Espace de travail").setItems(new String[]{"Réglages","Revenir au navigateur"},(d,i)->{if(i==0)startActivity(new Intent(this,SettingsActivity.class));else showSpace("browser");}).show();return;}
+        new AgentDialog.Builder(this).setTitle("Actions de la page").setItems(new String[]{"Actualiser","Page suivante",store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris","Favoris et historique","Rechercher dans la page","Partager le lien","Enregistrer la page dans Notes","Lire / copier le texte","Taille du texte","Mode lecture plein écran","Réglages","Nouvel onglet"},(d,i)->{
             switch(i){case 0:if(current!=null)current.reload();break;case 1:if(current!=null&&current.canGoForward())current.goForward();break;case 2:toggleBookmark();break;case 3:library();break;case 4:findInPage();break;
                 case 5:if(current!=null)startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,current.getUrl()),"Partager la page"));break;
                 case 6:savePageNote();break;case 7:readPage();break;case 8:textSize();break;case 9:setFocusMode(true);break;case 10:startActivity(new Intent(this,SettingsActivity.class));break;case 11:newTab(HOME);break;}
         }).setNegativeButton("Fermer",null).show();
     }
-    private void textSize(){new AlertDialog.Builder(this).setTitle("Taille du texte des pages").setItems(new String[]{"100 % · Standard","115 % · Confort","130 % · Grand","150 % · Très grand"},(d,i)->{int zoom=new int[]{100,115,130,150}[i];getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putInt("text_zoom",zoom).apply();for(WebView web:tabs)web.getSettings().setTextZoom(zoom);}).show();}
+    private void textSize(){new AgentDialog.Builder(this).setTitle("Taille du texte des pages").setItems(new String[]{"100 % · Standard","115 % · Confort","130 % · Grand","150 % · Très grand"},(d,i)->{int zoom=new int[]{100,115,130,150}[i];getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putInt("text_zoom",zoom).apply();for(WebView web:tabs)web.getSettings().setTextZoom(zoom);}).show();}
     private void findInPage(){if(current==null)return;WebView web=current;EditText input=new EditText(this);input.setSingleLine(true);input.setHint("Mot à rechercher");LinearLayout box=MobileUi.column(this);box.setPadding(dp(16),dp(8),dp(16),dp(8));box.addView(input);TextView count=MobileUi.text(this,"Saisis un mot",14,MobileUi.MUTED);box.addView(count);web.setFindListener((index,total,done)->{if(done)count.setText(total==0?"Aucun résultat":(index+1)+" / "+total);});input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int aft){}public void onTextChanged(CharSequence s,int st,int b,int c){web.findAllAsync(s.toString());}public void afterTextChanged(android.text.Editable e){}});
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Rechercher dans la page").setView(box).setPositiveButton("Suivant",null).setNeutralButton("Précédent",null).setNegativeButton("Fermer",null).create();dialog.setOnDismissListener(d->{web.clearMatches();web.setFindListener(null);});dialog.setOnShowListener(d->{dialog.getButton(-1).setOnClickListener(v->web.findNext(true));dialog.getButton(-3).setOnClickListener(v->web.findNext(false));});dialog.show();
+        AlertDialog dialog=new AgentDialog.Builder(this).setTitle("Rechercher dans la page").setView(box).setPositiveButton("Suivant",null).setNeutralButton("Précédent",null).setNegativeButton("Fermer",null).create();dialog.setOnDismissListener(d->{web.clearMatches();web.setFindListener(null);});dialog.setOnShowListener(d->{dialog.getButton(-1).setOnClickListener(v->web.findNext(true));dialog.getButton(-3).setOnClickListener(v->web.findNext(false));});dialog.show();
     }
     private void setFocusMode(boolean enabled){focusMode=enabled;findViewById(R.id.space_nav).setVisibility(enabled?View.GONE:View.VISIBLE);findViewById(R.id.address_bar).setVisibility(enabled?View.GONE:View.VISIBLE);if(enabled)toast("Lecture agrandie · Retour pour retrouver les commandes");}
     private void savePageNote(){if(current==null)return;WebView web=current;String title=web.getTitle(),url=web.getUrl();web.evaluateJavascript("(document.body && document.body.innerText || '').slice(0,12000)",raw->{if(isFinishing())return;startActivity(new Intent(this,NoteEditorActivity.class).putExtra("title",title).putExtra("body",fromJavascript(raw)).putExtra("source",url));});}

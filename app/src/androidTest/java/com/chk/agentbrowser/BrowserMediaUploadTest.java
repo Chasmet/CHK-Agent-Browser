@@ -36,25 +36,13 @@ public final class BrowserMediaUploadTest {
         try {
             Field f=MainActivity.class.getDeclaredField("current");f.setAccessible(true);
             WebView web=(WebView)f.get(activity);
-            String html="<html><body><input id='media' type='file' accept='image/png'>"
+            String html="<html><body data-page='workspace-upload-fixture'><input id='media' type='file' accept='image/png'>"
                 +"<span id='selected'>none</span>"
                 +"<script>document.getElementById('media').addEventListener('change',"
                 +"function(e){document.getElementById('selected').textContent="
                 +"e.target.files[0]&&e.target.files[0].name||'none';});</script></body></html>";
-            instrumentation.runOnMainSync(()->web.loadDataWithBaseURL(
-                "https://example.com/agent-test",html,"text/html","UTF-8","https://example.com/agent-test"));
-            boolean ready=false;
-            for(int attempt=0;attempt<60;attempt++){
-                CountDownLatch latch=new CountDownLatch(1);AtomicReference<String> state=new AtomicReference<>("");
-                instrumentation.runOnMainSync(()->web.evaluateJavascript(
-                    "!!document.querySelector('#media')",value->{state.set(value);latch.countDown();}));
-                assertTrue(latch.await(5,TimeUnit.SECONDS));
-                if("true".equals(state.get())){ready=true;break;}
-                Thread.sleep(150);
-            }
-            assertTrue("File input should be present",ready);
-            // Match a real HTTPS page: WebView's history URL and document URL agree.
-            // A null history URL creates about:blank and intentionally fails the destination guard.
+            WebFixture.load(instrumentation,web,"https://example.com/agent-test",html,"!!document.querySelector('#media')");
+            // The real HTTPS navigation exercises the destination guard, without network timing.
             instrumentation.runOnMainSync(()->assertEquals("https://example.com/agent-test",web.getUrl()));
             CountDownLatch uploaded=new CountDownLatch(1);
             AtomicBoolean success=new AtomicBoolean();
@@ -123,12 +111,7 @@ public final class BrowserMediaUploadTest {
 
     private static void loadPage(Instrumentation instrumentation,WebView web,String url,String marker)throws Exception{
         String html="<html><body data-page='"+marker+"'><input id='media' type='file'></body></html>";
-        instrumentation.runOnMainSync(()->web.loadDataWithBaseURL(url,html,"text/html","UTF-8",url));
-        for(int attempt=0;attempt<60;attempt++){
-            if("true".equals(evaluate(instrumentation,web,"!!document.body&&document.body.getAttribute('data-page')==='"+marker+"'")))return;
-            Thread.sleep(100);
-        }
-        fail("Replacement page did not finish loading");
+        WebFixture.load(instrumentation,web,url,html,"!!document.body&&document.body.getAttribute('data-page')==='"+marker+"'");
     }
 
     private static String evaluate(Instrumentation instrumentation,WebView web,String script)throws Exception{

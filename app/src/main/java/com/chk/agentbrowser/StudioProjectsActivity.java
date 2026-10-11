@@ -54,7 +54,7 @@ public final class StudioProjectsActivity extends Activity {
         find.setGravity(Gravity.CENTER);header.addView(find,new LinearLayout.LayoutParams(dp(48),-1));
         TextView more=label("⋮",26,INK,false);more.setGravity(Gravity.CENTER);
         header.addView(more,new LinearLayout.LayoutParams(dp(42),-1));
-        more.setOnClickListener(v->new AlertDialog.Builder(this).setItems(
+        more.setOnClickListener(v->new AgentDialog.Builder(this).setItems(
             new String[]{"Actualiser","Ouvrir le montage actif","Restaurer un projet supprimé"},
             (d,i)->{if(i==0)refresh();else if(i==1)startEditor();else{tab=2;renderTabs();render();}}).show());
         find.setOnClickListener(v->{search.setVisibility(search.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE);
@@ -79,7 +79,7 @@ public final class StudioProjectsActivity extends Activity {
         count.setGravity(Gravity.CENTER_VERTICAL);countBar.addView(count,new LinearLayout.LayoutParams(0,-1,1));
         TextView sort=label("Plus récents ▾",12,SOFT,false);
         sort.setGravity(Gravity.CENTER_VERTICAL);countBar.addView(sort);
-        sort.setOnClickListener(v->new AlertDialog.Builder(this).setItems(new String[]{"Plus récents","Plus anciens"},(d,n)->{
+        sort.setOnClickListener(v->new AgentDialog.Builder(this).setItems(new String[]{"Plus récents","Plus anciens"},(d,n)->{
             newestFirst=n==0;visibleLimit=40;render();}).show());
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
@@ -205,17 +205,17 @@ public final class StudioProjectsActivity extends Activity {
     private void projectOptions(JSONObject item,boolean deleted){
         String id=item.optString("id");
         if(deleted){
-            new AlertDialog.Builder(this).setTitle(item.optString("name"))
+            new AgentDialog.Builder(this).setTitle(item.optString("name"))
                 .setItems(new String[]{"Restaurer le projet"},(d,n)->command("video_editor_project_restore",new JSONObjectSafe("id",id),false))
                 .show();return;
         }
-        new AlertDialog.Builder(this).setTitle(item.optString("name")).setItems(
+        new AgentDialog.Builder(this).setTitle(item.optString("name")).setItems(
             new String[]{"Ouvrir","Renommer","Dupliquer","Mettre à la corbeille"},
             (d,n)->{switch(n){
                 case 0:open(id);break;
                 case 1:rename(item);break;
                 case 2:command("video_editor_project_duplicate",new JSONObjectSafe("id",id),true);break;
-                case 3:new AlertDialog.Builder(this).setTitle("Mettre à la corbeille ?")
+                case 3:new AgentDialog.Builder(this).setTitle("Mettre à la corbeille ?")
                     .setMessage("Le projet pourra être restauré. Les vidéos et les exports restent intacts.")
                     .setNegativeButton("Annuler",null).setPositiveButton("Mettre à la corbeille",
                         (a,b)->command("video_editor_project_trash",new JSONObjectSafe("id",id),false)).show();
@@ -225,7 +225,7 @@ public final class StudioProjectsActivity extends Activity {
     private void rename(JSONObject item){
         EditText input=new EditText(this);input.setSingleLine(true);
         input.setText(item.optString("name"));input.selectAll();
-        new AlertDialog.Builder(this).setTitle("Renommer le projet").setView(input)
+        new AgentDialog.Builder(this).setTitle("Renommer le projet").setView(input)
             .setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,n)->{
                 try{JSONObject args=new JSONObjectSafe("id",item.optString("id"));
                     args.put("name",input.getText().toString().trim());

@@ -87,7 +87,7 @@ public final class WorkspaceMediaChooser {
             }
             String[] labels=actions.toArray(new String[0]);
             String title="Fichiers CHK"+(location.isEmpty()?"":" / "+location);
-            new AlertDialog.Builder(activity).setTitle(title)
+            new AgentDialog.Builder(activity).setTitle(title)
                 .setItems(labels,(dialog,which)->{
                     String path=paths.get(which);
                     if("..".equals(path)){folder(parent(location));return;}
@@ -113,7 +113,7 @@ public final class WorkspaceMediaChooser {
         return String.format(Locale.FRANCE,"%.1f Mo",value/1048576.0);
     }
     private void error(String location){
-        new AlertDialog.Builder(activity).setTitle("Fichiers CHK")
+        new AgentDialog.Builder(activity).setTitle("Fichiers CHK")
             .setMessage("Ce dossier est momentanément inaccessible.")
             .setPositiveButton("Réessayer",(dialog,which)->folder(location))
             .setNeutralButton("Fichiers Android",(dialog,which)->{
