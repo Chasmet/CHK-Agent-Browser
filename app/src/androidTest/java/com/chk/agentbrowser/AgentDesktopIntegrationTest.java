@@ -62,10 +62,11 @@ public final class AgentDesktopIntegrationTest {
         JSONObject before=state("native");assertTrue(call(clickAt(before,"Cible tactile","tap")).json().getBoolean("gesture_sent"));assertEquals(1,clicks.get());
         assertTrue(call(clickAt(before,"Cible tactile","double_tap")).ok);assertEquals(3,clicks.get());
         assertTrue(call(clickAt(before,"Cible tactile","long_press")).ok);assertEquals(1,longs.get());assertEquals(3,clicks.get());
+        assertTrue(call(new JSONObject().put("tool","pointer").put("target","native").put("gesture","back").put("expected_context",state("native").getString("context"))).ok);main(()->assertFalse(dialog.isShowing()));
     }
     @Test public void dragDeliversDownMovesAndUpToNativeCanvas()throws Exception{
         AtomicInteger down=new AtomicInteger(),moves=new AtomicInteger(),up=new AtomicInteger();AtomicReference<Float> end=new AtomicReference<>(0f);
-        main(()->{View canvas=new View(activity);canvas.setContentDescription("Surface native");canvas.setBackgroundColor(0xff205080);canvas.setOnTouchListener((v,e)->{if(e.getAction()==0)down.incrementAndGet();if(e.getAction()==2)moves.incrementAndGet();if(e.getAction()==1){up.incrementAndGet();end.set(e.getX());}return true;});activity.setContentView(canvas);});measured();
+        main(()->{View canvas=new View(activity);canvas.setContentDescription("Surface native");canvas.setBackgroundColor(0xff205080);canvas.setOnTouchListener((v,e)->{if(e.getAction()==0)down.incrementAndGet();if(e.getAction()==2)moves.incrementAndGet();if(e.getAction()==1){up.incrementAndGet();end.set(e.getX());}return true;});LinearLayout box=new LinearLayout(activity);box.addView(canvas,new LinearLayout.LayoutParams(-1,400));dialog=new AgentDialog.Builder(activity).setTitle("Surface tactile").setView(box).create();dialog.show();});measured();
         JSONObject before=state("native"),b=bounds(before,"Surface native");float x=b.getInt("x")+20,y=b.getInt("y")+30,ex=b.getInt("x")+b.getInt("width")-30;
         Reply r=call(pointer(before,"drag",x,y).put("end_x",ex).put("end_y",y+100).put("duration_ms",350));assertTrue(r.text,r.ok);assertEquals(1,down.get());assertTrue(moves.get()>5);assertEquals(1,up.get());assertTrue(end.get()>100);
     }
@@ -121,6 +122,18 @@ public final class AgentDesktopIntegrationTest {
         assertTrue(call(new JSONObject().put("tool","terminal").put("operation","validate").put("id",id).put("script",script)).json().getBoolean("dry_run"));assertTrue(store.file(folder+"/image.jpg").exists());
         assertTrue(call(new JSONObject().put("tool","terminal").put("operation","run").put("id",id).put("script",script)).ok);assertEquals("completed",awaitTask(id).getString("state"));assertTrue(store.file(folder+"/photo-0001.jpg").exists());String json=store.readText(folder+"/data.json.pretty.json",0).getString("text");assertTrue(json.contains("\n"));assertEquals("idée",new JSONObject(json).getString("name"));
         JSONObject forbidden=new JSONObject().put("version",1).put("commands",new JSONArray().put(new JSONObject().put("command","shell").put("text","id")));assertFalse(call(new JSONObject().put("tool","terminal").put("id","blocked").put("script",forbidden)).ok);
+    }
+    @Test public void interruptedFileEffectIsNotRepeatedAndOtherItemsContinue()throws Exception{
+        WorkspaceStore store=new WorkspaceStore(context);store.writeText(folder+"/a.txt","first",false);store.writeText(folder+"/b.txt","second",false);String id="interrupted-"+folder;
+        assertTrue(call(files("plan",id).put("paths",new JSONArray().put(folder+"/a.txt").put(folder+"/b.txt")).put("prefix","safe-")).ok);
+        java.io.File journal=AgentFiles.journal(context,"files",id);JSONObject saved=AgentFiles.read(journal);saved.getJSONArray("items").getJSONObject(0).put("state","running");AgentFiles.save(journal,saved);
+        store.move(folder+"/a.txt",folder+"/safe-0001.txt");JSONObject result=call(files("run",id)).json();assertEquals(1,result.getInt("uncertain"));assertEquals(1,result.getInt("succeeded"));
+        assertEquals("first",store.readText(folder+"/safe-0001.txt",0).getString("text"));assertEquals("second",store.readText(folder+"/safe-0002.txt",0).getString("text"));assertEquals(1,call(files("run",id)).json().getInt("uncertain"));
+    }
+    @Test public void javascriptConfirmationIsVisibleAndClickableAsChkDialog()throws Exception{
+        WebFixture.load(instrumentation,web,"https://desktop.test/dialog","<script>window.confirmed=false;</script>","typeof confirmed==='boolean'");
+        js("setTimeout(()=>{window.confirmed=confirm('Confirmation native de test')},40);true");Thread.sleep(180);JSONObject before=state("native");assertTrue(before.toString().contains("Confirmation native de test"));
+        assertTrue(call(clickAt(before,"Confirmer","tap")).ok);assertEquals("true",js("confirmed"));
     }
     @Test public void externalAccessRequiresAnActualAndroidGrantAndPathContainment()throws Exception{
         assertFalse(call(new JSONObject().put("tool","files").put("operation","external_list").put("root_id","0000000000000000")).ok);

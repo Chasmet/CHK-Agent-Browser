@@ -190,6 +190,19 @@ public class MainActivity extends Activity {
         });
         web.setOnLongClickListener(v->{WebView.HitTestResult hit=web.getHitTestResult();if(hit==null||hit.getExtra()==null||!(hit.getType()==WebView.HitTestResult.SRC_ANCHOR_TYPE||hit.getType()==WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE))return false;String link=hit.getExtra();if(!link.startsWith("https://"))return false;new AgentDialog.Builder(this).setTitle("Lien").setMessage(link).setItems(new String[]{"Ouvrir dans un nouvel onglet","Copier le lien","Partager"},(d,i)->{if(i==0)newTab(link);else if(i==1){((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Lien",link));toast("Lien copié");}else startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,link),"Partager le lien"));}).show();return true;});
         web.setWebChromeClient(new WebChromeClient(){
+            @Override public boolean onJsAlert(WebView web,String url,String message,android.webkit.JsResult result){
+                new AgentDialog.Builder(MainActivity.this).setTitle("Message du site").setMessage(message)
+                    .setPositiveButton("OK",(d,w)->result.confirm()).setOnCancelListener(d->result.cancel()).show();return true;
+            }
+            @Override public boolean onJsConfirm(WebView web,String url,String message,android.webkit.JsResult result){
+                new AgentDialog.Builder(MainActivity.this).setTitle("Confirmation du site").setMessage(message)
+                    .setPositiveButton("Confirmer",(d,w)->result.confirm()).setNegativeButton("Annuler",(d,w)->result.cancel()).setOnCancelListener(d->result.cancel()).show();return true;
+            }
+            @Override public boolean onJsPrompt(WebView web,String url,String message,String value,android.webkit.JsPromptResult result){
+                EditText input=new EditText(MainActivity.this);input.setText(value);input.setHint(message);
+                new AgentDialog.Builder(MainActivity.this).setTitle("Saisie du site").setMessage(message).setView(input)
+                    .setPositiveButton("Confirmer",(d,w)->result.confirm(input.getText().toString())).setNegativeButton("Annuler",(d,w)->result.cancel()).setOnCancelListener(d->result.cancel()).show();return true;
+            }
             @Override public void onShowCustomView(View view,CustomViewCallback callback){
                 if(fullScreenVideo!=null){callback.onCustomViewHidden();return;}
                 fullScreenVideo=view;fullScreenCallback=callback;((ViewGroup)getWindow().getDecorView()).addView(view,new ViewGroup.LayoutParams(-1,-1));getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);

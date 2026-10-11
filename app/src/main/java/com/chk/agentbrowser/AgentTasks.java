@@ -107,9 +107,9 @@ final class AgentTasks {
         void receipt(int index,boolean verify,boolean ok,String text){
             JSONObject state=null;try{
                 state=AgentFiles.read(file);if(state.optString("state").equals("cancelled")){running.remove(id);return;}
-                JSONObject row=state.getJSONArray("steps").getJSONObject(index);JSONObject result;
-                try{result=new JSONObject(text);}catch(Exception e){result=new JSONObject().put("message",text==null?"":text);}
-                ok=ok&&result.optBoolean("ok",true);
+                JSONObject row=state.getJSONArray("steps").getJSONObject(index);Object result;
+                try{result=new org.json.JSONTokener(text).nextValue();}catch(Exception e){result=new JSONObject().put("message",text==null?"":text);}
+                ok=ok&&(!(result instanceof JSONObject)||((JSONObject)result).optBoolean("ok",true));
                 if(verify&&ok){JSONObject rule=row.getJSONObject("verify"),expect=rule.optJSONObject("expect"),contains=rule.optJSONObject("contains");
                     if(expect!=null){Iterator<String> keys=expect.keys();while(keys.hasNext()){String key=keys.next();Object actual=at(result,key),wanted=resolve(expect.get(key),state);if(!String.valueOf(actual).equals(String.valueOf(wanted)))ok=false;}}
                     if(contains!=null){Iterator<String> keys=contains.keys();while(keys.hasNext()){String key=keys.next();if(!String.valueOf(at(result,key)).contains(String.valueOf(resolve(contains.get(key),state))))ok=false;}}
