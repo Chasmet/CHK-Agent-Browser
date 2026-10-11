@@ -1,3 +1,11 @@
+NOUVEAU — Fichiers CHK organisés par catégories.
+
+- Accueil « Mes fichiers » épuré : uniquement les six icônes Images, Vidéos, Audio, Documents, Téléchargements et Récents ; aucun dossier sous les icônes.
+- Dossiers visibles et accessibles à l'intérieur de chaque catégorie, avec navigation et retour Accueil.
+- Bouton Créer / Importer contextuel ; nouveaux dossiers classés automatiquement sous Categories/Images, Videos, Audio, Documents.
+- Dossiers et MP4 historiques inchangés sur disque ; toujours accessibles depuis leurs chemins MCP et depuis les catégories, sans migration destructrice.
+- Recherche, tri, import multiple, fichiers et corbeille conservés.
+
 ACTUALISATION CUT STUDIO — X sans programmation : fiche prête à publier immédiatement, sans date/heure ni alarme Android. L'import MCP accepte X sans horodatage. Une publication ne passe à « Publié » qu'après confirmation explicite. Les rappels YouTube/TikTok/Instagram restent locaux et ne sont pas des programmations certifiées sur les réseaux.
 
 NOUVEAU — Cut Vidéo directement dans CHK Agent Browser.

@@ -32,8 +32,8 @@ public final class WorkspacePanel {
     private final android.os.Handler handler=new android.os.Handler();
     private final Runnable filter=()->{offset=0;refresh();};
     public WorkspacePanel(Activity a,FrameLayout host){this.a=a;this.host=host;}
-    void saveState(android.os.Bundle out){out.putString("workspace_folder",folder);out.putString("workspace_export",exportPath);out.putString("workspace_import",importFolder);out.putString("workspace_category",category);}
-    void restoreState(android.os.Bundle state){if(state==null)return;folder=state.getString("workspace_folder","");exportPath=state.getString("workspace_export","");importFolder=state.getString("workspace_import",folder);category=state.getString("workspace_category","all");}
+    void saveState(android.os.Bundle out){out.putString("workspace_folder",folder);out.putString("workspace_export",exportPath);out.putString("workspace_import",importFolder);out.putString("workspace_import_category",importCategory);out.putString("workspace_category",category);}
+    void restoreState(android.os.Bundle state){if(state==null)return;folder=state.getString("workspace_folder","");exportPath=state.getString("workspace_export","");importFolder=state.getString("workspace_import",folder);importCategory=state.getString("workspace_import_category","all");category=state.getString("workspace_category","all");}
     private int ink(){return space.equals("files")?0xff202124:MobileUi.TEXT;}
     private int muted(){return space.equals("files")?0xff687080:MobileUi.MUTED;}
     private TextView label(String value,int size){return MobileUi.text(a,value,size,ink());}
@@ -55,15 +55,17 @@ public final class WorkspacePanel {
     }
     public void refresh(){
         if(list==null||a.isFinishing())return;final int ticket=++generation;String mode=space,p=folder,q=search.getText().toString();int page=offset;
-        WorkspaceCommands.IO.execute(()->{try{WorkspaceStore s=new WorkspaceStore(a);JSONObject files=mode.equals("files")?WorkspaceCatalog.query(a,p,category,q,sort,page):null;JSONArray notes=files==null?s.notes(q,false,page):null;
+        if(mode.equals("files")&&p.isEmpty()&&category.equals("all")&&q.isEmpty()&&!selectMode){
+            list.removeAllViews();location.setText("Mes fichiers");dashboard();return;
+        }
+        WorkspaceCommands.IO.execute(()->{try{WorkspaceStore s=new WorkspaceStore(a);JSONObject files=mode.equals("files")?WorkspaceCategoryView.query(a,p,category,q,sort,page):null;JSONArray notes=files==null?s.notes(q,false,page):null;
             WorkspaceCommands.UI.post(()->{if(a.isFinishing()||ticket!=generation)return;try{list.removeAllViews();
                 if(files!=null){location.setText(category.equals("all")?(p.isEmpty()?"Mes fichiers":p):categoryName(category));
                     gridRow=null;gridColumn=0;
                     if(selectMode)selectionBar();
-                    if(p.isEmpty()&&category.equals("all")&&q.isEmpty()&&!selectMode&&page==0)dashboard();
                     breadcrumbs();
                     JSONArray rows=files.getJSONArray("items");for(int i=0;i<rows.length();i++)fileRow(rows.getJSONObject(i));if(grid&&gridRow!=null&&gridColumn<3){for(int filler=gridColumn;filler<3;filler++)gridRow.addView(new android.view.View(a),new LinearLayout.LayoutParams(0,1,1));}if(files.optBoolean("truncated"))empty("Affichage limité aux 5 000 premiers éléments analysés.");
-                    if(rows.length()==0)empty(q.isEmpty()?"Ce dossier est prêt pour tes fichiers.\nAppuie sur Créer / Importer pour ajouter du contenu.":"Aucun résultat dans ce dossier.");
+                    if(rows.length()==0)empty(q.isEmpty()?"Aucun élément ici. Appuie sur Créer / Importer pour ajouter un dossier ou un fichier.":"Aucun résultat dans cette catégorie.");
                     int next=files.getInt("next_offset");pager(next);
                 }else{for(int i=0;i<notes.length();i++)noteRow(notes.getJSONObject(i));if(notes.length()==0)empty("Une idée à garder ? Crée ta première note.");pager(notes.length()==50?page+50:-1);}
             }catch(Exception e){empty("Affichage impossible");}});
@@ -75,15 +77,16 @@ public final class WorkspacePanel {
     private void breadcrumbs(){
         LinearLayout line=new LinearLayout(a);line.setGravity(android.view.Gravity.CENTER_VERTICAL);list.addView(line,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,48)));
         TextView home=label("⌂  Accueil",14);home.setMinHeight(MobileUi.dp(a,48));line.addView(home);home.setOnClickListener(v->{folder="";category="all";offset=0;search.setText("");refresh();});
-        TextView path=label(folder.isEmpty()?(category.equals("all")?"":"› "+categoryName(category)):"› "+folder,13);path.setSingleLine(true);line.addView(path,new LinearLayout.LayoutParams(0,-2,1));path.setOnClickListener(v->{if(folder.contains("/"))folder=folder.substring(0,folder.lastIndexOf('/'));else folder="";category="all";offset=0;refresh();});
+        TextView path=label(folder.isEmpty()?(category.equals("all")?"":"› "+categoryName(category)):
+            "› "+categoryName(category)+" / "+folder.substring(folder.lastIndexOf('/')+1),13);
+        path.setSingleLine(true);line.addView(path,new LinearLayout.LayoutParams(0,-2,1));
+        path.setOnClickListener(v->upFolder());
         TextView toggle=UiIcons.button(a,"",grid?"grid":"sort",0xff2b6fd6);toggle.setContentDescription("Basculer entre grille et liste");line.addView(toggle,new LinearLayout.LayoutParams(MobileUi.dp(a,48),-1));toggle.setOnClickListener(v->{grid=!grid;refresh();});
     }
     private void dashboard(){
-        TextView storage=label("Stockage CHK · fichiers importés",14);storage.setTag("files_storage");storage.setBackground(MobileUi.bg(a,0xfff0f3fa));list.addView(storage,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,54)));storage.setOnClickListener(v->importPicker());int ticket=generation;
-        WorkspaceCommands.IO.execute(()->{try{android.os.StatFs disk=new android.os.StatFs(a.getFilesDir().getPath());String free=android.text.format.Formatter.formatShortFileSize(a,disk.getAvailableBytes());WorkspaceCommands.UI.post(()->{if(ticket==generation)storage.setText("Stockage CHK · fichiers importés\n"+free+" disponibles sur le téléphone");});}catch(Exception ignored){}});
+        // Accueil : les six catégories uniquement, sans dossiers ni liste brute.
         String[] keys={"image","video","audio","document","downloads","recent"};String[] names={"Images","Vidéos","Audio","Documents","Téléchargements","Récents"};String[] icons={"image","video","audio","document","download","history"};int[] colors={0xff16ad4e,0xfffc3856,0xff9c5bdb,0xff2684f4,0xff11b559,0xffff9a1f};
-        LinearLayout row=null;for(int i=0;i<keys.length;i++){if(i%3==0){row=new LinearLayout(a);list.addView(row);}String key=keys[i];TextView cell=UiIcons.button(a,names[i],icons[i],colors[i]);cell.setTextColor(ink());cell.setBackground(MobileUi.bg(a,0xfff2f4f9));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,MobileUi.dp(a,76),1);lp.setMargins(MobileUi.dp(a,3),MobileUi.dp(a,5),MobileUi.dp(a,3),MobileUi.dp(a,5));row.addView(cell,lp);cell.setOnClickListener(v->{if(key.equals("downloads")){downloads();return;}category=key;folder="";offset=0;search.setText("");refresh();});}
-        list.addView(label("Dossiers et fichiers",16));
+        LinearLayout row=null;for(int i=0;i<keys.length;i++){if(i%3==0){row=new LinearLayout(a);list.addView(row);}String key=keys[i];TextView cell=UiIcons.button(a,names[i],icons[i],colors[i]);cell.setTag("files_category_"+key);cell.setTextColor(ink());cell.setBackground(MobileUi.bg(a,0xfff2f4f9));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,MobileUi.dp(a,76),1);lp.setMargins(MobileUi.dp(a,3),MobileUi.dp(a,5),MobileUi.dp(a,3),MobileUi.dp(a,5));row.addView(cell,lp);cell.setOnClickListener(v->{if(key.equals("downloads")){downloads();return;}category=key;folder="";offset=0;search.setText("");refresh();});}
     }
     private void fileRow(JSONObject row)throws Exception{
         String path=row.getString("path"),name=row.getString("name"),mime=row.getString("mime_type");boolean dir=row.getBoolean("directory");
@@ -94,7 +97,7 @@ public final class WorkspacePanel {
         TextView detail=MobileUi.text(a,dir?"Dossier":android.text.format.Formatter.formatShortFileSize(a,row.getLong("size")),11,muted());detail.setPadding(MobileUi.dp(a,tile?1:8),MobileUi.dp(a,2),0,0);info.addView(detail);
         if(tile){if(gridRow==null||gridColumn==3){gridRow=new LinearLayout(a);list.addView(gridRow);gridColumn=0;}LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,MobileUi.dp(a,132),1);lp.setMargins(MobileUi.dp(a,3),MobileUi.dp(a,4),MobileUi.dp(a,3),MobileUi.dp(a,4));gridRow.addView(card,lp);gridColumn++;}
         else{if(gridRow!=null&&gridColumn<3){for(int i=gridColumn;i<3;i++)gridRow.addView(new View(a),new LinearLayout.LayoutParams(0,1,1));}gridRow=null;gridColumn=0;if(dir){TextView next=label("›",24);card.addView(next);}LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,MobileUi.dp(a,62));lp.bottomMargin=MobileUi.dp(a,2);list.addView(card,lp);}
-        card.setOnClickListener(v->{if(selectMode){if(selected.contains(path))selected.remove(path);else selected.add(path);refresh();}else if(dir){folder=path;category="all";offset=0;search.setText("");refresh();}else openFile(path,false);});card.setOnLongClickListener(v->{fileMenu(path);return true;});
+        card.setOnClickListener(v->{if(selectMode){if(selected.contains(path))selected.remove(path);else selected.add(path);refresh();}else if(dir){folder=path;offset=0;search.setText("");refresh();}else openFile(path,false);});card.setOnLongClickListener(v->{fileMenu(path);return true;});
         if(!dir&&(mime.startsWith("image/")||mime.startsWith("video/"))){final int ticket=generation;ThumbnailLoader.load(a,path,0,mime.startsWith("video/"),new ThumbnailLoader.Result(){public boolean current(){return ticket==generation&&!a.isFinishing();}public void ready(android.graphics.Bitmap b){thumb.setImageBitmap(b);}});}
     }
     private void selectionBar(){TextView action=action("✓ "+selected.size()+" sélectionné(s) · actions");list.addView(action);action.setOnClickListener(v->new AlertDialog.Builder(a).setTitle("Sélection").setItems(new String[]{"Copier dans un dossier","Déplacer dans un dossier","Mettre à la corbeille","Terminer la sélection"},(d,n)->{java.util.List<String> paths=new java.util.ArrayList<>(selected);if(n==3){selectMode=false;selected.clear();refresh();}else if(n==2)confirm("Mettre les éléments sélectionnés à la corbeille ?",()->work(()->{WorkspaceStore s=new WorkspaceStore(a);for(String p:paths)s.trash(p);selected.clear();selectMode=false;return paths.size()+" élément(s) dans la corbeille";}));else prompt("Dossier de destination (vide = racine)","",target->work(()->{WorkspaceStore s=new WorkspaceStore(a);int count=0;for(String p:paths){String dest=WorkspacePaths.child(target,p.substring(p.lastIndexOf('/')+1));if(n==0)WorkspaceCatalog.copy(a,p,dest);else s.move(p,dest);count++;}selected.clear();selectMode=false;return count+" élément(s) traité(s)";}));}).show());}
@@ -103,8 +106,54 @@ public final class WorkspacePanel {
         v.setOnLongClickListener(w->{new AlertDialog.Builder(a).setTitle(n.optString("title")).setItems(new String[]{"Ouvrir","Mettre à la corbeille"},(d,i)->{if(i==0)openNote(id);else confirm("Mettre cette note à la corbeille ?",()->work(()->{new WorkspaceStore(a).deleteNote(id,true,n.getInt("revision"));return "Note dans la corbeille";}));}).show();return true;});
     }
     private void openNote(String id){a.startActivity(new Intent(a,NoteEditorActivity.class).putExtra("id",id));}
-    private void createMenu(){new AlertDialog.Builder(a).setTitle("Ajouter dans ce dossier").setItems(new String[]{"Importer depuis le téléphone","Créer un dossier","Créer un document texte"},(d,i)->{if(i==0)importPicker();if(i==1)prompt("Nom du dossier","",name->work(()->{new WorkspaceStore(a).mkdir(WorkspacePaths.child(folder,name));return "Dossier créé";}));if(i==2)prompt("Nom du document","Document.txt",name->work(()->{new WorkspaceStore(a).writeText(WorkspacePaths.child(folder,name),"",false);return "Document créé";}));}).show();}
-    private void options(){new AlertDialog.Builder(a).setTitle("Options").setItems(space.equals("files")?new String[]{"Actualiser","Téléchargements","Corbeille",grid?"Afficher en liste":"Afficher en grille","Trier","Sélectionner plusieurs"}:new String[]{"Actualiser","Corbeille"},(d,i)->{if(i==0)refresh();else if(!space.equals("files"))trash();else if(i==1)downloads();else if(i==2)trash();else if(i==3){grid=!grid;refresh();}else if(i==4)new AlertDialog.Builder(a).setTitle("Trier par").setItems(new String[]{"Nom","Plus récents","Plus volumineux"},(x,n)->{sort=new String[]{"name","date","size"}[n];offset=0;refresh();}).show();else{selectMode=true;selected.clear();refresh();}}).show();}
+    private void chooseCategory(Runnable next){
+        new AlertDialog.Builder(a).setTitle("Dans quelle catégorie ?")
+            .setItems(new String[]{"Images","Vidéos","Audio","Documents"},(d,i)->{
+                category=new String[]{"image","video","audio","document"}[i];
+                folder="";offset=0;search.setText("");refresh();next.run();
+            }).setNegativeButton("Annuler",null).show();
+    }
+    private boolean needsCategory(){
+        return folder.isEmpty()&&!WorkspaceCategoryView.isContainerCategory(category);
+    }
+    private void createMenu(){
+        if(needsCategory()){chooseCategory(this::createMenu);return;}
+        String targetFolder=folder,targetCategory=category;
+        new AlertDialog.Builder(a).setTitle("Ajouter dans "+(folder.isEmpty()?categoryName(category):folder))
+            .setItems(new String[]{"Importer depuis le téléphone","Créer un dossier","Créer un document texte"},
+                (d,i)->{
+                    if(i==0){importPicker();return;}
+                    if(i==1)prompt("Nom du dossier","",name->work(()->{
+                        WorkspaceStore s=new WorkspaceStore(a);
+                        String dest=WorkspaceCategoryView.destination(s,targetCategory,targetFolder);
+                        s.mkdir(WorkspacePaths.child(dest,name));return "Dossier créé dans "+categoryName(targetCategory);
+                    }));
+                    if(i==2)prompt("Nom du document","Document.txt",name->work(()->{
+                        WorkspaceStore s=new WorkspaceStore(a);
+                        String dest=WorkspaceCategoryView.destination(s,targetCategory,targetFolder);
+                        s.writeText(WorkspacePaths.child(dest,name),"",false);return "Document créé";
+                    }));
+                }).show();
+    }
+    private void options(){
+        boolean home=space.equals("files")&&folder.isEmpty()&&"all".equals(category);
+        String[] choices=!space.equals("files")?new String[]{"Actualiser","Corbeille"}:
+            home?new String[]{"Actualiser","Téléchargements","Corbeille"}:
+            new String[]{"Actualiser","Téléchargements","Corbeille",
+                grid?"Afficher en liste":"Afficher en grille","Trier","Sélectionner plusieurs"};
+        new AlertDialog.Builder(a).setTitle("Options").setItems(choices,(d,i)->{
+            if(i==0)refresh();
+            else if(!space.equals("files"))trash();
+            else if(i==1)downloads();
+            else if(i==2)trash();
+            else if(i==3){grid=!grid;refresh();}
+            else if(i==4)new AlertDialog.Builder(a).setTitle("Trier par")
+                .setItems(new String[]{"Nom","Plus récents","Plus volumineux"},(x,n)->{
+                    sort=new String[]{"name","date","size"}[n];offset=0;refresh();
+                }).show();
+            else{selectMode=true;selected.clear();refresh();}
+        }).show();
+    }
     private void fileMenu(String path){boolean directory=false;try{directory=new WorkspaceStore(a).file(path).isDirectory();}catch(Exception ignored){}final boolean dir=directory;new AlertDialog.Builder(a).setTitle(path.substring(path.lastIndexOf('/')+1)).setItems(dir?new String[]{"Renommer","Déplacer","Mettre à la corbeille"}:new String[]{"Ouvrir","Partager","Exporter vers le téléphone","Renommer","Déplacer","Modifier le texte","Mettre à la corbeille","Copier","Monter dans Studio","Informations du média"},(d,i)->{int choice=dir?new int[]{3,4,6}[i]:i;switch(choice){
         case 0:openFile(path,false);break;case 1:openFile(path,true);break;case 2:exportPicker(path);break;
         case 3:prompt("Nouveau nom",path.substring(path.lastIndexOf('/')+1),name->work(()->{String parent=path.contains("/")?path.substring(0,path.lastIndexOf('/')):"";new WorkspaceStore(a).move(path,WorkspacePaths.child(parent,name));return "Élément renommé";}));break;
@@ -116,11 +165,21 @@ public final class WorkspacePanel {
         case 6:confirm("Mettre cet élément à la corbeille ?",()->work(()->{new WorkspaceStore(a).trash(path);return "Élément dans la corbeille";}));break;
     }}).setNegativeButton("Fermer",null).show();}
     private void openFile(String path,boolean share){try{WorkspaceStore s=new WorkspaceStore(a);if(!share&&(s.mime(path).startsWith("image/")||s.mime(path).startsWith("video/")||s.mime(path).startsWith("audio/"))){a.startActivity(new Intent(a,MediaPreviewActivity.class).putExtra("path",path));return;}Uri u=s.uri(path);Intent intent=new Intent(share?Intent.ACTION_SEND:Intent.ACTION_VIEW);if(share){intent.setType(s.mime(path));intent.putExtra(Intent.EXTRA_STREAM,u);}else intent.setDataAndType(u,s.mime(path));intent.setClipData(ClipData.newRawUri("Fichier",u));intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);a.startActivity(Intent.createChooser(intent,share?"Partager le fichier":"Ouvrir le fichier"));}catch(Exception e){toast("Aucune application compatible ou fichier inaccessible");}}
-    private void importPicker(){importFolder=folder;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);try{a.startActivityForResult(i,IMPORT);}catch(Exception e){toast("Sélecteur Android indisponible");}}
+    private String importCategory="all";
+    private void importPicker(){
+        if(needsCategory()){chooseCategory(this::importPicker);return;}
+        importFolder=folder;importCategory=category;
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .setType(folder.isEmpty()&&"video".equals(category)?"video/*":
+                folder.isEmpty()&&"image".equals(category)?"image/*":
+                folder.isEmpty()&&"audio".equals(category)?"audio/*":"*/*")
+            .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+        try{a.startActivityForResult(i,IMPORT);}catch(Exception e){toast("Sélecteur Android indisponible");}
+    }
     private void exportPicker(String path){exportPath=path;try{WorkspaceStore s=new WorkspaceStore(a);Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(s.mime(path)).putExtra(Intent.EXTRA_TITLE,path.substring(path.lastIndexOf('/')+1));a.startActivityForResult(i,EXPORT);}catch(Exception e){toast(e.getMessage());}}
     public boolean result(int request,int result,Intent data){if(request!=IMPORT&&request!=EXPORT)return false;if(result!=Activity.RESULT_OK||data==null)return true;
-        if(request==IMPORT){java.util.List<Uri> uris=new java.util.ArrayList<>();if(data.getClipData()!=null){for(int i=0;i<Math.min(50,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());}else if(data.getData()!=null)uris.add(data.getData());String destination=importFolder;
-            work(()->{WorkspaceStore s=new WorkspaceStore(a);int count=0;java.util.List<String> failures=new java.util.ArrayList<>();
+        if(request==IMPORT){java.util.List<Uri> uris=new java.util.ArrayList<>();if(data.getClipData()!=null){for(int i=0;i<Math.min(50,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());}else if(data.getData()!=null)uris.add(data.getData());String requestedFolder=importFolder,requestedCategory=importCategory;
+            work(()->{WorkspaceStore s=new WorkspaceStore(a);String destination=WorkspaceCategoryView.destination(s,requestedCategory,requestedFolder);int count=0;java.util.List<String> failures=new java.util.ArrayList<>();
                 for(Uri u:uris){try{String name="Fichier-"+System.nanoTime();try(Cursor c=a.getContentResolver().query(u,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())name=c.getString(0);}
                     File parent=WorkspacePaths.resolve(new File(a.getFilesDir(),"workspace"),destination,true);
                     String path=WorkspacePaths.child(destination,FileNames.available(parent,name,null));s.importUri(u,path);count++;
@@ -130,8 +189,49 @@ public final class WorkspacePanel {
     }
     private void editText(String path){WorkspaceCommands.IO.execute(()->{try{JSONObject o=new WorkspaceStore(a).readText(path,0);if(o.getInt("next_offset")!=-1)throw new IOException("Édition locale limitée à 12 000 caractères");String body=o.getString("text");WorkspaceCommands.UI.post(()->{if(a.isFinishing())return;EditText input=new EditText(a);input.setText(body);input.setMinLines(8);input.setMaxLines(14);input.setGravity(android.view.Gravity.TOP);new AlertDialog.Builder(a).setTitle("Modifier "+path).setView(input).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,i)->work(()->{WorkspaceStore s=new WorkspaceStore(a);if(!s.readText(path,0).getString("text").equals(body))throw new IOException("Fichier modifié ailleurs : rouvre-le");s.writeText(path,input.getText().toString(),true);return "Document enregistré";})).show();});}catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}});}
     private void trash(){String mode=space;WorkspaceCommands.IO.execute(()->{try{WorkspaceStore s=new WorkspaceStore(a);JSONArray rows=mode.equals("files")?s.trashList():s.notes("",true,0);String[] names=new String[rows.length()];for(int i=0;i<rows.length();i++)names[i]=rows.getJSONObject(i).optString(mode.equals("files")?"path":"title");WorkspaceCommands.UI.post(()->{if(a.isFinishing())return;if(names.length==0){toast("La corbeille est vide");return;}new AlertDialog.Builder(a).setTitle("Toucher pour restaurer").setItems(names,(d,i)->work(()->{JSONObject row=rows.getJSONObject(i);WorkspaceStore store=new WorkspaceStore(a);if(mode.equals("files"))store.restore(row.getString("id"));else store.deleteNote(row.getString("id"),false,row.getInt("revision"));return "Élément restauré";})).setNegativeButton("Fermer",null).show();});}catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}});}
-    private void downloads(){WorkspaceCommands.IO.execute(()->{File root=a.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);File[] files=root==null?null:root.listFiles();WorkspaceCommands.UI.post(()->{if(a.isFinishing())return;if(files==null||files.length==0){toast("Aucun téléchargement");return;}String[] names=new String[files.length];for(int i=0;i<files.length;i++)names[i]=files[i].getName();String destination=folder;new AlertDialog.Builder(a).setTitle("Importer un téléchargement dans ce dossier").setItems(names,(d,i)->work(()->{WorkspaceStore s=new WorkspaceStore(a);String path=WorkspacePaths.child(destination,names[i]);return s.importDownload(names[i],path)+" importé";})).setNegativeButton("Fermer",null).show();});});}
-    public boolean back(){if(!space.equals("files"))return false;if(selectMode){selectMode=false;selected.clear();refresh();return true;}if(!category.equals("all")){category="all";offset=0;search.setText("");refresh();return true;}if(folder.isEmpty())return false;folder=folder.contains("/")?folder.substring(0,folder.lastIndexOf('/')):"";offset=0;search.setText("");refresh();return true;}
+    private void downloads(){
+        WorkspaceCommands.IO.execute(()->{
+            File root=a.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            File[] files=root==null?null:root.listFiles();
+            WorkspaceCommands.UI.post(()->{
+                if(a.isFinishing())return;
+                if(files==null||files.length==0){toast("Aucun téléchargement");return;}
+                java.util.List<String> names=new java.util.ArrayList<>();
+                for(File file:files)if(file.isFile())names.add(file.getName());
+                if(names.isEmpty()){toast("Aucun téléchargement");return;}
+                new AlertDialog.Builder(a).setTitle("Téléchargements · choisir un fichier")
+                    .setItems(names.toArray(new String[0]),(d,i)->{
+                        String name=names.get(i);
+                        if(needsCategory())chooseCategory(()->importSelectedDownload(name));
+                        else importSelectedDownload(name);
+                    }).setNegativeButton("Fermer",null).show();
+            });
+        });
+    }
+    private void importSelectedDownload(String name){
+        String targetFolder=folder,targetCategory=category;
+        work(()->{
+            WorkspaceStore s=new WorkspaceStore(a);
+            String dest=WorkspaceCategoryView.destination(s,targetCategory,targetFolder);
+            String path=WorkspacePaths.child(dest,FileNames.available(s.file(dest),name,null));
+            return s.importDownload(name,path)+" importé";
+        });
+    }
+
+    private void upFolder(){
+        if(!folder.isEmpty()){
+            String parent=folder.contains("/")?folder.substring(0,folder.lastIndexOf('/')):"";
+            folder=parent.equals(WorkspaceCategoryView.isContainerCategory(category)?
+                WorkspaceCategoryView.storageRoot(category):"")?"":parent;
+        }else{category="all";}
+        offset=0;search.setText("");refresh();
+    }
+    public boolean back(){
+        if(!space.equals("files"))return false;
+        if(selectMode){selectMode=false;selected.clear();refresh();return true;}
+        if(folder.isEmpty()&&"all".equals(category))return false;
+        upFolder();return true;
+    }
     public interface Job{String run()throws Exception;}
     private void work(Job job){toast("En cours…");WorkspaceCommands.IO.execute(()->{String result;try{result=job.run();}catch(Exception e){result=e.getMessage();}String message=result;WorkspaceCommands.UI.post(()->{if(a.isFinishing())return;toast(message);refresh();});});}
     private interface Name{void done(String text);}

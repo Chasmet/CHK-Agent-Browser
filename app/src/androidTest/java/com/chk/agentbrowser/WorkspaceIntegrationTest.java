@@ -56,4 +56,56 @@ public final class WorkspaceIntegrationTest {
             a.findViewById(R.id.nav_browser).performClick();assertEquals(android.view.View.VISIBLE,a.findViewById(R.id.web_container).getVisibility());a.finish();
         });
     }
+
+    @Test public void categoriesHideRootAndKeepLegacyFoldersWithoutMoving() throws Exception {
+        android.content.Context ctx=getInstrumentation().getTargetContext();
+        WorkspaceStore store=new WorkspaceStore(ctx);
+        String legacy="old-folder-"+UUID.randomUUID().toString().substring(0,8);
+        store.mkdir(legacy);
+        String oldVideo=legacy+"/clip.mp4";
+        assertTrue(store.file(oldVideo).createNewFile());
+        String orphan="legacy-empty-"+UUID.randomUUID().toString().substring(0,8);
+        store.mkdir(orphan);
+        String newFolder=null;
+        try {
+            assertEquals(0,WorkspaceCategoryView.query(ctx,"","all","","name",0)
+                .getJSONArray("items").length());
+            org.json.JSONArray videos=WorkspaceCategoryView.query(ctx,"","video","","name",0)
+                .getJSONArray("items");
+            assertTrue("Ancien dossier vidéo toujours accessible",hasPath(videos,legacy));
+            assertTrue(store.file(oldVideo).exists());
+            org.json.JSONArray docs=WorkspaceCategoryView.query(ctx,"","document","","name",0)
+                .getJSONArray("items");
+            assertTrue("Dossier historique vide rangé sans suppression",hasPath(docs,orphan));
+            String base=WorkspaceCategoryView.destination(store,"video","");
+            assertEquals("Categories/Videos",base);
+            newFolder=base+"/mon-dossier-"+UUID.randomUUID().toString().substring(0,8);
+            store.mkdir(newFolder);
+            videos=WorkspaceCategoryView.query(ctx,"","video","","name",0)
+                .getJSONArray("items");
+            assertTrue("Nouveau dossier visible à l'intérieur de Vidéos",hasPath(videos,newFolder));
+            assertTrue("Nouveau dossier absent de la racine visible",
+                !hasPath(WorkspaceCategoryView.query(ctx,"","all","","name",0)
+                    .getJSONArray("items"),newFolder));
+            assertEquals(0,WorkspaceCategoryView.query(ctx,newFolder,"video","","name",0)
+                .getJSONArray("items").length());
+            try {
+                WorkspaceCategoryView.destination(store,"recent","");
+                fail("Récents est une vue, pas une destination d'écriture");
+            }catch(IllegalArgumentException expected){}
+        } finally {
+            if(newFolder!=null)store.file(newFolder).delete();
+            store.file(oldVideo).delete();
+            store.file(legacy).delete();
+            store.file(orphan).delete();
+        }
+    }
+
+    private static boolean hasPath(org.json.JSONArray rows,String expected) {
+        for(int i=0;i<rows.length();i++){
+            JSONObject row=rows.optJSONObject(i);
+            if(row!=null&&expected.equals(row.optString("path")))return true;
+        }
+        return false;
+    }
 }
