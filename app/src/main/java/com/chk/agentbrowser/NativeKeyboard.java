@@ -185,7 +185,8 @@ final class NativeKeyboard {
         if(op.equals("check")){if(!(v instanceof CompoundButton))throw new Exception("Contrôle non cochable.");CompoundButton b=(CompoundButton)v;boolean expected=p.optBoolean("checked",true);if(b.isChecked()!=expected)b.performClick();if(b.isChecked()!=expected)throw new Exception("État non confirmé.");return;}
         if(op.equals("select_option")){
             if(!(v instanceof Spinner))throw new Exception("Contrôle non sélectionnable.");Spinner spinner=(Spinner)v;String wanted=p.optString("text");int index=-1;
-            for(int i=0;spinner.getAdapter()!=null&&i<spinner.getAdapter().getCount();i++)if(String.valueOf(i).equals(wanted)||String.valueOf(spinner.getAdapter().getItem(i)).equals(wanted)){if(index>=0)throw new Exception("Option ambiguë : utilise son index.");index=i;}
+            for(int i=0;spinner.getAdapter()!=null&&i<spinner.getAdapter().getCount();i++)if(String.valueOf(i).equals(wanted)){index=i;break;}
+            if(index<0)for(int i=0;spinner.getAdapter()!=null&&i<spinner.getAdapter().getCount();i++)if(String.valueOf(spinner.getAdapter().getItem(i)).equals(wanted)){if(index>=0)throw new Exception("Option ambiguë : utilise son index.");index=i;}
             if(index<0)throw new Exception("Option introuvable.");spinner.setSelection(index);if(spinner.getSelectedItemPosition()!=index)throw new Exception("Option non confirmée.");return;
         }
         if(!(v instanceof EditText)||protectedField((EditText)v))throw new Exception("Champ non modifiable par le clavier agent.");

@@ -108,14 +108,16 @@ public final class AgentKeyboardIntegrationTest {
         assertFalse(nativeCall(command("replace",state,f).put("text","abc")).ok);assertFalse(nativeCall(command("replace",state,f).put("text","123456")).ok);main(()->assertEquals("12.5",number.get().getText().toString()));
     }
     @Test public void nativeBatchContinuesAfterDisabledFieldAndCanFillChoices()throws Exception{
-        AtomicReference<EditText> first=new AtomicReference<>(),last=new AtomicReference<>();AtomicReference<Spinner> choice=new AtomicReference<>();AtomicReference<CheckBox> check=new AtomicReference<>();
+        AtomicReference<EditText> first=new AtomicReference<>(),last=new AtomicReference<>();AtomicReference<Spinner> choice=new AtomicReference<>(),numberChoice=new AtomicReference<>();AtomicReference<CheckBox> check=new AtomicReference<>();
         main(()->{LinearLayout box=form();first.set(edit(box,"Premier","",InputType.TYPE_CLASS_TEXT));EditText blocked=edit(box,"Bloqué","inchangé",InputType.TYPE_CLASS_TEXT);blocked.setEnabled(false);last.set(edit(box,"Dernier","",InputType.TYPE_CLASS_TEXT));
             Spinner spinner=new Spinner(activity);spinner.setContentDescription("Réseau");spinner.setAdapter(new ArrayAdapter<>(activity,android.R.layout.simple_spinner_item,new String[]{"YouTube","X"}));box.addView(spinner);choice.set(spinner);
+            Spinner numbers=new Spinner(activity);numbers.setContentDescription("Numéro de liste");numbers.setAdapter(new ArrayAdapter<>(activity,android.R.layout.simple_spinner_item,new String[]{"1","2"}));box.addView(numbers);numberChoice.set(numbers);
             CheckBox c=new CheckBox(activity);c.setText("Épingler");box.addView(c);check.set(c);show(box);});
         JSONObject state=nativeState();JSONArray fields=new JSONArray();for(String label:new String[]{"Premier","Bloqué","Dernier"})fields.put(new JSONObject().put("selector",control(state,label).getString("selector")).put("text",label));
         fields.put(new JSONObject().put("selector",control(state,"Réseau").getString("selector")).put("operation","select_option").put("text","X"));fields.put(new JSONObject().put("selector",control(state,"Épingler").getString("selector")).put("operation","check").put("checked",true));
-        Reply result=nativeCall(new JSONObject().put("operation","fill").put("fields",fields).put("expected_context",state.getString("context")));assertTrue(result.text,result.ok);assertEquals(4,result.json().getInt("succeeded"));assertEquals(1,result.json().getInt("failed"));
-        main(()->{assertEquals("Premier",first.get().getText().toString());assertEquals("Dernier",last.get().getText().toString());assertEquals(1,choice.get().getSelectedItemPosition());assertTrue(check.get().isChecked());});
+        fields.put(new JSONObject().put("selector",control(state,"Numéro de liste").getString("selector")).put("operation","select_option").put("text","1"));
+        Reply result=nativeCall(new JSONObject().put("operation","fill").put("fields",fields).put("expected_context",state.getString("context")));assertTrue(result.text,result.ok);assertEquals(5,result.json().getInt("succeeded"));assertEquals(1,result.json().getInt("failed"));
+        main(()->{assertEquals("Premier",first.get().getText().toString());assertEquals("Dernier",last.get().getText().toString());assertEquals(1,choice.get().getSelectedItemPosition());assertEquals(1,numberChoice.get().getSelectedItemPosition());assertEquals("2",numberChoice.get().getSelectedItem());assertTrue(check.get().isChecked());});
     }
     @Test public void nativeStaleAndProtectedFieldsNeverReceiveText()throws Exception{
         main(()->{LinearLayout box=form();edit(box,"Ordinaire","ancien",InputType.TYPE_CLASS_TEXT);edit(box,"Secret","do-not-expose",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);show(box);});

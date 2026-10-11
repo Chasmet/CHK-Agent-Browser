@@ -26,7 +26,7 @@ Les mots de passe, champs cachés et fichiers ne sont pas exposés ni saisis. Ut
 
 Les sélecteurs uniques restent associés au contrôle observé. Après un changement de page, de dialogue ou de contrôle, inspecter de nouveau. Fournir `expected_context` pour un lot ou une action sur le champ actuellement ciblé ; `expected_host` peut également fixer le domaine web.
 
-Opérations : `replace`, `insert`, `clear`, `select`, `key`, `check`, `select_option` et `click` (natif seulement). Pour `select_option`, `text` est la valeur HTML ; pour un Spinner natif, le libellé exact ou son index affiché dans les options.
+Opérations : `replace`, `insert`, `clear`, `select`, `key`, `check`, `select_option` et `click` (natif seulement). Pour `select_option`, `text` est la valeur HTML ; pour un Spinner natif, utiliser en priorité son index `options[].value`. Un libellé exact est également accepté s’il ne correspond pas déjà à un index valide.
 
 Touches : `SELECT_ALL`, `BACKSPACE`, `DELETE`, `LEFT`, `RIGHT`, `HOME`, `END`, `TAB`, `SHIFT_TAB`, `ENTER`, `UNDO`, `REDO`.
 
