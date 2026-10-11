@@ -52,3 +52,7 @@ La navigation inférieure donne accès au Navigateur, aux Fichiers et aux Notes.
 Fichiers : dossiers, import multiple depuis Android, création de documents texte, renommage, déplacement, recherche, aperçu image/vidéo, partage, export, téléchargements existants et corbeille récupérable. Notes : autosauvegarde SQLite, recherche, épinglage, URL source, capture de texte de page et export Markdown. Les révisions protègent les modifications concurrentes du téléphone et du MCP.
 
 Le module isolé `backend/browser_workspace.py` dans le dépôt du relais expose les outils `browser_files_*`, `browser_notes_*`, `browser_workspace_status` et `browser_upload_workspace_file`. Il utilise le même service, la même URL MCP et les droits déjà enregistrés. Aucun nouveau service Render ni clé API. Voir [audit et limites de la version](docs/AUDIT_MOBILE_2026-10-09.md).
+
+## Clavier réservé à l’agent MCP
+
+L’agent peut inspecter et remplir les champs web ainsi que les écrans et dialogues natifs CHK : dossiers, Notes, Studio et Cut. Texte, nombres, curseur, touches et lots vérifiés sont disponibles avec le même connecteur. Aucun clavier utilisateur supplémentaire ; Gboard reste inchangé. Voir [contrat des outils et compatibilité](docs/CLAVIER_AGENT_MCP.md).

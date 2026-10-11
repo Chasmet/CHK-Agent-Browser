@@ -107,7 +107,7 @@ public final class AgentClient {
         });
     }
     void browserInterrupted(){
-        if(pending!=null&&!WorkspaceCommands.handles(pending.optString("action","")))
+        if(pending!=null&&!WorkspaceCommands.handles(pending.optString("action",""))&&!KeyboardCommands.nativeTarget(pending))
             finishPending(false,"Page interrompue par Android. Résultat inconnu : relis la page avant de recommencer l'action.");
     }
     public boolean isAutonomous(){return settings.getBoolean("autonomous_mode",false);}
@@ -124,6 +124,7 @@ public final class AgentClient {
     public void removeBackgroundHandler(CommandHandler listener){
         if(backgroundHandler==listener)backgroundHandler=null;
     }
+    void nativeScreenChanged(){ui.post(this::deliverPending);}
     private CommandHandler activeHandler() {
         return screen!=null && handler!=null ? handler :
             (isAutonomous()?backgroundHandler:null);
@@ -207,6 +208,7 @@ public final class AgentClient {
                     info.put("url", limit(page, 500)); info.put("title", limit(title, 150));
                     info.put("autonomous",isAutonomous());
                     info.put("workspace_version",2);
+                    info.put("keyboard_version",1);
                     info.put("session_source",currentHandler==null?"none":currentHandler.sessionSource());
                     info.put("executing_id",settings.getString("executing_id",""));
                     request("POST", "/agentbrowser/api/heartbeat", info, true);
@@ -248,7 +250,7 @@ public final class AgentClient {
         });
     }
     private void deliverPending() {
-        CommandHandler receiver=activeHandler();
+        CommandHandler receiver=pending!=null&&KeyboardCommands.nativeTarget(pending)?NativeKeyboard.handler(app):activeHandler();
         if(pending == null || presenting || receiver == null ||
             (screen != null && screen.isFinishing()))return;
         if(SystemClock.elapsedRealtime() - receivedAt >= COMMAND_TIMEOUT_MS) {

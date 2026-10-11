@@ -54,7 +54,7 @@ public final class SettingsActivity extends Activity {
                 showMcp();
                 return;
             }
-            new AlertDialog.Builder(this)
+            new AgentDialog.Builder(this)
                 .setTitle("Autoriser le mode autonome ?")
                 .setMessage("ChatGPT pourra ouvrir des sites, lire des pages, cliquer et remplir des formulaires sans validation à chaque étape, même quand tu utilises une autre application. Cela inclut potentiellement des actions sensibles sur des comptes connectés. N'active ce mode que si tu fais confiance au plugin MCP et à ses commandes. Tu pourras le désactiver à tout moment.")
                 .setNegativeButton("Annuler",(dialog,which)->autonomousMode.setChecked(false))
@@ -102,7 +102,7 @@ public final class SettingsActivity extends Activity {
         check.setOnClickListener(v->checkUpdate());
         install.setOnClickListener(v->confirmInstall());
         findViewById(R.id.clear_history).setOnClickListener(v->
-            new AlertDialog.Builder(this)
+            new AgentDialog.Builder(this)
                 .setTitle("Effacer l'historique ?")
                 .setMessage("Les favoris et les cookies seront conservés.")
                 .setNegativeButton("Annuler",null)
@@ -180,7 +180,7 @@ public final class SettingsActivity extends Activity {
             check.setEnabled(true);
             status.setText(message);
             if(release!=null) {
-                new AlertDialog.Builder(this)
+                new AgentDialog.Builder(this)
                     .setTitle("CHK Agent Browser "+release.version)
                     .setMessage("Télécharger la mise à jour sur ce téléphone ? L'installation garde les données avec la signature Android d'origine.")
                     .setNegativeButton("Plus tard",null)
@@ -221,7 +221,7 @@ public final class SettingsActivity extends Activity {
             status.setText("Pas de mise à jour compatible téléchargée.");
             return;
         }
-        new AlertDialog.Builder(this)
+        new AgentDialog.Builder(this)
             .setTitle("Installer la mise à jour ?")
             .setMessage("L'application sera mise à jour directement sur ce téléphone. Favoris, historique et connexion MCP resteront enregistrés.")
             .setNegativeButton("Annuler",null)
