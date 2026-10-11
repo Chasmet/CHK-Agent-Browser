@@ -51,6 +51,8 @@ public final class CutStudioActivity extends Activity {
     private LinearLayout content;
     private TextView status;
     private int tab=0;
+    private int cutMode=0; // 0=rapide, 1=personnalise, 2=rogner
+    private String libraryFolder="";
     private Uri source;
     private String sourceName="";
     private long sourceDurationMs;
@@ -134,6 +136,13 @@ public final class CutStudioActivity extends Activity {
         LinearLayout p=panel();p.addView(text("01 · Choisir une vidéo",18,INK,true));
         p.addView(text(source==null?"Aucune source sélectionnée":
             sourceName+" · "+format(sourceDurationMs),13,MUTED,false));
+        if(source!=null&&!exporting){
+            android.widget.VideoView preview=new android.widget.VideoView(this);
+            preview.setVideoURI(source);
+            preview.setMediaController(new android.widget.MediaController(this));
+            p.addView(preview,new LinearLayout.LayoutParams(-1,dp(230)));
+            p.addView(text("Aperçu vidéo · lecture, pause et déplacement libre",12,MUTED,false));
+        }
         button("Importer depuis le téléphone",p,()->{
             if(exporting){toast("Export en cours");return;}
             Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("video/*")
@@ -143,6 +152,17 @@ public final class CutStudioActivity extends Activity {
         });
         button("Choisir dans Fichiers CHK",p,()->chooseWorkspace(""));
         LinearLayout v=panel();v.addView(text("02 · Durée des morceaux",18,INK,true));
+        LinearLayout modes=new LinearLayout(this);modes.setOrientation(LinearLayout.HORIZONTAL);
+        String[] labels={"Découpe rapide","Personnalisé","Rogner"};
+        for(int m=0;m<labels.length;m++){
+            final int selected=m;
+            Button choice=new Button(this);choice.setText(labels[m]);choice.setTextSize(11);
+            choice.setAllCaps(false);
+            choice.setTextColor(cutMode==m?0xff69e2c6:INK);
+            modes.addView(choice,new LinearLayout.LayoutParams(0,dp(52),1));
+            choice.setOnClickListener(w->{if(!exporting){cutMode=selected;render(0);}});
+        }
+        v.addView(modes);
         lengthInput=field(v,"Longueur (secondes)","15 / 30 / 60 / 90","30",true);
         LinearLayout presets=new LinearLayout(this);presets.setOrientation(LinearLayout.HORIZONTAL);
         for(int seconds:new int[]{15,30,60,90}){
@@ -151,12 +171,17 @@ public final class CutStudioActivity extends Activity {
             b.setOnClickListener(w->lengthInput.setText(String.valueOf(seconds)));
         }
         v.addView(presets);
+        presets.setVisibility(cutMode==0?View.VISIBLE:View.GONE);
+        lengthInput.setVisibility(cutMode==2?View.GONE:View.VISIBLE);
         startInput=field(v,"Début (secondes)","0","0",true);
         endInput=field(v,"Fin (secondes) · vide = fin de vidéo","Fin",
             sourceDurationMs>0?String.format(Locale.US,"%.2f",sourceDurationMs/1000d):"",true);
+        startInput.setVisibility(cutMode==2?View.VISIBLE:View.GONE);
+        endInput.setVisibility(cutMode==2?View.VISIBLE:View.GONE);
         v.addView(text("Découpe exacte via Media3. Maximum 100 morceaux par lot, durée 1 à 600 s.",12,MUTED,false));
         button(exporting?"Export en cours…":"Découper et enregistrer les MP4",v,this::startCut);
         if(exporting)button("Annuler l'export",v,this::cancelCut);
+        showAutomationStatus();
         LinearLayout info=panel();info.addView(text("03 · Publier",18,INK,true));
         info.addView(text("Les morceaux arrivent dans Fichiers CHK > CutVideo. Ouvre « Mes vidéos » pour les programmer sur chaque réseau.",13,MUTED,false));
         button("Ouvrir l'éditeur vidéo avancé",info,()->
@@ -188,6 +213,7 @@ public final class CutStudioActivity extends Activity {
             long duration=Long.parseLong(raw==null?"0":raw);
             if(duration<=0)throw new IllegalArgumentException("Durée inconnue");
             source=uri;sourceName=name;sourceDurationMs=duration;
+            CutStudioAutomation.rememberSelected(this,uri,name);
             render(0);message("Vidéo prête : "+name);
         }catch(Exception ex){toast("Vidéo non prise en charge : "+ex.getMessage());}
         finally{try{m.release();}catch(Exception ignored){}}
@@ -230,7 +256,9 @@ public final class CutStudioActivity extends Activity {
             long length=Math.round(size*1000),begin=Math.round(start*1000),
                 stop=Math.min(sourceDurationMs,Math.round(end*1000));
             segments.clear();
-            while(begin<stop){
+            if(cutMode==2){
+                segments.add(new long[]{begin,stop});
+            }else while(begin<stop){
                 if(segments.size()>=100)throw new IllegalArgumentException(
                     "Plus de 100 morceaux. Augmente la durée ou réduis la plage.");
                 long next=Math.min(stop,begin+length);segments.add(new long[]{begin,next});begin=next;
@@ -249,6 +277,7 @@ public final class CutStudioActivity extends Activity {
         if(segmentIndex>=segments.size()){
             exporting=false;transformer=null;pendingTemp=null;
             message(segments.size()+" morceaux créés dans "+outputFolder);
+            libraryFolder=outputFolder;
             render(1);return;
         }
         long[] times=segments.get(segmentIndex);
@@ -296,33 +325,80 @@ public final class CutStudioActivity extends Activity {
         if(pendingTemp!=null){pendingTemp.delete();pendingTemp=null;}
         exporting=false;toast("Export annulé ; morceaux terminés conservés");render(1);
     }
+    private void showAutomationStatus(){
+        LinearLayout p=panel();
+        p.addView(text("Commande ChatGPT · Découpe automatique",16,INK,true));
+        p.addView(text("L'agent utilise les MP4 de Fichiers CHK, sans modifier l'application Cut Vidéo indépendante.",12,MUTED,false));
+        try {
+            JSONObject job=new JSONObject(CutStudioAutomation.statusText(this));
+            String state=job.optString("state","idle");
+            if(!"idle".equals(state)&&!state.isEmpty()){
+                p.addView(text(state+" · "+job.optInt("completed")+"/"+job.optInt("total")
+                    +" morceaux",14,0xff69e2c6,true));
+                if(job.has("output_folder"))
+                    p.addView(text(job.optString("output_folder"),12,MUTED,false));
+                if(job.has("error"))p.addView(text(job.optString("error"),12,0xffef9a9a,false));
+                button("Actualiser le suivi",p,()->render(0));
+            } else p.addView(text("Aucune découpe distante en cours",12,MUTED,false));
+        }catch(Exception e){p.addView(text("État de découpe indisponible",12,MUTED,false));}
+    }
+
     private void renderLibrary(){
-        LinearLayout head=panel();head.addView(text("Bibliothèque Cut Vidéo",18,INK,true));
-        head.addView(text("MP4 locaux, sans suppression automatique des fichiers sources.",12,MUTED,false));
+        LinearLayout head=panel();
+        head.addView(text(libraryFolder.isEmpty()?"Mes vidéos · Dossiers":
+            "Mes vidéos · "+libraryFolder.substring(libraryFolder.lastIndexOf('/')+1),18,INK,true));
+        head.addView(text("Importations et découpes locales. Les sources sont conservées.",12,MUTED,false));
         try{
             ensureFolder();
-            File root=workspace.file(CutStudioStore.FOLDER);
-            File[] folders=root.listFiles();int count=0;
-            if(folders!=null)for(File folder:folders){
-                if(!folder.isDirectory())continue;
-                File[] files=folder.listFiles();if(files==null)continue;
-                int n=0;for(File f:files)if(f.getName().endsWith(".mp4")&&
-                    !f.getName().startsWith("temp_"))n++;
-                if(n==0)continue;
-                count+=n;LinearLayout section=panel();
-                section.addView(text(folder.getName()+" · "+n+" vidéos",15,INK,true));
-                for(File f:files){
-                    if(!f.getName().endsWith(".mp4")||f.getName().startsWith("temp_"))continue;
-                    String path=CutStudioStore.FOLDER+"/"+folder.getName()+"/"+f.getName();
-                    section.addView(text(f.getName()+" · "+(f.length()/1024/1024)+" Mo",13,MUTED,false));
-                    button("▶ Lire",section,()->
-                        startActivity(new Intent(this,MediaPreviewActivity.class).putExtra("path",path)));
-                    button("Planifier / créer des métadonnées",section,()->scheduleEditor(path,null));
-                    button("Partager le MP4",section,()->shareVideo(path));
+            if(libraryFolder.isEmpty()){
+                File root=workspace.file(CutStudioStore.FOLDER);
+                File[] folders=root.listFiles();
+                int total=0;
+                if(folders!=null){
+                    java.util.Arrays.sort(folders,(a,b)->Long.compare(b.lastModified(),a.lastModified()));
+                    for(File folder:folders){
+                        if(!folder.isDirectory())continue;
+                        File[] files=folder.listFiles();
+                        int number=0;
+                        if(files!=null)for(File mp4:files)
+                            if(mp4.isFile()&&mp4.getName().toLowerCase(Locale.ROOT).endsWith(".mp4")
+                                    &&!mp4.getName().startsWith("temp_"))number++;
+                        if(number==0)continue;
+                        total+=number;
+                        LinearLayout card=panel();
+                        card.addView(text("▣ "+folder.getName(),16,INK,true));
+                        card.addView(text(number+" morceaux · "+new Date(folder.lastModified()),12,MUTED,false));
+                        String selected=CutStudioStore.FOLDER+"/"+folder.getName();
+                        button("Ouvrir le dossier",card,()->{libraryFolder=selected;render(1);});
+                    }
                 }
+                head.addView(text(total==0?"Aucun morceau découpé":total+" morceaux disponibles",
+                    13,0xff69e2c6,true));
+            }else{
+                String open=libraryFolder;
+                button("← Tous les dossiers",head,()->{libraryFolder="";render(1);});
+                File folder=workspace.file(open);
+                if(!folder.isDirectory())throw new java.io.IOException("Dossier introuvable");
+                File[] files=folder.listFiles();
+                int count=0;
+                if(files!=null){
+                    java.util.Arrays.sort(files,(a,b)->a.getName().compareToIgnoreCase(b.getName()));
+                    for(File file:files){
+                        if(!file.isFile()||!file.getName().toLowerCase(Locale.ROOT).endsWith(".mp4")
+                                ||file.getName().startsWith("temp_"))continue;
+                        count++;
+                        String path=open+"/"+file.getName();
+                        LinearLayout card=panel();
+                        card.addView(text("▶ "+file.getName(),14,INK,true));
+                        card.addView(text((file.length()/1024/1024)+" Mo",12,MUTED,false));
+                        button("Lire le morceau",card,()->startActivity(
+                            new Intent(this,MediaPreviewActivity.class).putExtra("path",path)));
+                        button("Planifier la publication",card,()->scheduleEditor(path,null));
+                        button("Partager le MP4",card,()->shareVideo(path));
+                    }
+                }
+                head.addView(text(count+" vidéos dans ce dossier",13,0xff69e2c6,true));
             }
-            if(count==0)head.addView(text("Aucun morceau. Reviens à « Découper ».",13,MUTED,false));
-            else head.addView(text(count+" morceaux MP4 disponibles",13,0xff69e2c6,true));
         }catch(Exception e){toast("Bibliothèque indisponible : "+e.getMessage());}
     }
     private void shareVideo(String path){

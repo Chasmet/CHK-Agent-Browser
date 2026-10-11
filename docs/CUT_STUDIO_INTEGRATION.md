@@ -50,7 +50,22 @@
 ```
 
 7. Avant chaque envoi : lister les véritables MP4 dans `CutVideo`, contrôler leurs métadonnées, proposer des heures adaptées au fuseau horaire voulu. Le même `request_id` rend une relance **idempotente** (mise à jour sans doublon). L'importation valide **l'intégralité du lot** avant enregistrement : chemin MP4 local existant, compte/réseau autorisé, date future, métadonnées limitées à 100 caractères et 5 hashtags. Une entrée invalide annule tout le lot. `published=true` est refusé dans les imports automatiques.
-8. Le connecteur ne pilote **pas encore la découpe native** via une commande spécifique : l'utilisateur peut découper depuis l'onglet ou l'agent peut exploiter l'éditeur vidéo MCP existant si approprié. Une **programmation locale n'équivaut jamais à une programmation distante sur YouTube ou TikTok**, et les outils existants n'accordent pas d'accès OAuth. Pour publier réellement : naviguer, transférer le fichier, régler les champs, confirmer sur le site et recueillir une preuve vérifiable. Sur X, préparer puis publier au moment voulu (pas de programmation automatisée intégrée).
+8. **Découpage automatique réel à la demande, uniquement dans CHK Agent Browser :** après avoir importé un MP4 avec `browser_files_import` ou `browser_files_import_download`, choisir le `source_path` exact retourné par `browser_files_list`. Appeler `browser_files_write_text` avec `path="CutVideo/cut_inbox.json"`, `overwrite=true` et un `text` JSON unique :
+
+```json
+{
+  "request_id": "clip-alpha-30s-001",
+  "source_path": "Videos/alpha.mp4",
+  "seconds": 30,
+  "start_ms": 0,
+  "end_ms": null
+}
+```
+
+9. La réponse immédiate est `state=running`, avec `output_folder`, `completed` et `total`. **Elle n'atteste pas que le MP4 est terminé.** Lire `CutVideo/cut_status.json` avec `browser_files_read_text` jusqu'à `state=completed`; vérifier ensuite les MP4 réels avec `browser_files_list` sur `output_folder`. En cas de `failed`, rapporter l'erreur et garder les morceaux exportés. Le fichier source n'est jamais supprimé. Limites : 1–600 s par morceau, au maximum 100 morceaux, un export simultané.
+10. Pour annuler le découpage demandé : `browser_files_write_text` avec `path="CutVideo/cut_cancel.json"` et `text='{"request_id":"clip-alpha-30s-001"}'`. Seuls les morceaux déjà terminés sont conservés.
+11. **Automatisation de publication sur demande** : après les exports réussis, générer des métadonnées adaptées *au contenu de chaque morceau vérifié*, importer les fiches dans `CutVideo/schedule_inbox.json` puis accéder aux sites dans des onglets CHK. Une planification locale **n'équivaut jamais** à une publication distante validée, et le serveur ne possède pas d'accès OAuth implicite. Ne prétendre à une publication effective qu'après confirmation vérifiable du site. X : aucun programmateur natif.
+12. **Aucun changement dans `Chasmet/Cut-vid-o-`.** Tout est réalisé par l'application CHK Agent Browser et son MCP de fichiers existant, sans nouvelle route Render. La commande est lancée uniquement sur instruction explicite de l'utilisateur.
 
 
 ## Conservation et architecture

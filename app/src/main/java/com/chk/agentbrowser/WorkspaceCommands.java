@@ -50,6 +50,10 @@ public final class WorkspaceCommands {
                 case "files_write_text":
                     if("CutVideo/schedule_inbox.json".equals(path))
                         result=CutStudioStore.importFromAgent(app,args.getString("text"));
+                    else if(CutStudioAutomation.COMMAND_PATH.equals(path))
+                        result=CutStudioAutomation.submit(app,args.getString("text"));
+                    else if(CutStudioAutomation.CANCEL_PATH.equals(path))
+                        result=CutStudioAutomation.cancel(app,args.getString("text"));
                     else result=s.writeText(path,args.getString("text"),args.optBoolean("overwrite",false));
                     break;
                 case "files_read_text":result=s.readText(path,args.optInt("offset",0));break;
