@@ -80,8 +80,8 @@ public final class AgentKeyboardIntegrationTest {
     private void load(String html)throws Exception{
         main(()->{Method show=MainActivity.class.getDeclaredMethod("showSpace",String.class);show.setAccessible(true);show.invoke(activity,"browser");
             Field homeField=MainActivity.class.getDeclaredField("home");homeField.setAccessible(true);((BrowserHome)homeField.get(activity)).revealWeb();
-            web.loadDataWithBaseURL("https://keyboard-test.example/",html,"text/html","UTF-8",null);});
-        boolean ready=false;for(int i=0;i<50;i++){if("true".equals(js("document.readyState==='complete'&&!!document.getElementById('ready')"))){ready=true;break;}Thread.sleep(100);}assertTrue("Fixture loaded",ready);
+        });
+        WebFixture.load(instrumentation,web,"https://keyboard-test.example/",html,"!!document.getElementById('ready')");
     }
     private Reply webCall(JSONObject request)throws Exception{
         Reply r=new Reply();CountDownLatch done=new CountDownLatch(1);main(()->WebKeyboard.execute(context,web,request,(ok,text)->{r.ok=ok;r.text=text;done.countDown();}));assertTrue("Keyboard callback",done.await(8,TimeUnit.SECONDS));return r;
@@ -180,7 +180,8 @@ public final class AgentKeyboardIntegrationTest {
     }
     @Test public void webStaleControlsAndWrongHostDoNotReceiveText()throws Exception{
         load("<body id='ready'><input id='name' aria-label='Nom' value='ancien'></body>");JSONObject state=webState(),field=control(state,"Nom");
-        Reply host=webCall(command("replace",state,field).put("text","erreur").put("expected_host","another.example"));assertFalse(host.ok);assertEquals("\"ancien\"",js("document.getElementById('name').value"));
+        Reply validHost=webCall(command("replace",state,field).put("text","valide").put("expected_host","keyboard-test.example"));assertTrue(validHost.text,validHost.ok);assertTrue(validHost.json().getBoolean("ok"));
+        Reply host=webCall(command("replace",state,field).put("text","erreur").put("expected_host","another.example"));assertFalse(host.ok);assertEquals("\"valide\"",js("document.getElementById('name').value"));
         js("document.getElementById('name').outerHTML='<input id=\"name\" aria-label=\"Nom\" value=\"nouveau\">'");Reply stale=webCall(command("replace",state,field).put("text","erreur"));assertFalse(stale.json().getBoolean("ok"));assertEquals("\"nouveau\"",js("document.getElementById('name').value"));
     }
     @Test public void webRichTextInsertPreservesMarkupAndEnterIsARealKey()throws Exception{
