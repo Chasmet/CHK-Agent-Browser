@@ -92,11 +92,17 @@ public final class CutStudioAutomation {
             }
             ensureFolder(store);
             JSONObject previous = readStatus(store);
+            if ("running".equals(previous.optString("state"))) {
+                previous.put("state", "interrupted");
+                previous.put("error", "Application redemarree avant la confirmation de fin d'export.");
+                store.writeText(STATUS_PATH, previous.toString(), true);
+            }
             if (id.equals(previous.optString("request_id"))) {
                 String state = previous.optString("state");
-                if ("completed".equals(state) || "running".equals(state)
-                        || "cancelled".equals(state))
+                if ("completed".equals(state) || "cancelled".equals(state))
                     return new JSONObject(previous.toString());
+                if ("interrupted".equals(state))
+                    throw new IllegalStateException("Export precedent interrompu : demande un nouveau request_id apres verification des fichiers.");
             }
             String folder = "lot_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
                     .format(new Date()) + "_" + UUID.randomUUID().toString().substring(0, 8);
