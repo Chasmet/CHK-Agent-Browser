@@ -8,7 +8,7 @@ final class CommandResult {
     static final int MAX_BYTES=240000;
     private CommandResult() {}
     static JSONObject envelope(String id,String action,boolean success,String message)throws Exception {
-        boolean large=WorkspaceCommands.handles(action)||"preview".equals(action)||"screenshot".equals(action);
+        boolean large="desktop".equals(action)||WorkspaceCommands.handles(action)||"preview".equals(action)||"screenshot".equals(action);
         JSONObject result=new JSONObject().put("id",id).put("ok",success);
         result.put(success?"result":"error",message==null?"":message);
         if((success&&message!=null&&message.length()>(large?230000:32000))||

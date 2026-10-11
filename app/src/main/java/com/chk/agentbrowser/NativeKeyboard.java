@@ -41,18 +41,24 @@ final class NativeKeyboard {
         for(int i=list.size()-1;i>=0;i--)if(list.get(i).get()==null)list.remove(i);
         list.add(new WeakReference<>(d));
     }
-    private static Activity activity()throws Exception{
+    static Activity activity()throws Exception{
         Activity a=last.get();if(a==null||a.isFinishing()||a.isDestroyed())throw new Exception("Ouvre l’écran CHK à remplir ; aucun écran natif conservé.");return a;
     }
-    private static View root()throws Exception{
+    static View root()throws Exception{
         Activity a=activity();ArrayList<WeakReference<Dialog>> list=dialogs.get(a);
         if(list!=null)for(int i=list.size()-1;i>=0;i--){Dialog d=list.get(i).get();if(d!=null&&d.isShowing()&&d.getWindow()!=null)return d.getWindow().getDecorView();}
         return a.findViewById(android.R.id.content);
     }
-    private static String identity(View v){String s=identities.get(v);if(s==null){s=UUID.randomUUID().toString().substring(0,12);identities.put(v,s);}return s;}
+    static android.view.Window window()throws Exception{
+        Activity a=activity();ArrayList<WeakReference<Dialog>> list=dialogs.get(a);
+        if(list!=null)for(int i=list.size()-1;i>=0;i--){Dialog d=list.get(i).get();if(d!=null&&d.isShowing()&&d.getWindow()!=null)return d.getWindow();}
+        return a.getWindow();
+    }
+    static boolean foreground(){return foreground;}
+    static String identity(View v){String s=identities.get(v);if(s==null){s=UUID.randomUUID().toString().substring(0,12);identities.put(v,s);}return s;}
     private static String context(View r){return "native:"+identity(r);}
     private static String selector(View r,View v){return context(r)+":"+identity(v);}
-    private static boolean protectedField(EditText e){
+    static boolean protectedField(EditText e){
         int type=e.getInputType(),kind=type&InputType.TYPE_MASK_CLASS,variant=type&InputType.TYPE_MASK_VARIATION;
         return e.getTransformationMethod() instanceof PasswordTransformationMethod||
             (kind==InputType.TYPE_CLASS_TEXT&&(variant==InputType.TYPE_TEXT_VARIATION_PASSWORD||variant==InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD||variant==InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD))||

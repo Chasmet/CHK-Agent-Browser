@@ -42,6 +42,10 @@ public final class SettingsActivity extends Activity {
         updates=new UpdateManager(this);
         agent=AgentClient.get(this);
         findViewById(R.id.settings_back).setOnClickListener(v->finish());
+        android.view.ViewGroup group=(android.view.ViewGroup)findViewById(R.id.battery_settings).getParent();
+        Button folders=new Button(this);folders.setText("Dossiers externes autorisés à l’agent");
+        folders.setOnClickListener(v->startActivity(new Intent(this,ExternalFilesActivity.class)));group.addView(folders);
+
         Switch autoUpdate=findViewById(R.id.auto_update);autoUpdate.setChecked(getSharedPreferences("update_monitor",MODE_PRIVATE).getBoolean("enabled",true));autoUpdate.setOnCheckedChangeListener((b,on)->getSharedPreferences("update_monitor",MODE_PRIVATE).edit().putBoolean("enabled",on).apply());
         autonomousMode=findViewById(R.id.autonomous_mode);
         previewMode=findViewById(R.id.preview_mode);

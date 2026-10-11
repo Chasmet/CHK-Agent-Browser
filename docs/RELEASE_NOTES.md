@@ -1,3 +1,13 @@
+## Cinq outils IA — souris, vision, fichiers, tâches et terminal
+
+- Vrais gestes tactiles Android dans CHK et ses pages web : clic, double-clic, appui long, déplacement et retour ; canvas et commandes natives inclus.
+- Vision des fenêtres, menus, messages et coordonnées ; captures de CHK sous le contrôle du partage d’aperçus existant.
+- Sélection et plans de 500 fichiers : renommage en série, classement, copie, déplacement, corbeille et transformations texte ; bilan individuel et reprise sans répéter les réussites.
+- Accès aux dossiers externes sélectionnés et autorisés par Android, avec retrait des accès depuis Réglages.
+- Tâches locales de 50 étapes avec vérifications, journal durable, pause, reprise et annulation ; résultats incertains signalés.
+- Terminal CHK Script pour les traitements de fichiers autorisés et conversion de texte/JSON/Markdown, avec aperçu avant exécution.
+- Le clavier Google, les données existantes et la même URL MCP sont conservés. Aucun service d’accessibilité ni accès root ajouté.
+
 ## Clavier agent MCP — saisie native et formulaires web
 
 - Nouvel outil réservé à ChatGPT : saisie dans les dialogues et écrans CHK ainsi que dans les pages web, sans remplacer le clavier Google de l’utilisateur.

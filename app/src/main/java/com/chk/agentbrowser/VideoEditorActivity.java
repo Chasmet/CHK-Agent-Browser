@@ -191,7 +191,7 @@ public final class VideoEditorActivity extends Activity {
         if(viewer==null||player==null||project==null)return;
         pausePreview();
         if(viewer.getParent() instanceof ViewGroup)((ViewGroup)viewer.getParent()).removeView(viewer);
-        Dialog dialog=new Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        Dialog dialog=AgentDialog.watch(new Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen));
         fullscreenDialog=dialog;
         LinearLayout screen=new LinearLayout(this);screen.setOrientation(LinearLayout.VERTICAL);
         screen.setBackgroundColor(android.graphics.Color.BLACK);
