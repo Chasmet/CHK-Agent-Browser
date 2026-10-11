@@ -5,6 +5,7 @@ import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.content.SharedPreferences;
 
 import androidx.annotation.OptIn;
 import androidx.media3.common.MediaItem;
@@ -40,6 +41,17 @@ public final class CutStudioAutomation {
     public static final String CANCEL_PATH = "CutVideo/cut_cancel.json";
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final CutStudioAutomation INSTANCE = new CutStudioAutomation();
+    private static final String SOURCE_PREFS = "chk_cut_last_authorized_source";
+    private static final String SOURCE_URI = "uri";
+    private static final String SOURCE_NAME = "name";
+
+    /** Autorise uniquement la derniere source effectivement choisie dans l'onglet Cut. */
+    public static void rememberSelected(Context context, Uri uri, String name) {
+        if (uri == null) return;
+        context.getApplicationContext().getSharedPreferences(SOURCE_PREFS, Context.MODE_PRIVATE)
+                .edit().putString(SOURCE_URI, uri.toString())
+                .putString(SOURCE_NAME, name == null ? "clip.mp4" : name).apply();
+    }
     private Job current;
     private Transformer transformer;
     private File temp;
@@ -53,23 +65,44 @@ public final class CutStudioAutomation {
         if (!id.matches("[A-Za-z0-9_-]{1,80}"))
             throw new IllegalArgumentException("request_id obligatoire (1-80 lettres, chiffres, _ ou -).");
         String path = args.optString("source_path", args.optString("path", "")).trim();
-        if (path.isEmpty() || !path.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|mov|mkv|webm|m4v)$"))
-            throw new IllegalArgumentException("source_path doit designer une vraie video dans Fichiers CHK.");
+        boolean lastSelected = "@last_selected".equals(path);
+        if (!lastSelected && (path.isEmpty() || !path.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|mov|mkv|webm|m4v)$")))
+            throw new IllegalArgumentException("source_path : chemin Fichiers CHK ou @last_selected.");
         int seconds = args.optInt("seconds", 0);
         if (seconds < 1 || seconds > 600)
             throw new IllegalArgumentException("seconds doit etre compris entre 1 et 600.");
 
         Context app = context.getApplicationContext();
         WorkspaceStore store = new WorkspaceStore(app);
-        File source = store.file(path);
-        if (!source.isFile() || source.length() < 1024)
-            throw new IOException("Video absente ou vide : " + path);
-        if (source.getName().startsWith("temp_"))
-            throw new IllegalArgumentException("Fichier temporaire refuse.");
+        File source = null;
+        Uri sourceUri;
+        String sourceName;
+        if (lastSelected) {
+            SharedPreferences selected = app.getSharedPreferences(SOURCE_PREFS, Context.MODE_PRIVATE);
+            String rawUri = selected.getString(SOURCE_URI, "");
+            sourceName = selected.getString(SOURCE_NAME, "clip.mp4");
+            if (rawUri == null || rawUri.isEmpty())
+                throw new IOException("Aucune video importee depuis l'onglet Cut.");
+            sourceUri = Uri.parse(rawUri);
+            if (!"content".equals(sourceUri.getScheme()) && !"file".equals(sourceUri.getScheme()))
+                throw new IllegalArgumentException("Source non autorisee.");
+            try (android.os.ParcelFileDescriptor descriptor =
+                         app.getContentResolver().openFileDescriptor(sourceUri, "r")) {
+                if (descriptor == null) throw new IOException("Video selectionnee inaccessible.");
+            }
+        } else {
+            source = store.file(path);
+            if (!source.isFile() || source.length() < 1024)
+                throw new IOException("Video absente ou vide : " + path);
+            if (source.getName().startsWith("temp_"))
+                throw new IllegalArgumentException("Fichier temporaire refuse.");
+            sourceUri = Uri.fromFile(source);
+            sourceName = source.getName();
+        }
         MediaMetadataRetriever reader = new MediaMetadataRetriever();
         long duration;
         try {
-            reader.setDataSource(source.getAbsolutePath());
+            reader.setDataSource(app, sourceUri);
             String raw = reader.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
             duration = Long.parseLong(raw == null ? "0" : raw);
         } finally { reader.release(); }
@@ -111,7 +144,7 @@ public final class CutStudioAutomation {
             List<long[]> segments = new ArrayList<>();
             for (long t = start; t < end; t += seconds * 1000L)
                 segments.add(new long[]{t, Math.min(end, t + seconds * 1000L)});
-            Job job = new Job(app, store, id, path, output, source, segments);
+            Job job = new Job(app, store, id, path, output, sourceUri, sourceName, segments);
             INSTANCE.current = job;
             INSTANCE.completed = 0;
             INSTANCE.saveStatus(job, "running", "");
@@ -195,7 +228,7 @@ public final class CutStudioAutomation {
                 return;
             }
             long[] interval = job.segments.get(completed);
-            String base = job.source.getName().replaceFirst("\\.[^.]+$", "")
+            String base = job.sourceName.replaceFirst("\\.[^.]+$", "")
                     .replaceAll("[^A-Za-z0-9_-]", "_");
             if (base.isEmpty()) base = "cut";
             if (base.length() > 35) base = base.substring(0, 35);
@@ -204,7 +237,7 @@ public final class CutStudioAutomation {
             File temporary = new File(job.output, "temp_" + UUID.randomUUID() + ".mp4");
             temp = temporary;
             try {
-                MediaItem item = new MediaItem.Builder().setUri(Uri.fromFile(job.source))
+                MediaItem item = new MediaItem.Builder().setUri(job.sourceUri)
                         .setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder()
                                 .setStartPositionMs(interval[0])
                                 .setEndPositionMs(interval[1]).build()).build();
@@ -257,18 +290,20 @@ public final class CutStudioAutomation {
         final String id;
         final String sourcePath;
         final String outputFolder;
-        final File source;
+        final Uri sourceUri;
+        final String sourceName;
         final File output;
         final List<long[]> segments;
 
         Job(Context app, WorkspaceStore store, String id, String sourcePath, String outputFolder,
-            File source, List<long[]> segments) throws Exception {
+            Uri sourceUri, String sourceName, List<long[]> segments) throws Exception {
             this.app = app;
             this.store = store;
             this.id = id;
             this.sourcePath = sourcePath;
             this.outputFolder = outputFolder;
-            this.source = source;
+            this.sourceUri = sourceUri;
+            this.sourceName = sourceName;
             this.output = store.file(outputFolder);
             this.segments = segments;
         }
