@@ -107,7 +107,7 @@ public final class AgentClient {
         });
     }
     void browserInterrupted(){
-        if(pending!=null&&!WorkspaceCommands.handles(pending.optString("action",""))&&!KeyboardCommands.nativeTarget(pending))
+        if(pending!=null&&!WorkspaceCommands.handles(pending.optString("action",""))&&!KeyboardCommands.nativeTarget(pending)&&!DesktopCommands.nativeTarget(pending))
             finishPending(false,"Page interrompue par Android. Résultat inconnu : relis la page avant de recommencer l'action.");
     }
     public boolean isAutonomous(){return settings.getBoolean("autonomous_mode",false);}
@@ -209,6 +209,7 @@ public final class AgentClient {
                     info.put("autonomous",isAutonomous());
                     info.put("workspace_version",2);
                     info.put("keyboard_version",1);
+                    info.put("desktop_version",1);
                     info.put("session_source",currentHandler==null?"none":currentHandler.sessionSource());
                     info.put("executing_id",settings.getString("executing_id",""));
                     request("POST", "/agentbrowser/api/heartbeat", info, true);
@@ -249,8 +250,14 @@ public final class AgentClient {
             });
         });
     }
+    void executeTaskStep(JSONObject command,ResultCallback cb){
+        if(!cb.isActive())return;
+        CommandHandler receiver=DesktopCommands.nativeTarget(command)?DesktopCommands.handler(app):KeyboardCommands.nativeTarget(command)?NativeKeyboard.handler(app):activeHandler();
+        if(receiver==null){cb.finish(false,"Aucun écran CHK ou moteur web disponible.");return;}
+        receiver.onCommand(command,cb);
+    }
     private void deliverPending() {
-        CommandHandler receiver=pending!=null&&KeyboardCommands.nativeTarget(pending)?NativeKeyboard.handler(app):activeHandler();
+        CommandHandler receiver=pending!=null&&DesktopCommands.nativeTarget(pending)?DesktopCommands.handler(app):pending!=null&&KeyboardCommands.nativeTarget(pending)?NativeKeyboard.handler(app):activeHandler();
         if(pending == null || presenting || receiver == null ||
             (screen != null && screen.isFinishing()))return;
         if(SystemClock.elapsedRealtime() - receivedAt >= COMMAND_TIMEOUT_MS) {

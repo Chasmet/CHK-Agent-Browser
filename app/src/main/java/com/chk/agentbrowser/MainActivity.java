@@ -190,6 +190,19 @@ public class MainActivity extends Activity {
         });
         web.setOnLongClickListener(v->{WebView.HitTestResult hit=web.getHitTestResult();if(hit==null||hit.getExtra()==null||!(hit.getType()==WebView.HitTestResult.SRC_ANCHOR_TYPE||hit.getType()==WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE))return false;String link=hit.getExtra();if(!link.startsWith("https://"))return false;new AgentDialog.Builder(this).setTitle("Lien").setMessage(link).setItems(new String[]{"Ouvrir dans un nouvel onglet","Copier le lien","Partager"},(d,i)->{if(i==0)newTab(link);else if(i==1){((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Lien",link));toast("Lien copié");}else startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,link),"Partager le lien"));}).show();return true;});
         web.setWebChromeClient(new WebChromeClient(){
+            @Override public boolean onJsAlert(WebView web,String url,String message,android.webkit.JsResult result){
+                new AgentDialog.Builder(MainActivity.this).setTitle("Message du site").setMessage(message)
+                    .setPositiveButton("OK",(d,w)->result.confirm()).setOnCancelListener(d->result.cancel()).show();return true;
+            }
+            @Override public boolean onJsConfirm(WebView web,String url,String message,android.webkit.JsResult result){
+                new AgentDialog.Builder(MainActivity.this).setTitle("Confirmation du site").setMessage(message)
+                    .setPositiveButton("Confirmer",(d,w)->result.confirm()).setNegativeButton("Annuler",(d,w)->result.cancel()).setOnCancelListener(d->result.cancel()).show();return true;
+            }
+            @Override public boolean onJsPrompt(WebView web,String url,String message,String value,android.webkit.JsPromptResult result){
+                EditText input=new EditText(MainActivity.this);input.setText(value);input.setHint(message);
+                new AgentDialog.Builder(MainActivity.this).setTitle("Saisie du site").setMessage(message).setView(input)
+                    .setPositiveButton("Confirmer",(d,w)->result.confirm(input.getText().toString())).setNegativeButton("Annuler",(d,w)->result.cancel()).setOnCancelListener(d->result.cancel()).show();return true;
+            }
             @Override public void onShowCustomView(View view,CustomViewCallback callback){
                 if(fullScreenVideo!=null){callback.onCustomViewHidden();return;}
                 fullScreenVideo=view;fullScreenCallback=callback;((ViewGroup)getWindow().getDecorView()).addView(view,new ViewGroup.LayoutParams(-1,-1));getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
@@ -379,6 +392,7 @@ public class MainActivity extends Activity {
         final JSONObject parameters=args;
         String extra="";
         if(WorkspaceCommands.handles(action))extra="Utiliser l’espace Fichiers et Notes : "+action;
+        else if(DesktopCommands.handles(action,args))extra="Utiliser les outils IA CHK : souris, vision, fichiers, tâches ou scripts";
         else if(KeyboardCommands.handles(action,args))extra="Utiliser le clavier agent pour inspecter ou remplir les champs";
         else switch(action){
             case "read_page":extra="Lire le texte actuellement visible dans la page";break;
@@ -431,6 +445,10 @@ public class MainActivity extends Activity {
             public void finish(boolean ok,String result){transferHandler.post(()->{if(!isDestroyed())finishAgentAction(ok);});originalCallback.finish(ok,result);}
         };
         if(!agentClient.isEnabled()){callback.finish(false,"MCP désactivé par le propriétaire.");return;}
+        if(DesktopCommands.handles(action,args)){
+            if(args.optString("target","native").equals("web")){showSpace("browser");if(home!=null)home.revealWeb();}
+            DesktopCommands.execute(this,current,action,args,callback);return;
+        }
         if(KeyboardCommands.handles(action,args)){
             boolean nativeTarget;try{String target=KeyboardCommands.parameters(action,args).optString("target","web");nativeTarget=target.equals("native")||(target.equals("auto")&&NativeKeyboard.prefersNative());}catch(Exception e){callback.finish(false,e.getMessage());return;}
             if(!nativeTarget){showSpace("browser");if(home!=null)home.revealWeb();showAgentAction("keyboard");}
@@ -724,7 +742,7 @@ public class MainActivity extends Activity {
     private void setFocusMode(boolean enabled){focusMode=enabled;findViewById(R.id.space_nav).setVisibility(enabled?View.GONE:View.VISIBLE);findViewById(R.id.address_bar).setVisibility(enabled?View.GONE:View.VISIBLE);if(enabled)toast("Lecture agrandie · Retour pour retrouver les commandes");}
     private void savePageNote(){if(current==null)return;WebView web=current;String title=web.getTitle(),url=web.getUrl();web.evaluateJavascript("(document.body && document.body.innerText || '').slice(0,12000)",raw->{if(isFinishing())return;startActivity(new Intent(this,NoteEditorActivity.class).putExtra("title",title).putExtra("body",fromJavascript(raw)).putExtra("source",url));});}
     private void tabOverview(){
-        android.app.Dialog dialog=new android.app.Dialog(this);LinearLayout box=MobileUi.column(this);box.setPadding(dp(16),dp(16),dp(16),dp(16));box.setBackgroundColor(Color.rgb(13,20,35));box.addView(MobileUi.text(this,"Tes onglets · "+tabs.size()+" / 12",22,MobileUi.TEXT));
+        android.app.Dialog dialog=AgentDialog.watch(new android.app.Dialog(this));LinearLayout box=MobileUi.column(this);box.setPadding(dp(16),dp(16),dp(16),dp(16));box.setBackgroundColor(Color.rgb(13,20,35));box.addView(MobileUi.text(this,"Tes onglets · "+tabs.size()+" / 12",22,MobileUi.TEXT));
         android.widget.ScrollView sc=new android.widget.ScrollView(this);box.addView(sc,new LinearLayout.LayoutParams(-1,0,1));LinearLayout rows=MobileUi.column(this);sc.addView(rows);
         for(WebView web:new ArrayList<>(tabs)){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);String title=web.getTitle()==null?"Nouvel onglet":web.getTitle();TextView label=MobileUi.action(this,(web==current?"●  ":"")+title+"\n"+(web.getUrl()==null?"":web.getUrl()));label.setMaxLines(3);label.setTextColor(web==current?MobileUi.ACCENT:MobileUi.TEXT);row.addView(label,new LinearLayout.LayoutParams(0,-2,1));label.setOnClickListener(v->{select(web);showSpace("browser");dialog.dismiss();});TextView x=MobileUi.action(this,"×");x.setTextSize(24);x.setContentDescription("Fermer l’onglet "+title);row.addView(x,new LinearLayout.LayoutParams(dp(48),dp(64)));x.setOnClickListener(v->{close(web);dialog.dismiss();tabOverview();});rows.addView(row);}
         TextView add=MobileUi.action(this,"＋ Nouvel onglet");box.addView(add);add.setOnClickListener(v->{showSpace("browser");newTab(HOME);dialog.dismiss();address.requestFocus();((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(address,InputMethodManager.SHOW_IMPLICIT);});TextView done=MobileUi.action(this,"Revenir à la page");box.addView(done);done.setOnClickListener(v->dialog.dismiss());dialog.setContentView(box);android.view.Window w=dialog.getWindow();if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.setLayout(-1,Math.round(getResources().getDisplayMetrics().heightPixels*0.80f));w.setGravity(Gravity.BOTTOM);}dialog.show();if(w!=null)w.setLayout(-1,Math.round(getResources().getDisplayMetrics().heightPixels*0.80f));

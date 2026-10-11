@@ -192,6 +192,10 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         String action=command.optString("action","");
         JSONObject args=command.optJSONObject("args");if(args==null)args=new JSONObject();
         final JSONObject parameters=args;
+        if(DesktopCommands.handles(action,args)){
+            if(DesktopCommands.nativeTarget(command)){DesktopCommands.execute(app,null,action,args,callback);return;}
+            restore();afterLoad(()->DesktopCommands.execute(app,current,action,parameters,callback));return;
+        }
         if(WorkspaceCommands.handles(action)){if(!AgentClient.get(app).isEnabled()){callback.finish(false,"MCP désactivé");return;}WorkspaceCommands.run(app,action,args,callback);return;}
         if(KeyboardCommands.handles(action,args)){
             if(KeyboardCommands.nativeTarget(command)){KeyboardCommands.run(app,null,action,args,callback);return;}

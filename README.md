@@ -56,3 +56,5 @@ Le module isolé `backend/browser_workspace.py` dans le dépôt du relais expose
 ## Clavier réservé à l’agent MCP
 
 L’agent peut inspecter et remplir les champs web ainsi que les écrans et dialogues natifs CHK : dossiers, Notes, Studio et Cut. Texte, nombres, curseur, touches et lots vérifiés sont disponibles avec le même connecteur. Aucun clavier utilisateur supplémentaire ; Gboard reste inchangé. Voir [contrat des outils et compatibilité](docs/CLAVIER_AGENT_MCP.md).
+
+Les cinq nouveaux outils de travail IA sont décrits dans [ORDINATEUR_AGENT_MCP.md](docs/ORDINATEUR_AGENT_MCP.md).

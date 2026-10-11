@@ -1,7 +1,7 @@
 name: CHK Agent Browser - APK Android et Releases
 on:
   push:
-    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009, agent/mobile-studio-20261009, agent/general-audit-20261010, feature/cut-studio-20261010, 'feature/cut-*', 'feature/files-*']
+    branches: [main, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009, agent/mobile-studio-20261009, agent/general-audit-20261010, feature/cut-studio-20261010, 'feature/cut-*', 'feature/files-*', 'feature/agent-desktop-*']
   workflow_dispatch:
 permissions:
   contents: write
@@ -37,6 +37,12 @@ jobs:
         run: bash validation/check.sh
       - name: Compiler APK debug
         run: ./gradlew --no-daemon assembleDebug lintDebug
+      - name: Afficher les erreurs Android si la vérification échoue
+        if: failure()
+        run: |
+          if test -f app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt; then
+            rg -A 5 'Error:' app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt || true
+          fi
       - name: Autoriser KVM pour les tests Android
         run: sudo chmod 666 /dev/kvm
       - name: Tester navigateur, Fichiers, Notes et véritable export vidéo sur Android
