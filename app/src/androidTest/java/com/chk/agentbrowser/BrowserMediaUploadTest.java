@@ -36,7 +36,7 @@ public final class BrowserMediaUploadTest {
         try {
             Field f=MainActivity.class.getDeclaredField("current");f.setAccessible(true);
             WebView web=(WebView)f.get(activity);
-            String html="<html><body><input id='media' type='file' accept='image/png'>"
+            String html="<html><body data-page='workspace-upload-fixture'><input id='media' type='file' accept='image/png'>"
                 +"<span id='selected'>none</span>"
                 +"<script>document.getElementById('media').addEventListener('change',"
                 +"function(e){document.getElementById('selected').textContent="
@@ -46,13 +46,18 @@ public final class BrowserMediaUploadTest {
             boolean ready=false;
             for(int attempt=0;attempt<60;attempt++){
                 CountDownLatch latch=new CountDownLatch(1);AtomicReference<String> state=new AtomicReference<>("");
-                instrumentation.runOnMainSync(()->web.evaluateJavascript(
-                    "!!document.querySelector('#media')",value->{state.set(value);latch.countDown();}));
+                AtomicBoolean committed=new AtomicBoolean();
+                instrumentation.runOnMainSync(()->{
+                    committed.set("https://example.com/agent-test".equals(web.getUrl()));
+                    web.evaluateJavascript("document.readyState==='complete'&&!!document.body&&"
+                        +"document.body.getAttribute('data-page')==='workspace-upload-fixture'&&!!document.querySelector('#media')",
+                        value->{state.set(value);latch.countDown();});
+                });
                 assertTrue(latch.await(5,TimeUnit.SECONDS));
-                if("true".equals(state.get())){ready=true;break;}
+                if("true".equals(state.get())&&committed.get()){ready=true;break;}
                 Thread.sleep(150);
             }
-            assertTrue("File input should be present",ready);
+            assertTrue("Fixture DOM and WebView history URL should both finish loading",ready);
             // Match a real HTTPS page: WebView's history URL and document URL agree.
             // A null history URL creates about:blank and intentionally fails the destination guard.
             instrumentation.runOnMainSync(()->assertEquals("https://example.com/agent-test",web.getUrl()));
@@ -125,7 +130,9 @@ public final class BrowserMediaUploadTest {
         String html="<html><body data-page='"+marker+"'><input id='media' type='file'></body></html>";
         instrumentation.runOnMainSync(()->web.loadDataWithBaseURL(url,html,"text/html","UTF-8",url));
         for(int attempt=0;attempt<60;attempt++){
-            if("true".equals(evaluate(instrumentation,web,"!!document.body&&document.body.getAttribute('data-page')==='"+marker+"'")))return;
+            AtomicBoolean committed=new AtomicBoolean();
+            instrumentation.runOnMainSync(()->committed.set(url.equals(web.getUrl())));
+            if("true".equals(evaluate(instrumentation,web,"document.readyState==='complete'&&!!document.body&&document.body.getAttribute('data-page')==='"+marker+"'"))&&committed.get())return;
             Thread.sleep(100);
         }
         fail("Replacement page did not finish loading");
