@@ -57,7 +57,7 @@ public final class WorkspaceCategoryView {
                                    String search, String sort, int offset) throws Exception {
         WorkspaceStore store=new WorkspaceStore(context);
         String q=search==null?"":search.toLowerCase(Locale.ROOT).trim();
-        if(!"all".equals(category) && "recent".equals(category))
+        if("recent".equals(category))
             return WorkspaceCatalog.query(context,"","recent",q,sort,offset);
         if(!folder.isEmpty()) {
             // Navigation normale une fois le dossier ouvert. Les chemins existants sont intacts.
@@ -66,7 +66,7 @@ public final class WorkspaceCategoryView {
         if("all".equals(category)) {
             // L'accueil est constitué uniquement d'icônes, jamais d'une liste brute.
             if(q.isEmpty()) return page(new ArrayList<>(),sort,offset,false);
-            return WorkspaceCatalog.query(context,"","recent",q,sort,offset);
+            return WorkspaceCatalog.query(context,"","search",q,sort,offset);
         }
         if(!isContainerCategory(category))
             return WorkspaceCatalog.query(context,"",category,q,sort,offset);
@@ -76,7 +76,7 @@ public final class WorkspaceCategoryView {
         Counter scanned=new Counter();
         String base=storageRoot(category);
         if(store.file(base).isDirectory())
-            appendChildren(store,base,q,result,seen,scanned);
+            appendChildren(store,base,"",result,seen,scanned);
 
         int next=0;
         while(next>=0 && scanned.count<SCAN_LIMIT) {
@@ -89,14 +89,40 @@ public final class WorkspaceCategoryView {
                 if(ROOT.equals(path)) continue; // Répertoire technique non affiché.
                 if(item.optBoolean("directory")) {
                     if(matchesLegacyFolder(store,path,category,scanned))
-                        add(result,seen,item,q);
-                } else if(category.equals(WorkspaceCatalog.category(item.getString("mime_type"),path))) {
-                    add(result,seen,item,q);
+                        add(result,seen,item,"");
+                } else if(WorkspaceCatalog.matchesCategory(category,WorkspaceCatalog.category(item.getString("mime_type"),path))) {
+                    add(result,seen,item,"");
                 }
             }
             next=page.getInt("next_offset");
         }
+        if(!q.isEmpty())result=searchFolders(store,result,q,scanned);
         return page(result,sort,offset,scanned.count>=SCAN_LIMIT);
+    }
+
+    /** Search the folders actually visible in this category, including their contents. */
+    private static List<JSONObject> searchFolders(WorkspaceStore store,List<JSONObject> roots,
+                                                 String query,Counter scanned)throws Exception {
+        List<JSONObject> matches=new ArrayList<>();
+        Set<String> seen=new HashSet<>();
+        ArrayDeque<String> folders=new ArrayDeque<>();
+        for(JSONObject root:roots){
+            add(matches,seen,root,query);
+            if(root.optBoolean("directory"))folders.add(root.getString("path"));
+        }
+        while(!folders.isEmpty()&&scanned.count<SCAN_LIMIT){
+            String folder=folders.removeFirst();int next=0;
+            do{
+                JSONObject batch=store.list(folder,"",next);JSONArray rows=batch.getJSONArray("items");
+                for(int i=0;i<rows.length()&&scanned.count<SCAN_LIMIT;i++){
+                    JSONObject row=rows.getJSONObject(i);scanned.count++;
+                    add(matches,seen,row,query);
+                    if(row.optBoolean("directory"))folders.addLast(row.getString("path"));
+                }
+                next=batch.getInt("next_offset");
+            }while(next>=0&&scanned.count<SCAN_LIMIT);
+        }
+        return matches;
     }
 
     private static void appendChildren(WorkspaceStore store,String base,String q,
@@ -127,7 +153,7 @@ public final class WorkspaceCategoryView {
         if(category.equals(hinted)) return true;
         ArrayDeque<String> pending=new ArrayDeque<>();
         pending.add(initial);
-        boolean recognized=false, match=false;
+        boolean recognized=false;
         while(!pending.isEmpty() && scanned.count<SCAN_LIMIT) {
             String path=pending.removeFirst();
             int next=0;
@@ -143,14 +169,14 @@ public final class WorkspaceCategoryView {
                     } else {
                         String found=WorkspaceCatalog.category(row.getString("mime_type"),sub);
                         if(!"other".equals(found))recognized=true;
-                        if(category.equals(found))match=true;
+                        if(WorkspaceCatalog.matchesCategory(category,found))return true;
                     }
                 }
                 next=page.getInt("next_offset");
             }
         }
         // Dossiers anciens vides/inclassables : conservés dans Documents, jamais perdus.
-        return match || ("document".equals(category) && !recognized && hinted.isEmpty());
+        return "document".equals(category) && !recognized && hinted.isEmpty();
     }
 
     private static String hint(String name) {

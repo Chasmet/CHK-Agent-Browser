@@ -83,11 +83,20 @@ public final class AgentClient {
         return action+" · "+(result.isEmpty()?"en cours":result);
     }
     public String lastErrorSummary(){return lastError.isEmpty()?"aucune":lastError;}
+    public String shortConnectionStatus(){
+        if(!isEnabled())return "MCP désactivé";
+        if(!running)return "Connexion arrêtée · ouvrir Réglages";
+        if(!lastError.isEmpty()||(lastContact>0&&SystemClock.elapsedRealtime()-lastContact>45000L))
+            return "Reconnexion à ChatGPT en cours…";
+        if(lastContact==0)return "Connexion à ChatGPT en cours…";
+        return "● ChatGPT connecté · "+(isAutonomous()?"autonome":"manuel");
+    }
     public String connectionStatus(){
         if(!isEnabled())return "MCP désactivé";
         if(!running)return "Service arrêté : ouvre le navigateur pour reprendre";
         if(!lastError.isEmpty())return "Reconnexion automatique · " + lastError;
         if(lastContact==0)return "Connexion au relais en cours…";
+        if(SystemClock.elapsedRealtime()-lastContact>45000L)return "Relais sans réponse récente · reconnexion en cours";
         return "Relais connecté · dernier contact il y a " +
             ((SystemClock.elapsedRealtime()-lastContact)/1000) + " s";
     }

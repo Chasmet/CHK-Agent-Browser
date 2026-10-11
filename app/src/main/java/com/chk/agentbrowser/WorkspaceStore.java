@@ -101,10 +101,14 @@ public final class WorkspaceStore {
         if(target.exists()||!temp.renameTo(target)){temp.delete();throw new IOException("Enregistrement impossible");}return path;
     }
     public JSONArray downloads()throws Exception{
-        File dir=app.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);JSONArray rows=new JSONArray();File[] files=dir==null?null:dir.listFiles();if(files!=null){java.util.Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));for(File f:files){if(rows.length()>=100)break;if(f.isFile())rows.put(new JSONObject().put("name",f.getName()).put("size",f.length()));}}return rows;
+        File dir=app.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);JSONArray rows=new JSONArray();
+        Set<String> unavailable=CompletedDownloads.unavailable(app);File[] files=dir==null?null:dir.listFiles();
+        if(files!=null){java.util.Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));for(File f:files){if(rows.length()>=100)break;if(CompletedDownloads.ready(f,unavailable))rows.put(new JSONObject().put("name",f.getName()).put("size",f.length()));}}return rows;
     }
     public String importDownload(String name,String destination)throws Exception{
-        if(name.contains("/"))throw new IOException("Nom invalide");File dir=app.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);if(dir==null)throw new IOException("Stockage indisponible");File source=WorkspacePaths.resolve(dir,name,false);if(!source.isFile())throw new IOException("Téléchargement introuvable");return importUri(Uri.fromFile(source),destination);
+        if(name.contains("/"))throw new IOException("Nom invalide");File dir=app.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);if(dir==null)throw new IOException("Stockage indisponible");File source=WorkspacePaths.resolve(dir,name,false);
+        if(!CompletedDownloads.ready(source,CompletedDownloads.unavailable(app)))throw new IOException("Téléchargement non terminé ou fichier inaccessible");
+        return importUri(Uri.fromFile(source),destination);
     }
     public JSONObject preview(String path)throws Exception{
         if(!AgentClient.get(app).isPreviewAllowed())throw new IOException("Active le partage d’aperçus dans Réglages");

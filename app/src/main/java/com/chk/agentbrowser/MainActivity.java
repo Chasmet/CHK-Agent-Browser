@@ -49,10 +49,11 @@ public class MainActivity extends Activity {
     private WorkspacePanel workspace;
     private String activeSpace="browser";
     private boolean focusMode;
+    private boolean explicitPageOnResume;
     private BrowserHome home;
     private View fullScreenVideo;
     private WebChromeClient.CustomViewCallback fullScreenCallback;
-    private final Runnable connectionTick=new Runnable(){public void run(){if(!isFinishing()){((TextView)findViewById(R.id.connection_badge)).setText(agentClient.isEnabled()?(agentClient.isAutonomous()?"● Agent actif · autonome":"● Agent actif · manuel"):"Ton espace de travail");transferHandler.postDelayed(this,3000);}}};
+    private final Runnable connectionTick=new Runnable(){public void run(){if(!isFinishing()&&!isDestroyed()){TextView badge=findViewById(R.id.connection_badge);badge.setText(agentClient.shortConnectionStatus());badge.setVisibility(agentClient.isEnabled()?View.VISIBLE:View.GONE);transferHandler.postDelayed(this,3000);}}};
     private ValueCallback<Uri[]> fileCallback;
     private AgentClient agentClient;
     private Uri[] pendingUploadUris;
@@ -89,21 +90,30 @@ public class MainActivity extends Activity {
         findViewById(R.id.menu).setOnClickListener(v->browserMenu());
         findViewById(R.id.tab_count).setOnClickListener(v->tabOverview());
         findViewById(R.id.tab_count).setOnLongClickListener(v->{newTab(HOME);return true;});
+        findViewById(R.id.connection_badge).setOnClickListener(v->startActivity(new Intent(this,SettingsActivity.class)));
         restoreTabs(state);
         showSpace(state==null?"browser":state.getString("space","browser"));
-        String launch=getIntent().getStringExtra("open_url");if(launch!=null)navigate(launch);
-         String cutLaunch=getIntent().getStringExtra("cutstudio_url");
-         if(cutLaunch!=null&&cutLaunch.startsWith("https://")){showSpace("browser");newTab(cutLaunch);}
+        if(state==null)openIntent(getIntent());
         autoUpdate();
     }
+    private void openIntent(Intent intent){
+        String launch=intent.getStringExtra("open_url"),cut=intent.getStringExtra("cutstudio_url");
+        intent.removeExtra("open_url");intent.removeExtra("cutstudio_url");
+        if(launch!=null&&launch.startsWith("https://")){explicitPageOnResume=true;navigate(launch);}
+        if(cut!=null&&cut.startsWith("https://")){
+            explicitPageOnResume=true;showSpace("browser");
+            if(tabs.size()<12)newTab(cut);else navigate(cut);
+        }
+    }
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);openIntent(intent);}
     private void toast(String value){Toast.makeText(this,value,Toast.LENGTH_SHORT).show();}
     private int dp(float p){return (int)(getResources().getDisplayMetrics().density*p+0.5f);}
     private void autoUpdate(){
         android.content.SharedPreferences pref=getSharedPreferences("update_monitor",MODE_PRIVATE);
         if(!pref.getBoolean("enabled",true))return;
         long now=System.currentTimeMillis();
-        if(now-pref.getLong("last_check",0)<86400000L)return;
-        pref.edit().putLong("last_check",now).apply();
+        if(now-pref.getLong("last_check",0)<86400000L||now-pref.getLong("last_attempt",0)<600000L)return;
+        pref.edit().putLong("last_attempt",now).apply();
         new UpdateManager(this).check((message,release)->{
             if(isFinishing()||isDestroyed()||release==null)return;
             new AlertDialog.Builder(this).setTitle("Nouvelle version "+release.version)
@@ -333,7 +343,7 @@ public class MainActivity extends Activity {
         if(workspace!=null&&!activeSpace.equals("browser"))workspace.refresh();
         if(agentClient!=null){
             AgentService.ensureRunning(this);
-            if(agentClient.isAutonomous()&&current!=null){
+            if(!explicitPageOnResume&&agentClient.isAutonomous()&&current!=null){
                 String latest=AgentService.latestBackgroundUrl();
                 String open=current.getUrl();
                 if(latest!=null&&latest.startsWith("https://")&&!latest.equals(open)){
@@ -349,6 +359,7 @@ public class MainActivity extends Activity {
                 }
             });
         }
+        explicitPageOnResume=false;
     }
     @Override protected void onPause(){
         saveTabs();transferHandler.removeCallbacks(connectionTick);
@@ -687,7 +698,7 @@ public class MainActivity extends Activity {
         boolean light=space.equals("files");findViewById(R.id.space_nav).setBackgroundColor(light?0xfff4f6fb:0xff202124);
         getWindow().setStatusBarColor(0xff17181c);getWindow().setNavigationBarColor(light?0xfff4f6fb:0xff202124);
         if(Build.VERSION.SDK_INT>=26){int flags=getWindow().getDecorView().getSystemUiVisibility();getWindow().getDecorView().setSystemUiVisibility(light?flags|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:flags&~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);}
-        String[] spaces={"browser","files","video","notes"},icons={"globe","folder","video","document"};int[] ids={R.id.nav_browser,R.id.nav_files,R.id.nav_video,R.id.nav_notes};
+        String[] spaces={"browser","files","video","cut","notes"},icons={"globe","folder","video","scissors","document"};int[] ids={R.id.nav_browser,R.id.nav_files,R.id.nav_video,R.id.nav_cut,R.id.nav_notes};
         for(int i=0;i<ids.length;i++){TextView v=findViewById(ids[i]);boolean selected=space.equals(spaces[i]);int color=selected?(light?0xff2468cb:0xffc5bfff):(light?0xff687080:0xffbfc2cd);v.setTextSize(11);v.setTextColor(color);v.setCompoundDrawablesWithIntrinsicBounds(null,UiIcons.icon(this,icons[i],color,23),null,null);v.setBackground(selected?MobileUi.bg(this,light?0xffdceaff:0xff393548):null);v.setSelected(selected);v.setFocusable(true);}
         if(!browser&&workspace!=null&&!space.equals(activeSpace))workspace.show(space);
         activeSpace=space;updatePageError();

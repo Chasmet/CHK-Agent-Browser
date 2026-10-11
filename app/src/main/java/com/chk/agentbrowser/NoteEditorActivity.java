@@ -45,6 +45,9 @@ public final class NoteEditorActivity extends Activity {
     private void changed(){if(loading)return;dirty=true;status.setText(conflict?"Conflit : conserve une copie depuis le menu":"Modifications en cours…");handler.removeCallbacks(autosave);handler.postDelayed(autosave,650);}
     private void save(){handler.removeCallbacks(autosave);if(loading||saving||conflict||!dirty){if(leaveWhenSaved&&!dirty&&!saving&&!conflict)finish();return;}
         String saveId=id,t=title.getText().toString(),b=body.getText().toString(),url=source;boolean pin=pinned.isChecked();int expected=revision;
+        if(saveId.isEmpty()&&t.trim().isEmpty()&&b.trim().isEmpty()&&url.isEmpty()&&!pin){
+            dirty=false;status.setText("Nouvelle note");if(leaveWhenSaved)finish();return;
+        }
         saving=true;dirty=false;status.setText("Enregistrement…");
         SaveState task=new SaveState();task.owner=this;lastSave=task;
         android.content.Context app=getApplicationContext();

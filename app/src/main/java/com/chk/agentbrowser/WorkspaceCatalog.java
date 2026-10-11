@@ -13,16 +13,23 @@ public final class WorkspaceCatalog {
         if(mime.startsWith("text/")||path.toLowerCase(Locale.ROOT).matches(".*\\.(pdf|docx?|xlsx?|pptx?|odt|csv|json|md)$"))return "document";
         return "other";
     }
+    public static boolean matchesCategory(String requested,String actual){
+        return requested.equals(actual)||("document".equals(requested)
+            &&("archive".equals(actual)||"other".equals(actual)));
+    }
     public static JSONObject query(Context c,String folder,String category,String search,String sort,int offset)throws Exception{
         WorkspaceStore store=new WorkspaceStore(c);List<JSONObject> all=new ArrayList<>();ArrayDeque<String> pending=new ArrayDeque<>();pending.add(folder);int scanned=0;long bytes=0;
-        JSONObject counts=new JSONObject();boolean global=!"all".equals(category);
+        JSONObject counts=new JSONObject();boolean global=!"all".equals(category)||!search.trim().isEmpty();
         while(!pending.isEmpty()&&scanned<5000){String dir=pending.removeFirst();int page=0;do{
             JSONObject batch=store.list(dir,"",page);JSONArray rows=batch.getJSONArray("items");
             for(int i=0;i<rows.length()&&scanned<5000;i++){
                 JSONObject row=rows.getJSONObject(i);scanned++;boolean directory=row.getBoolean("directory");
                 if(directory){if(global)pending.addLast(row.getString("path"));}
                 else{String type=category(row.getString("mime_type"),row.getString("path"));row.put("category",type);counts.put(type,counts.optInt(type)+1);bytes+=row.getLong("size");}
-                if((!global||(!directory&&(category.equals("recent")||category.equals(row.optString("category")))))&&row.getString("name").toLowerCase(Locale.ROOT).contains(search.toLowerCase(Locale.ROOT)))all.add(row);
+                boolean include=category.equals("all")||category.equals("search")
+                    ||(!directory&&(category.equals("recent")||matchesCategory(category,row.optString("category"))));
+                if(include&&!("search".equals(category)&&"Categories".equals(row.optString("path")))
+                    &&row.getString("name").toLowerCase(Locale.ROOT).contains(search.toLowerCase(Locale.ROOT)))all.add(row);
             }page=batch.getInt("next_offset");
         }while(page>=0&&scanned<5000);}
         final String order=category.equals("recent")?"date":sort;

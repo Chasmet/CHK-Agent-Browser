@@ -71,7 +71,11 @@ public final class UpdateManager {
                     JSONObject data=new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));
                     String remote=data.optString("tag_name","").replaceFirst("^[vV]","");
                     String local=context.getPackageManager().getPackageInfo(context.getPackageName(),0).versionName;
+                    if(!remote.matches("[0-9]+\\.[0-9]+\\.[0-9]+")){
+                        respond(callback,"Version officielle invalide : réessaie plus tard.",null);return;
+                    }
                     if(!newer(remote,local)) {
+                        recordSuccessfulCheck();
                         respond(callback,"Application à jour ("+local+").",null);return;
                     }
                     JSONArray assets=data.optJSONArray("assets");
@@ -81,6 +85,7 @@ public final class UpdateManager {
                         String name=asset.optString("name"),link=asset.optString("browser_download_url");
                         if(name.equals("CHK-Agent-Browser-"+remote+".apk") &&
                            link.startsWith("https://github.com/Chasmet/CHK-Agent-Browser/releases/download/")) {
+                            recordSuccessfulCheck();
                             respond(callback,"Version "+remote+" disponible à installer",new Release(remote,link,name));
                             return;
                         }
@@ -91,6 +96,10 @@ public final class UpdateManager {
                 respond(callback,"Vérification impossible : "+e.getClass().getSimpleName(),null);
             }finally {if(c!=null)c.disconnect();}
         },"chk-apk-update-check").start();
+    }
+    private void recordSuccessfulCheck(){
+        context.getSharedPreferences("update_monitor",Context.MODE_PRIVATE).edit()
+            .putLong("last_check",System.currentTimeMillis()).apply();
     }
     private void respond(Listener callback,String status,Release release) {
         ui.post(()->callback.onResult(status,release));
