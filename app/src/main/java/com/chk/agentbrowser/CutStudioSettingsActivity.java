@@ -14,7 +14,7 @@ public final class CutStudioSettingsActivity extends Activity {
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
-        LinearLayout host=new LinearLayout(this);host.setOrientation(1);host.setBackgroundColor(0xff111414);
+        LinearLayout host=new LinearLayout(this);host.setOrientation(LinearLayout.VERTICAL);host.setBackgroundColor(0xff111414);
         ScrollView scroll=new ScrollView(this);scroll.addView(host);setContentView(scroll);
         TextView title=text("‹   RÉGLAGES CUT VIDÉO",21,Color.WHITE);title.setPadding(dp(18),dp(20),dp(18),dp(20));
         title.setBackgroundColor(0xff00796b);host.addView(title);title.setOnClickListener(v->finish());
@@ -27,7 +27,7 @@ public final class CutStudioSettingsActivity extends Activity {
     }
     private TextView text(String s,int sz,int color){TextView t=new TextView(this);t.setText(s);t.setTextColor(color);t.setTextSize(sz);return t;}
     private void box(LinearLayout host,String title,String subtitle){
-        LinearLayout p=new LinearLayout(this);p.setOrientation(1);p.setPadding(dp(15),dp(14),dp(15),dp(14));
+        LinearLayout p=new LinearLayout(this);p.setOrientation(LinearLayout.VERTICAL);p.setPadding(dp(15),dp(14),dp(15),dp(14));
         p.setBackground(CutStudioHomeActivity.surface(0xff252b2b,dp(10)));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(dp(14),dp(12),dp(14),0);host.addView(p,lp);
         p.addView(text(title,16,0xff00c7b0));TextView info=text(subtitle,13,0xffb7c0bf);info.setPadding(0,dp(6),0,0);p.addView(info);
