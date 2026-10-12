@@ -498,7 +498,9 @@ public final class CutStudioLibraryActivity extends Activity {
                     for(File file:files){
                         String old=file.isDirectory()?"CutVideo/"+file.getName()+"/":
                             "CutVideo/"+file.getParentFile().getName()+"/"+file.getName();
-                        File dest=new File(trash,System.currentTimeMillis()+"_"+file.getName());
+                        String tag=file.isDirectory()?"D__"+file.getName():
+                            "F__"+file.getParentFile().getName()+"__"+file.getName();
+                        File dest=new File(trash,System.currentTimeMillis()+"_"+tag);
                         if(!file.renameTo(dest))throw new Exception("Échec : "+file.getName());
                         CutStudioStore.removeForPath(this,old);
                         if(file.isFile())state.clearVideo(old);
@@ -524,7 +526,16 @@ public final class CutStudioLibraryActivity extends Activity {
     }
     private void restore(File file){
         String name=file.getName().replaceFirst("^[0-9]+_", "");
-        File destination=file.isDirectory()?new File(root,name):new File(root,"recuperation_"+name);
+        String[] parts=name.split("__",3);
+        if(parts.length<2){toast("Ancien élément : utilise Fichiers CHK pour le restaurer");return;}
+        File destination;
+        if("D".equals(parts[0])&&parts.length==2&&validName(parts[1]))
+            destination=new File(root,parts[1]);
+        else if("F".equals(parts[0])&&parts.length==3&&validName(parts[1])&&validName(parts[2])){
+            File folder=new File(root,parts[1]);
+            if(!folder.isDirectory()){toast("Restaure d'abord le dossier "+parts[1]);return;}
+            destination=new File(folder,parts[2]);
+        }else{toast("Nom de sauvegarde invalide");return;}
         if(destination.exists()){
             toast("Un dossier ou fichier de ce nom existe déjà");return;
         }
