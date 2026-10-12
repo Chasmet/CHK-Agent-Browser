@@ -13,7 +13,7 @@ public final class WorkspaceCommands {
     public static final ExecutorService IO=Executors.newSingleThreadExecutor();
     public static final Handler UI=new Handler(Looper.getMainLooper());
     private WorkspaceCommands(){}
-    public static boolean handles(String action){return action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status")||action.startsWith("video_editor_")||action.startsWith("media_");}
+    public static boolean handles(String action){return action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status")||action.startsWith("video_editor_")||action.startsWith("media_")||action.startsWith("document_");}
     public static void run(Context context,String action,JSONObject args,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
         Context app=context.getApplicationContext();
@@ -39,7 +39,9 @@ public final class WorkspaceCommands {
             if(!cb.isActive())return;
             WorkspaceStore s=new WorkspaceStore(app);String path=args.optString("path","");Object result;
             switch(action){
-                case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("video_editor",true).put("media_inspection",true).put("workspace_version",2).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;
+                case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("video_editor",true).put("media_inspection",true).put("workspace_version",3).put("document_reader_version",1).put("pdf_text_extraction",true).put("scanned_pdf_ocr",true).put("docx_text_extraction",true).put("image_ocr",true).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;
+                case "document_read":result=DocumentReader.readFile(app,path,args.optInt("page",1),args.optInt("page_count",8),args.optInt("offset",0));break;
+                case "document_page":result=DocumentReader.pdfPreview(app,s.file(path),args.optInt("page",0));break;
                 case "media_info":result=MediaInspection.info(app,path);break;
                 case "media_frame":result=MediaInspection.frame(app,path,args.optLong("time_ms",0));break;
                 case "media_codecs":result=MediaInspection.codecs();break;
@@ -56,11 +58,11 @@ public final class WorkspaceCommands {
                         result=CutStudioAutomation.cancel(app,args.getString("text"));
                     else result=s.writeText(path,args.getString("text"),args.optBoolean("overwrite",false));
                     break;
-                case "files_read_text":result=s.readText(path,args.optInt("offset",0));break;
+                case "files_read_text":result=DocumentReader.supported(path)?DocumentReader.readFile(app,path,args.optInt("page",1),args.optInt("page_count",8),args.optInt("offset",0)):s.readText(path,args.optInt("offset",0));break;
                 case "files_read_bytes":result=s.readBytes(path,args.optLong("offset",0));break;
                 case "files_downloads":result=s.downloads();break;
                 case "files_import_download":result=new JSONObject().put("path",s.importDownload(args.getString("name"),path));break;
-                case "files_preview":result=s.preview(path);break;
+                case "files_preview":result=path.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf")?DocumentReader.pdfPreview(app,s.file(path),0):s.preview(path);break;
                 case "files_move":s.move(path,args.getString("destination"));result=new JSONObject().put("path",args.getString("destination"));break;
                 case "files_trash":result=new JSONObject().put("trash_id",s.trash(path));break;
                 case "files_trash_list":result=s.trashList();break;
