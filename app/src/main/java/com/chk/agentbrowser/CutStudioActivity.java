@@ -45,7 +45,7 @@ import java.util.UUID;
 @OptIn(markerClass=UnstableApi.class)
 public final class CutStudioActivity extends Activity {
     private static final int PICK_VIDEO=9031;
-    private static final int INK=0xfff2f5ff, MUTED=0xffa8b7cb, PANEL=0xff252a34;
+    private static final int INK=0xffffffff, MUTED=0xffb7c0bf, PANEL=0xff252b2b;
     private final String[] networks={"YouTube","TikTok","Instagram","X"};
     private final String[] keys={"youtube","tiktok","instagram","x"};
     private LinearLayout content;
@@ -73,9 +73,11 @@ public final class CutStudioActivity extends Activity {
         catch(Exception e){message("Espace CHK indisponible : "+e.getMessage());}
         findViewById(R.id.cut_back).setOnClickListener(v->finish());
         findViewById(R.id.cut_tab_export).setOnClickListener(v->render(0));
-        findViewById(R.id.cut_tab_library).setOnClickListener(v->render(1));
+        findViewById(R.id.cut_tab_library).setOnClickListener(v->startActivity(new Intent(this,CutStudioLibraryActivity.class)));
         findViewById(R.id.cut_tab_planning).setOnClickListener(v->render(2));
-        render(getIntent().hasExtra("schedule_id")?2:0);
+        render(getIntent().getIntExtra("cut_tab",getIntent().hasExtra("schedule_id")?2:0));
+        String target=getIntent().getStringExtra("cut_schedule_path");
+        if(target!=null&&!target.isEmpty())scheduleEditor(target,null);
         requestNotificationPermission();
     }
     private void requestNotificationPermission(){
@@ -102,13 +104,15 @@ public final class CutStudioActivity extends Activity {
     }
     private LinearLayout panel(){
         LinearLayout l=column();l.setPadding(dp(10),dp(10),dp(10),dp(12));
-        l.setBackgroundColor(PANEL);
+        l.setBackground(CutStudioHomeActivity.surface(PANEL,dp(12)));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(12);
         content.addView(l,lp);return l;
     }
     private Button button(String label,LinearLayout parent,Runnable action){
         Button b=new Button(this);b.setText(label);b.setTextSize(13);b.setAllCaps(false);
-        b.setOnClickListener(v->action.run());parent.addView(b,new LinearLayout.LayoutParams(-1,dp(49)));
+        b.setTextColor(INK);b.setBackground(CutStudioHomeActivity.surface(0xff00796b,dp(9)));
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,dp(49));params.bottomMargin=dp(6);
+        b.setOnClickListener(v->action.run());parent.addView(b,params);
         return b;
     }
     private EditText field(LinearLayout parent,String label,String hint,String value,boolean numeric){
@@ -127,7 +131,7 @@ public final class CutStudioActivity extends Activity {
         tab=which;content.removeAllViews();
         int[] ids={R.id.cut_tab_export,R.id.cut_tab_library,R.id.cut_tab_planning};
         for(int i=0;i<3;i++){
-            TextView v=findViewById(ids[i]);v.setTextColor(i==which?0xff69e2c6:INK);
+            TextView v=findViewById(ids[i]);v.setTextColor(i==which?0xff00c7b0:INK);
             v.setTypeface(null,i==which?android.graphics.Typeface.BOLD:android.graphics.Typeface.NORMAL);
         }
         if(which==0)renderCut();else if(which==1)renderLibrary();else renderPlanning();
@@ -158,7 +162,7 @@ public final class CutStudioActivity extends Activity {
             final int selected=m;
             Button choice=new Button(this);choice.setText(labels[m]);choice.setTextSize(11);
             choice.setAllCaps(false);
-            choice.setTextColor(cutMode==m?0xff69e2c6:INK);
+            choice.setTextColor(cutMode==m?0xff00c7b0:INK);
             modes.addView(choice,new LinearLayout.LayoutParams(0,dp(52),1));
             choice.setOnClickListener(w->{if(!exporting){cutMode=selected;render(0);}});
         }
@@ -278,7 +282,7 @@ public final class CutStudioActivity extends Activity {
             exporting=false;transformer=null;pendingTemp=null;
             message(segments.size()+" morceaux créés dans "+outputFolder);
             libraryFolder=outputFolder;
-            render(1);return;
+            startActivity(new Intent(this,CutStudioLibraryActivity.class));return;
         }
         long[] times=segments.get(segmentIndex);
         String base=sourceName.replaceAll("\\.[^.]+$","").replaceAll("[^A-Za-z0-9_-]","_");
@@ -334,7 +338,7 @@ public final class CutStudioActivity extends Activity {
             String state=job.optString("state","idle");
             if(!"idle".equals(state)&&!state.isEmpty()){
                 p.addView(text(state+" · "+job.optInt("completed")+"/"+job.optInt("total")
-                    +" morceaux",14,0xff69e2c6,true));
+                    +" morceaux",14,0xff00c7b0,true));
                 if(job.has("output_folder"))
                     p.addView(text(job.optString("output_folder"),12,MUTED,false));
                 if(job.has("error"))p.addView(text(job.optString("error"),12,0xffef9a9a,false));
@@ -373,7 +377,7 @@ public final class CutStudioActivity extends Activity {
                     }
                 }
                 head.addView(text(total==0?"Aucun morceau découpé":total+" morceaux disponibles",
-                    13,0xff69e2c6,true));
+                    13,0xff00c7b0,true));
             }else{
                 String open=libraryFolder;
                 button("← Tous les dossiers",head,()->{libraryFolder="";render(1);});
@@ -397,7 +401,7 @@ public final class CutStudioActivity extends Activity {
                         button("Partager le MP4",card,()->shareVideo(path));
                     }
                 }
-                head.addView(text(count+" vidéos dans ce dossier",13,0xff69e2c6,true));
+                head.addView(text(count+" vidéos dans ce dossier",13,0xff00c7b0,true));
             }
         }catch(Exception e){toast("Bibliothèque indisponible : "+e.getMessage());}
     }
@@ -418,7 +422,7 @@ public final class CutStudioActivity extends Activity {
         LinearLayout head=panel();head.addView(text("Planning de publication",18,INK,true));
         head.addView(text("Rappels Android locaux. Les plateformes doivent confirmer l'envoi. X : publication manuelle, sans programmation native dans ce module.",12,MUTED,false));
         List<JSONObject> entries=CutStudioStore.list(this);
-        head.addView(text(entries.size()+" fiches de publication enregistrées",13,0xff69e2c6,true));
+        head.addView(text(entries.size()+" fiches de publication enregistrées",13,0xff00c7b0,true));
         for(JSONObject j:entries){
             LinearLayout p=panel();
             long at=j.optLong("at");boolean done=j.optBoolean("published");
@@ -427,7 +431,7 @@ public final class CutStudioActivity extends Activity {
                 ?"Prêt à publier sur X (sans programmation)"
                 :at<=System.currentTimeMillis()?"À publier":"Programmé (rappel local)";
             p.addView(text(j.optString("platform").toUpperCase(Locale.ROOT)+
-                " · "+j.optString("account"),14,0xff69e2c6,true));
+                " · "+j.optString("account"),14,0xff00c7b0,true));
             p.addView(text(j.optString("title"),15,INK,true));
             if(!manualX)p.addView(text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM,
                 DateFormat.SHORT,Locale.FRANCE).format(new Date(at)),13,MUTED,false));
