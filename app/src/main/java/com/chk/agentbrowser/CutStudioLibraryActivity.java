@@ -3,6 +3,8 @@ package com.chk.agentbrowser;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -252,6 +254,8 @@ public final class CutStudioLibraryActivity extends Activity {
             cb.setOnCheckedChangeListener((v,b)->{if(b)selection.add(videoPath);else selection.remove(videoPath);});
         }else{
             action(p,"▶ LIRE",()->openVideo(videoPath));
+            if(hasShareMetadata(videoPath))
+                action(p,"PARTAGER + MÉTADONNÉES",()->chooseShareMetadata(video));
             action(p,"PLANIFIER LA PUBLICATION",()->startActivity(
                 new Intent(this,CutStudioActivity.class).putExtra("cut_schedule_path",videoPath)));
             action(p,"⋮ VIDÉO",()->videoActions(video));
@@ -285,9 +289,53 @@ public final class CutStudioLibraryActivity extends Activity {
     private void openVideo(String path){
         startActivity(new Intent(this,MediaPreviewActivity.class).putExtra("path",path));
     }
+    private boolean hasShareMetadata(String path){
+        try{
+            File f=workspace.file(path);
+            return new File(f.getParentFile(),"metadonnees.json").isFile();
+        }catch(Exception ignored){return false;}
+    }
+    private void chooseShareMetadata(File video){
+        String path=path(video);
+        new AlertDialog.Builder(this).setTitle("Métadonnées de publication")
+            .setItems(NETWORK_LABELS,(dialog,choice)->{
+                try{
+                    JSONObject meta=CutShareMetadata.forVideo(workspace,path,NETWORKS[choice]);
+                    String text=meta.getString("text");
+                    new AlertDialog.Builder(this)
+                        .setTitle(NETWORK_LABELS[choice]+" · "+video.getName())
+                        .setMessage(text)
+                        .setNegativeButton("Annuler",null)
+                        .setNeutralButton("Copier le texte",(d,n)->copyMetadata(text))
+                        .setPositiveButton("Copier et partager",(d,n)->{
+                            copyMetadata(text);
+                            shareVideoWithMetadata(video,text);
+                        }).show();
+                }catch(Exception e){toast("Métadonnées : "+e.getMessage());}
+            }).show();
+    }
+    private void copyMetadata(String text){
+        ClipboardManager manager=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
+        if(manager!=null){
+            manager.setPrimaryClip(ClipData.newPlainText("Métadonnées Cut Vidéo",text));
+            toast("Titre, description et hashtags copiés");
+        }
+    }
+    private void shareVideoWithMetadata(File video,String metadata){
+        try{
+            Uri uri=workspace.uri(path(video));
+            Intent intent=new Intent(Intent.ACTION_SEND);
+            intent.setType("video/mp4");
+            intent.putExtra(Intent.EXTRA_STREAM,uri);
+            intent.putExtra(Intent.EXTRA_TEXT,metadata);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.setClipData(ClipData.newUri(getContentResolver(),"Cut Vidéo",uri));
+            startActivity(Intent.createChooser(intent,"Partager la vidéo et ses métadonnées"));
+        }catch(Exception e){toast("Partage : "+e.getMessage());}
+    }
     private void videoActions(File video){
         String p=path(video);
-        String[] opts={"Lire","Planifier","Partager","Renommer","Suivi des réseaux","Supprimer (corbeille)"};
+        String[] opts={"Lire","Planifier","Partager","Renommer","Suivi des réseaux","Supprimer (corbeille)","Copier les métadonnées"};
         new AlertDialog.Builder(this).setTitle(video.getName()).setItems(opts,(d,n)->{
             if(n==0)openVideo(p);
             else if(n==1)startActivity(new Intent(this,CutStudioActivity.class).putExtra("cut_schedule_path",p));
@@ -295,6 +343,7 @@ public final class CutStudioLibraryActivity extends Activity {
             else if(n==3)renameVideo(video);
             else if(n==4)trackingDialog(p);
             else if(n==5)confirmTrash(Arrays.asList(video),false);
+            else if(n==6)chooseShareMetadata(video);
         }).show();
     }
     private void trackingDialog(String path){

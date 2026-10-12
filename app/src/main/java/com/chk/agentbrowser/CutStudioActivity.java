@@ -491,12 +491,28 @@ public final class CutStudioActivity extends Activity {
             existing==null?0:visibilityIndex(existing.optString("visibility")));
         String fallback=new File(path).getName().replace(".mp4","").replace('_',' ');
         String suggested=fallback.length()>45?fallback.substring(0,45):fallback;
-        EditText title=field(form,"Titre","Titre",existing==null?suggested:
+        JSONObject initialMeta=null;
+        if(existing==null)try{
+            initialMeta=CutShareMetadata.forVideo(workspace,path,"youtube");
+        }catch(Exception ignored){}
+        EditText title=field(form,"Titre","Titre",existing==null?
+            (initialMeta==null?suggested:initialMeta.optString("title",suggested)):
             existing.optString("title"),false);
         EditText description=field(form,"Description","Description",
-            existing==null?"":existing.optString("description"),false);
+            existing==null?(initialMeta==null?"":initialMeta.optString("description")):
+                existing.optString("description"),false);
         EditText hashtags=field(form,"Hashtags · maximum 5","#video #shorts",
-            existing==null?"#video #shorts":existing.optString("hashtags"),false);
+            existing==null?(initialMeta==null?"#video #shorts":initialMeta.optString("hashtags")):
+                existing.optString("hashtags"),false);
+        button("Charger les métadonnées du réseau choisi",form,()->{
+            try{
+                JSONObject meta=CutShareMetadata.forVideo(workspace,path,keys[network.getSelectedItemPosition()]);
+                title.setText(meta.getString("title"));
+                description.setText(meta.getString("description"));
+                hashtags.setText(meta.getString("hashtags"));
+                toast("Métadonnées chargées pour "+network.getSelectedItem());
+            }catch(Exception ex){toast("Pas de métadonnées disponibles : "+ex.getMessage());}
+        });
         button("Coller un bloc de métadonnées ChatGPT",form,()->{
             ClipboardManager manager=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
             if(manager==null||!manager.hasPrimaryClip()||manager.getPrimaryClip()==null)return;
