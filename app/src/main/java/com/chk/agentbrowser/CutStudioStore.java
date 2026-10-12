@@ -63,6 +63,42 @@ public final class CutStudioStore {
             }
         }
     }
+    /**
+     * Update existing publication file paths after a library rename.
+     * Preserves IDs, timestamps, accounts, metadata and published flags.
+     */
+    public static synchronized void rewritePaths(Context context,String previous,String next) throws Exception {
+        JSONArray entries=all(context);
+        boolean changed=false;
+        for(int i=0;i<entries.length();i++){
+            JSONObject item=entries.optJSONObject(i);
+            if(item==null)continue;
+            String path=item.optString("path","");
+            if(path.equals(previous)||path.startsWith(previous)&&previous.endsWith("/")){
+                item.put("path",next+path.substring(previous.length()));
+                changed=true;
+            }
+        }
+        if(changed)persist(context,entries);
+    }
+    /**
+     * When a file or an entire folder enters the local trash, cancel its
+     * reminders instead of keeping publication cards with broken source paths.
+     */
+    public static synchronized void removeForPath(Context context,String path) throws Exception {
+        JSONArray entries=all(context), retained=new JSONArray();
+        boolean changed=false;
+        for(int i=0;i<entries.length();i++){
+            JSONObject item=entries.optJSONObject(i);
+            if(item==null)continue;
+            String candidate=item.optString("path","");
+            if(candidate.equals(path)||(path.endsWith("/")&&candidate.startsWith(path))){
+                cancel(context,item.optString("id"));changed=true;
+            }else retained.put(item);
+        }
+        if(changed)persist(context,retained);
+    }
+
     public static synchronized void reschedule(Context context) {
         JSONArray entries=all(context);
         for(int i=0;i<entries.length();i++){

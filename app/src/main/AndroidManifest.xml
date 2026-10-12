@@ -36,6 +36,9 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <activity android:name=".CutStudioHomeActivity" android:exported="false" />
+        <activity android:name=".CutStudioLibraryActivity" android:exported="false" />
+        <activity android:name=".CutStudioSettingsActivity" android:exported="false" />
         <activity android:name=".CutStudioActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".StudioProjectsActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".VideoEditorActivity" android:exported="false" android:screenOrientation="portrait" />
