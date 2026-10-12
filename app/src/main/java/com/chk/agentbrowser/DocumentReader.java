@@ -116,7 +116,7 @@ public final class DocumentReader {
         File temp=File.createTempFile("chk-private-pdf-", ".pdf", app.getCacheDir());
         try{
             if(c.getResponseCode()!=200)throw new IOException("Accès au PDF refusé (HTTP "+c.getResponseCode()+").");
-            long length=c.getContentLengthLong();
+            long length=c.getContentLength();
             if(length>MAX_PDF_BYTES)throw new IOException("PDF trop volumineux.");
             int total=0;byte[] buffer=new byte[16384];
             try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(temp)){
