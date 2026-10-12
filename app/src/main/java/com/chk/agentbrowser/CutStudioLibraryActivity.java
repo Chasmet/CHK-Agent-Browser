@@ -155,6 +155,7 @@ public final class CutStudioLibraryActivity extends Activity {
         labelLine(toolbar,groups.length()+" classements · "+all.size()+" dossiers · "+videos+" vidéos",bytes(size)+" utilisés");
         action(toolbar,"＋ CRÉER UN CLASSEMENT",()->editGroup(null));
         action(toolbar,"⚙ AFFICHAGE ET TRI",this::displayOptions);
+        action(toolbar,"CORBEILLE · RESTAURER",this::showTrash);
         for(int i=0;i<groups.length();i++){
             JSONObject g=groups.optJSONObject(i);if(g==null)continue;
             String id=g.optString("id"), name=g.optString("name");
@@ -238,7 +239,9 @@ public final class CutStudioLibraryActivity extends Activity {
         thumb.setBackgroundColor(0xff101818);
         add(p,thumb,7);
         LinearLayout.LayoutParams ip=(LinearLayout.LayoutParams)thumb.getLayoutParams();
-        ip.height=dp(grid?94:155);thumb.setLayoutParams(ip);
+        int scale=state.size();
+        ip.height=dp(grid?(scale==0?76:scale==2?122:94):(scale==0?116:scale==2?210:155));
+        thumb.setLayoutParams(ip);
         loadThumb(thumb,video);
         labelLine(p,"▶ "+video.getName(),bytes(video.length()));
         final String videoPath=path(video);
@@ -504,6 +507,33 @@ public final class CutStudioLibraryActivity extends Activity {
                     if(folder){folderName="";groupId="";groupName="";}
                     render();
                 }catch(Exception e){toast("Corbeille : "+e.getMessage());}
+            }).show();
+    }
+    private void showTrash(){
+        try{
+            File trash=workspace.file("CutVideo/.trash");
+            File[] files=trash.isDirectory()?trash.listFiles():null;
+            if(files==null||files.length==0){toast("La corbeille est vide");return;}
+            Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));
+            String[] names=new String[files.length];
+            for(int i=0;i<files.length;i++)names[i]=files[i].getName();
+            new AlertDialog.Builder(this).setTitle("Corbeille Cut Vidéo")
+                .setItems(names,(d,n)->restore(files[n]))
+                .setNegativeButton("Fermer",null).show();
+        }catch(Exception e){toast("Corbeille : "+e.getMessage());}
+    }
+    private void restore(File file){
+        String name=file.getName().replaceFirst("^[0-9]+_", "");
+        File destination=file.isDirectory()?new File(root,name):new File(root,"recuperation_"+name);
+        if(destination.exists()){
+            toast("Un dossier ou fichier de ce nom existe déjà");return;
+        }
+        new AlertDialog.Builder(this).setTitle("Restaurer ?")
+            .setMessage("Restaurer "+name+" ? Les rappels de publication supprimés ne seront pas recréés.")
+            .setNegativeButton("Annuler",null)
+            .setPositiveButton("Restaurer",(d,n)->{
+                if(file.renameTo(destination))render();
+                else toast("Impossible de restaurer");
             }).show();
     }
     private void alert(String title,String message){
