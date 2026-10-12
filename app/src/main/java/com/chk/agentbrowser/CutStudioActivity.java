@@ -53,6 +53,7 @@ public final class CutStudioActivity extends Activity {
     private int tab=0;
     private int cutMode=0; // 0=rapide, 1=personnalise, 2=rogner
     private String libraryFolder="";
+    private String planningPath="";
     private Uri source;
     private String sourceName="";
     private long sourceDurationMs;
@@ -75,7 +76,9 @@ public final class CutStudioActivity extends Activity {
         findViewById(R.id.cut_tab_export).setOnClickListener(v->render(0));
         findViewById(R.id.cut_tab_library).setOnClickListener(v->startActivity(new Intent(this,CutStudioLibraryActivity.class)));
         findViewById(R.id.cut_tab_planning).setOnClickListener(v->render(2));
-        render(getIntent().getIntExtra("cut_tab",getIntent().hasExtra("schedule_id")?2:0));
+        planningPath=getIntent().getStringExtra("cut_view_schedule_path");
+        if(planningPath==null)planningPath="";
+        render(!planningPath.isEmpty()?2:getIntent().getIntExtra("cut_tab",getIntent().hasExtra("schedule_id")?2:0));
         String target=getIntent().getStringExtra("cut_schedule_path");
         if(target!=null&&!target.isEmpty())scheduleEditor(target,null);
         requestNotificationPermission();
@@ -419,9 +422,19 @@ public final class CutStudioActivity extends Activity {
         long sec=ms/1000;return String.format(Locale.FRANCE,"%02d:%02d",sec/60,sec%60);
     }
     private void renderPlanning(){
-        LinearLayout head=panel();head.addView(text("Planning de publication",18,INK,true));
+        LinearLayout head=panel();head.addView(text(
+            planningPath.isEmpty()?"Planning de publication":
+                "Planifier · "+new File(planningPath).getName(),18,INK,true));
         head.addView(text("Rappels Android locaux. Les plateformes doivent confirmer l'envoi. X : publication manuelle, sans programmation native dans ce module.",12,MUTED,false));
         List<JSONObject> entries=CutStudioStore.list(this);
+        if(!planningPath.isEmpty()){
+            List<JSONObject> filtered=new ArrayList<>();
+            for(JSONObject item:entries)
+                if(planningPath.equals(item.optString("path")))filtered.add(item);
+            entries=filtered;
+            String selected=planningPath;
+            button("＋ AJOUTER UNE PROGRAMMATION",head,()->scheduleEditor(selected,null));
+        }
         head.addView(text(entries.size()+" fiches de publication enregistrées",13,0xff00c7b0,true));
         for(JSONObject j:entries){
             LinearLayout p=panel();
@@ -436,8 +449,16 @@ public final class CutStudioActivity extends Activity {
             if(!manualX)p.addView(text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM,
                 DateFormat.SHORT,Locale.FRANCE).format(new Date(at)),13,MUTED,false));
             p.addView(text(state+" · "+j.optString("path"),12,MUTED,false));
-            button("Ouvrir le réseau + copier les métadonnées",p,()->openPlatform(j));
-            button("Partager le fichier vidéo",p,()->shareVideo(j.optString("path")));
+            p.addView(text(CutStudioStore.text(j),13,INK,false));
+            button("PUBLIER · partager MP4 et métadonnées",p,
+                ()->CutPublicationShare.publish(this,workspace,j));
+            button("Copier les métadonnées",p,()->{
+                ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                if(clipboard!=null)clipboard.setPrimaryClip(
+                    ClipData.newPlainText("Métadonnées Cut",CutStudioStore.text(j)));
+                toast("Titre, description et hashtags copiés");
+            });
+            button("Ouvrir via le navigateur (alternative)",p,()->openPlatform(j));
             button("Modifier",p,()->scheduleEditor(j.optString("path"),j));
             button("Dupliquer",p,()->scheduleEditor(j.optString("path"),copyForDuplicate(j)));
             button(done?"Annuler la validation":"Valider : publié",p,()->{
