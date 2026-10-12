@@ -207,7 +207,7 @@ public final class AgentClient {
                     JSONObject info = new JSONObject();
                     info.put("url", limit(page, 500)); info.put("title", limit(title, 150));
                     info.put("autonomous",isAutonomous());
-                    info.put("workspace_version",2);
+                    info.put("workspace_version",3);
                     info.put("keyboard_version",1);
                     info.put("desktop_version",1);
                     info.put("session_source",currentHandler==null?"none":currentHandler.sessionSource());
