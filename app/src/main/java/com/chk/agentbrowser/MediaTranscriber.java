@@ -82,7 +82,7 @@ final class MediaTranscriber {
             long downloaded=0;
             try{
                 if(c.getResponseCode()!=200)throw new IOException("Modèle vocal non téléchargeable: HTTP "+c.getResponseCode());
-                if(c.getContentLengthLong()>MAX_DOWNLOAD)throw new IOException("Modèle vocal trop volumineux.");
+                if(c.getContentLength()>MAX_DOWNLOAD)throw new IOException("Modèle vocal trop volumineux.");
                 try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(zip)){
                     byte[] b=new byte[32768];int n;
                     while((n=in.read(b))!=-1){
