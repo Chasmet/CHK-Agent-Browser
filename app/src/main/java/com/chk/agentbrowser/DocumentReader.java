@@ -214,7 +214,11 @@ public final class DocumentReader {
                     bmp.eraseColor(Color.WHITE);
                     p.render(bmp,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
                     ByteArrayOutputStream jpeg=new ByteArrayOutputStream();
-                    bmp.compress(Bitmap.CompressFormat.JPEG,65,jpeg);
+                    for(int quality=75;quality>=15;quality-=15){
+                        jpeg.reset();bmp.compress(Bitmap.CompressFormat.JPEG,quality,jpeg);
+                        if(jpeg.size()<=150000)break;
+                    }
+                    if(jpeg.size()>150000)throw new IOException("Aperçu PDF trop volumineux.");
                     return new JSONObject().put("format","pdf_page").put("page",page+1).put("page_count",renderer.getPageCount())
                         .put("width",bmp.getWidth()).put("height",bmp.getHeight())
                         .put("jpeg_base64",android.util.Base64.encodeToString(jpeg.toByteArray(),android.util.Base64.NO_WRAP));
