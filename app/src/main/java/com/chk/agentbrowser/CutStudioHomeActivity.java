@@ -22,16 +22,16 @@ public final class CutStudioHomeActivity extends Activity {
     }
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
-        LinearLayout root=new LinearLayout(this);root.setOrientation(1);root.setBackgroundColor(BG);
+        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(BG);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.addView(root);
         setContentView(scroll);
-        LinearLayout top=new LinearLayout(this);top.setOrientation(1);
+        LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.VERTICAL);
         top.setPadding(dp(22),dp(24),dp(22),dp(18));
         top.setBackgroundColor(0xff00796b);root.addView(top);
         TextView title=label("CUT VIDÉO",27,Color.WHITE,true);title.setGravity(Gravity.CENTER);top.addView(title);
         TextView subtitle=label("Découpe, classement et publication",13,0xffd3fff3,false);
         subtitle.setGravity(Gravity.CENTER);top.addView(subtitle);
-        LinearLayout cards=new LinearLayout(this);cards.setOrientation(1);cards.setPadding(dp(16),dp(20),dp(16),dp(8));root.addView(cards);
+        LinearLayout cards=new LinearLayout(this);cards.setOrientation(LinearLayout.VERTICAL);cards.setPadding(dp(16),dp(20),dp(16),dp(8));root.addView(cards);
         card(cards,"✂","IMPORTER UNE VIDÉO","Choisir une vidéo du téléphone ou de Fichiers CHK",()->startActivity(new Intent(this,CutStudioActivity.class)));
         card(cards,"▣","MES VIDÉOS","Classements, dossiers, notes et publications",()->startActivity(new Intent(this,CutStudioLibraryActivity.class)));
         card(cards,"◎","ASSISTANT CHATGPT","Métadonnées, programmation et automatisations",()->startActivity(new Intent(this,CutStudioActivity.class).putExtra("cut_tab",2)));
@@ -50,7 +50,7 @@ public final class CutStudioHomeActivity extends Activity {
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(13);parent.addView(row,lp);
         TextView graphic=label(icon,28,TEAL,true);graphic.setGravity(Gravity.CENTER);
         row.addView(graphic,new LinearLayout.LayoutParams(dp(58),dp(48)));
-        LinearLayout text=new LinearLayout(this);text.setOrientation(1);row.addView(text,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout text=new LinearLayout(this);text.setOrientation(LinearLayout.VERTICAL);row.addView(text,new LinearLayout.LayoutParams(0,-2,1));
         text.addView(label(name,15,Color.WHITE,true));
         TextView desc=label(sub,12,0xffb7c0bf,false);desc.setPadding(0,dp(5),0,0);text.addView(desc);
         TextView arrow=label("›",29,TEAL,false);row.addView(arrow);
