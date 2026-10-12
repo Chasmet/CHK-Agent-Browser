@@ -495,7 +495,7 @@ public class MainActivity extends Activity {
                             out.put("document_url",details.optString("document_url"));
                             out.put("session_source","visible");
                             out.put("visibility",details.optString("visibility"));
-                            callback.finish(true,out.toString());
+                            WebPdfReader.enrich(this,page,out,callback);
                         }catch(Exception ex){callback.finish(false,"Lecture impossible");}
                     });return;
                 }

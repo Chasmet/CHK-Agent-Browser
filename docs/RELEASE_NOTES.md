@@ -1,3 +1,14 @@
+## Lecteur universel IA — documents, images, audio et vidéo (12 octobre 2026)
+
+- Lecture des fichiers PDF par extraction native PDFBox (jusqu'à 8 pages par demande), et reconnaissance OCR locale des pages scannées avec ML Kit.
+- Lecture du contenu des DOCX, et détection de texte dans les images JPG, PNG, BMP et WebP.
+- Aperçu d'une page PDF sous forme d'image; réglage du consentement aux aperçus respecté.
+- Lecture des PDF HTTPS ouverts dans la WebView avec les cookies de la session en cours : téléchargement temporaire en cache, lecture seule, fichier effacé à la fin et refus des redirections HTTP.
+- Transcription locale des pistes audio et vidéo par Vosk en français et en anglais, avec modèle open source téléchargé au premier usage (environ 40 Mo), puis utilisation sans réseau. Aucun envoi d'audio à Render.
+- Nouveaux outils MCP version 3 `browser_document_read`, `browser_document_page`, `browser_media_transcribe` et `browser_media_model_status`; les outils précédents continuent de fonctionner.
+- Les fichiers, la clé Android de signature, les données et les réglages MCP restent inchangés lors de la mise à jour.
+- Limites : les formats médias dépendent des codecs Android, OCR/ASR ne sont pas infaillibles, aucune lecture des fichiers d'autres applications sans import autorisé.
+
 ## Cinq outils IA — souris, vision, fichiers, tâches et terminal
 
 - Vrais gestes tactiles Android dans CHK et ses pages web : clic, double-clic, appui long, déplacement et retour ; canvas et commandes natives inclus.
