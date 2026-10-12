@@ -256,7 +256,14 @@ public final class CutStudioLibraryActivity extends Activity {
             action(p,"▶ LIRE",()->openVideo(videoPath));
             if(hasShareMetadata(videoPath))
                 action(p,"PARTAGER + MÉTADONNÉES",()->chooseShareMetadata(video));
-            action(p,"PLANIFIER LA PUBLICATION",()->startActivity(
+            int schedules=0;
+            for(JSONObject entry:CutStudioStore.list(this))
+                if(videoPath.equals(entry.optString("path"))&&!entry.optBoolean("published"))schedules++;
+            action(p,schedules==0?"AUCUNE PROGRAMMATION · AJOUTER":
+                    schedules+" PROGRAMMATION(S) ACTIVES",
+                ()->startActivity(new Intent(this,CutStudioActivity.class)
+                    .putExtra("cut_view_schedule_path",videoPath)));
+            action(p,"＋ PLANIFIER LA PUBLICATION",()->startActivity(
                 new Intent(this,CutStudioActivity.class).putExtra("cut_schedule_path",videoPath)));
             action(p,"⋮ VIDÉO",()->videoActions(video));
             if(!grid){
