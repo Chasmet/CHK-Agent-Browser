@@ -72,7 +72,7 @@ public final class CutStudioLibraryActivity extends Activity {
         if(bold)t.setTypeface(null,Typeface.BOLD);
         return t;
     }
-    private LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(1);return v;}
+    private LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
     private void add(LinearLayout host,View v,int bottom) {
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
         p.bottomMargin=dp(bottom);host.addView(v,p);
@@ -224,7 +224,7 @@ public final class CutStudioLibraryActivity extends Activity {
         if(state.layout()==1){
             LinearLayout row=null;
             for(int i=0;i<videos.size();i++){
-                if(i%2==0){row=new LinearLayout(this);row.setOrientation(0);add(content,row,7);}
+                if(i%2==0){row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);add(content,row,7);}
                 LinearLayout cell=column();LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,-2,1);
                 if(i%2==0)params.rightMargin=dp(6);
                 else params.leftMargin=dp(6);
