@@ -126,7 +126,7 @@ public final class CutStudioLibraryActivity extends Activity {
     }
     private void sort(List<File> files,boolean folders){
         final int mode=state.sort();
-        files.sort((a,b)->{
+        java.util.Collections.sort(files,(a,b)->{
             if(mode==1)return a.getName().compareToIgnoreCase(b.getName());
             if(mode==2)return Long.compare(sizeOf(b),sizeOf(a));
             if(mode==3&&folders)return Integer.compare(countVideo(b),countVideo(a));
