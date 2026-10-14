@@ -106,6 +106,8 @@ public final class VideoEditorEngine {
                 JSONObject data;
                 if("video_editor_status".equals(action))data=status();
                 else if("video_editor_project_read".equals(action))data=load(application);
+                else if("video_editor_offline_audit".equals(action))
+                    data=OfflineStudioAudit.analyze(application,load(application));
                 else if("video_editor_project_list".equals(action))
                     data=StudioProjectLibrary.list(application,args.optBoolean("trash",false));
                 else if("video_editor_project_save".equals(action)){
@@ -394,6 +396,14 @@ public final class VideoEditorEngine {
             double rotation=c.optDouble("rotation",0);
             if((Double.isNaN(rotation)||Double.isInfinite(rotation))||rotation<-180||rotation>180)throw new IllegalArgumentException("Rotation entre -180 et 180 requise");
             if(c.optString("text","").length()>500)throw new IllegalArgumentException("Texte limité à 500 caractères");
+            for(String key:new String[]{"grade_exposure","grade_exposure_end","grade_warmth","grade_warmth_end",
+                     "grade_saturation","grade_saturation_end"}){
+                if(!c.has(key))continue;
+                double x=c.optDouble(key,0);
+                double max=key.contains("saturation")?2:0.5, min=key.contains("saturation")?0:-0.5;
+                if(Double.isNaN(x)||Double.isInfinite(x)||x<min||x>max)
+                    throw new IllegalArgumentException("Étalonnage invalide : "+key);
+            }
             videoDuration+=Math.round(duration/speed);
         }
         if(sounds!=null){
@@ -481,6 +491,37 @@ public final class VideoEditorEngine {
     public static List<androidx.media3.common.Effect> previewEffects(String name){
         return effects(name,1000,0);
     }
+    /**
+     * Animated on-device 3x3 colour grading. 0 is neutral exposure/temperature;
+     * saturation 1 is neutral. Time is anchored to each source clip's first frame
+     * because Media3 can expose composition-global presentation timestamps.
+     * No extra decoder, GPU shader download or API is used.
+     */
+    private static RgbMatrix gradedColor(JSONObject c,long durationMs){
+        final float exposure0=(float)c.optDouble("grade_exposure",0);
+        final float exposure1=(float)c.optDouble("grade_exposure_end",exposure0);
+        final float warmth0=(float)c.optDouble("grade_warmth",0);
+        final float warmth1=(float)c.optDouble("grade_warmth_end",warmth0);
+        final float saturation0=(float)c.optDouble("grade_saturation",1);
+        final float saturation1=(float)c.optDouble("grade_saturation_end",saturation0);
+        final java.util.concurrent.atomic.AtomicLong first=new java.util.concurrent.atomic.AtomicLong(Long.MIN_VALUE);
+        return (timeUs,useHdr)->{
+            first.compareAndSet(Long.MIN_VALUE,timeUs);
+            float t=Math.max(0f,Math.min(1f,(timeUs-first.get())/(durationMs*1000f)));
+            float e=exposure0+(exposure1-exposure0)*t;
+            float warmth=warmth0+(warmth1-warmth0)*t;
+            float saturation=saturation0+(saturation1-saturation0)*t;
+            float gain=(float)Math.pow(2,e), gray=1f-saturation;
+            float r=gain*(1f+warmth*.3f),g=gain,b=gain*(1f-warmth*.3f);
+            return new float[]{
+                r*(saturation+gray*.2126f),r*gray*.7152f,r*gray*.0722f,0f,
+                g*gray*.2126f,g*(saturation+gray*.7152f),g*gray*.0722f,0f,
+                b*gray*.2126f,b*gray*.7152f,b*(saturation+gray*.0722f),0f,
+                0f,0f,0f,1f
+            };
+        };
+    }
+
     /** Ratios are independent from container and codec support. */
     public static float ratio(String value){
         if("source".equals(value))return 0;
@@ -500,6 +541,9 @@ public final class VideoEditorEngine {
         for(int i=0;i<clips.length();i++){
             JSONObject c=clips.getJSONObject(i);long len=c.optLong("duration_ms",10000);
             List<androidx.media3.common.Effect> fx=effects(c.optString("filter","aucun"),len,c.optLong("fade_ms",0));
+            if(c.has("grade_exposure")||c.has("grade_warmth")||c.has("grade_saturation")||
+               c.has("grade_exposure_end")||c.has("grade_warmth_end")||c.has("grade_saturation_end"))
+                fx.add(gradedColor(c,len));
             if(c.optDouble("rotation",0)!=0)fx.add(new androidx.media3.effect.ScaleAndRotateTransformation.Builder().setRotationDegrees((float)c.optDouble("rotation")).build());
             String caption=c.optString("text","");
             if(!caption.isEmpty()){
