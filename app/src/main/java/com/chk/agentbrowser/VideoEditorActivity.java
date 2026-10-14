@@ -133,7 +133,35 @@ public final class VideoEditorActivity extends Activity {
     private TextView chip(String text){TextView v=MobileUi.text(this,text,15,MobileUi.TEXT);v.setMinHeight(dp(48));v.setMinWidth(dp(48));v.setGravity(Gravity.CENTER);v.setFocusable(true);return v;}
     private void mainTool(LinearLayout parent,String label,String icon,Runnable action){TextView view=UiIcons.button(this,label,icon,0xfff4f4ff);parent.addView(view,new LinearLayout.LayoutParams(0,-1,1));view.setOnClickListener(v->action.run());}
     private void editMenu(){if(!editable())return;new AgentDialog.Builder(this).setTitle("Éditer le plan "+(selected+1)).setItems(new String[]{"Découper avec les curseurs","Diviser au curseur","Vitesse","Rotation","Son du plan"},(d,n)->{switch(n){case 0:trim(false,selected);break;case 1:split();break;case 2:speed();break;case 3:rotation();break;case 4:mute();break;}}).show();}
-    private void audioMenu(){new AgentDialog.Builder(this).setTitle("Audio").setItems(new String[]{"Ajouter un audio","Son original","Modifier les pistes"},(d,n)->{if(n==0)addMenu("audio");else if(n==1)mute();else{String[] names=new String[audio().length()];for(int i=0;i<names.length;i++)names[i]=name(audio().optJSONObject(i).optString("path"));new AgentDialog.Builder(this).setTitle("Pistes audio").setItems(names,(x,i)->new AgentDialog.Builder(this).setItems(new String[]{"Découper","Supprimer"},(y,j)->{if(j==0)trim(true,i);else delete(true,i);}).show()).show();}}).show();}
+    private void audioMenu(){new AgentDialog.Builder(this).setTitle("Audio").setItems(new String[]{"Ajouter un audio","Son original","Modifier les pistes","Transcrire les paroles · IA locale"},(d,n)->{if(n==0)addMenu("audio");else if(n==1)mute();else if(n==3)transcribeAudio();else{String[] names=new String[audio().length()];for(int i=0;i<names.length;i++)names[i]=name(audio().optJSONObject(i).optString("path"));new AgentDialog.Builder(this).setTitle("Pistes audio").setItems(names,(x,i)->new AgentDialog.Builder(this).setItems(new String[]{"Découper","Supprimer"},(y,j)->{if(j==0)trim(true,i);else delete(true,i);}).show()).show();}}).show();}
+    /** Vosk inference runs on-device. The model may require one initial installation. */
+    private void transcribeAudio(){
+        if(audio().length()==0){toast("Ajoute d'abord une piste audio");return;}
+        String path=audio().optJSONObject(0).optString("path");
+        if(path.isEmpty())return;
+        new AgentDialog.Builder(this).setTitle("Paroles · transcription locale")
+            .setMessage("Reconnaissance Vosk en français, exécutée sur le téléphone. "
+                +"Le modèle doit être installé localement au préalable (téléchargement initial possible). "
+                +"Le rap peut produire des mots incorrects : vérifie les paroles. "
+                +"Aucune piste audio n'est envoyée à un serveur.")
+            .setNegativeButton("Annuler",null)
+            .setPositiveButton("Analyser",(d,w)->{
+                toast("Transcription locale en cours…");
+                MediaTranscriber.IO.execute(()->{
+                    try{
+                        JSONObject result=MediaTranscriber.transcribe(this,path,"fr",180);
+                        ui.post(()->{if(!alive)return;
+                            String text=result.optString("text","");
+                            new AgentDialog.Builder(this).setTitle("Paroles reconnues · à vérifier")
+                                .setMessage(text.isEmpty()?"Aucune parole intelligible reconnue.":
+                                    text+"\n\nRésultat automatique, non synchronisé syllabe par syllabe.")
+                                .setPositiveButton("Fermer",null).show();
+                        });
+                    }catch(Exception e){ui.post(()->toast("Transcription locale : "+e.getMessage()));}
+                });
+            }).show();
+    }
+
     private void clipMenu(){if(!editable())return;new AgentDialog.Builder(this).setTitle("Plans du montage").setItems(new String[]{"Ajouter une vidéo","Dupliquer le plan","Déplacer le plan","Supprimer le plan"},(d,n)->{switch(n){case 0:addMenu("video");break;case 1:duplicate();break;case 2:move();break;case 3:delete(false,selected);break;}}).show();}
     private void tool(String glyph,String label,Runnable action){TextView v=chip(glyph+"  "+label);v.setTextSize(12);v.setPadding(dp(10),0,dp(10),0);v.setMinHeight(dp(44));v.setSingleLine(true);tools.addView(v,new LinearLayout.LayoutParams(-2,dp(compact?44:48)));v.setOnClickListener(w->{if(editable())action.run();});}
     private void toast(String text){if(alive)Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
