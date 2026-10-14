@@ -33,6 +33,7 @@ public final class VideoEditorActivity extends Activity {
     private boolean previewReady;
     private TextView previewHint,previewCaption;
     private TextView title,clock,status,play,format;
+    private boolean auditing;
 
     private androidx.media3.ui.PlayerView viewer;
     private FrameLayout previewCanvas;
@@ -122,6 +123,8 @@ public final class VideoEditorActivity extends Activity {
         LinearLayout mainTools=new LinearLayout(this);root.addView(mainTools,new LinearLayout.LayoutParams(-1,dp(compact?56:64)));
         mainTool(mainTools,"Éditer","scissors",()->editMenu());mainTool(mainTools,"Audio","audio",()->audioMenu());mainTool(mainTools,"Texte","text",()->{if(editable())caption();});mainTool(mainTools,"Effets","effects",()->{if(editable())filter();});mainTool(mainTools,"Plans","layers",()->clipMenu());mainTool(mainTools,"Format","crop",()->ratioMenu());
         HorizontalScrollView strip=new HorizontalScrollView(this);strip.setHorizontalScrollBarEnabled(false);root.addView(strip,new LinearLayout.LayoutParams(-1,dp(compact?44:48)));tools=new LinearLayout(this);strip.addView(tools);
+        tool("◎","Audit local",()->offlineAudit());tool("◉","Étalonnage",()->gradeMenu());
+        tool("◁","−1 image",()->stepFrame(-1));tool("▷","+1 image",()->stepFrame(1));
         tool("✂","Diviser",()->split());tool("◷","Vitesse",()->speed());tool("▣","Recadrer",()->ratioMenu());tool("↻","Rotation",()->rotation());tool("⇄","Déplacer",()->move());tool("▣","Dupliquer",()->duplicate());tool("×","Supprimer",()->delete(false,selected));
         status=MobileUi.text(this,"Montage local",11,MobileUi.MUTED);status.setPadding(dp(10),dp(2),dp(10),dp(2));status.setMaxLines(2);root.addView(status,new LinearLayout.LayoutParams(-1,dp(34)));status.setOnClickListener(v->outputMenu());scope.setOnClickListener(v->outputMenu());
         engine.command(this,"video_editor_project_read",new JSONObject(),(ok,res)->runOnUiThread(()->{try{if(ok){project=new JSONObject(res);revision=project.optInt("revision",0);draw();preview();String launch=getIntent().getStringExtra("add_path");if(launch!=null)addFile("video",launch);}else toast(res);}catch(Exception e){toast(e.getMessage());}}));ui.post(ticker);
@@ -355,6 +358,121 @@ public final class VideoEditorActivity extends Activity {
     private void trim(boolean sound,int index){JSONObject c=(sound?audio():clips()).optJSONObject(index);if(c==null||saving||importing)return;String path=c.optString("path");WorkspaceCommands.IO.execute(()->{try{long sourceDuration=MediaInspection.info(this,path).optLong("duration_ms");ui.post(()->{if(!alive)return;LinearLayout box=MobileUi.column(this);box.setPadding(dp(20),dp(10),dp(20),dp(12));TextView bounds=MobileUi.text(this,"",14,MobileUi.TEXT);box.addView(bounds);SeekBar begin=new SeekBar(this),end=new SeekBar(this);begin.setMax((int)sourceDuration);end.setMax((int)sourceDuration);begin.setProgress((int)c.optLong("start_ms"));end.setProgress((int)(c.optLong("start_ms")+c.optLong("duration_ms")));box.addView(MobileUi.text(this,"Début",12,MobileUi.MUTED));box.addView(begin);box.addView(MobileUi.text(this,"Fin",12,MobileUi.MUTED));box.addView(end);Runnable update=()->bounds.setText(time(begin.getProgress())+" → "+time(end.getProgress()));SeekBar.OnSeekBarChangeListener listener=new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar bar,int progress,boolean user){update.run();}public void onStartTrackingTouch(SeekBar b){}public void onStopTrackingTouch(SeekBar b){}};begin.setOnSeekBarChangeListener(listener);end.setOnSeekBarChangeListener(listener);update.run();
             AlertDialog dialog=new AgentDialog.Builder(this).setTitle("Découper · "+name(path)).setView(box).setNegativeButton("Annuler",null).setNeutralButton("Tout le média",(d,n)->{remember();try{c.put("start_ms",0).put("duration_ms",sourceDuration);save();}catch(Exception e){toast(e.getMessage());}}).setPositiveButton("Appliquer",null).create();dialog.setOnShowListener(d->dialog.getButton(-1).setOnClickListener(v->{if(end.getProgress()-begin.getProgress()<500){toast("Garde au moins 0,5 seconde");return;}try{remember();c.put("start_ms",begin.getProgress()).put("duration_ms",end.getProgress()-begin.getProgress());save();dialog.dismiss();}catch(Exception e){toast(e.getMessage());}}));dialog.show();
         });}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
+    /** All heavy calculations stay on the device's disk executor. */
+    private void offlineAudit(){
+        if(auditing||project==null)return;
+        auditing=true;
+        toast("Audit local : audio, luminosité, doublons et sources…");
+        engine.command(this,"video_editor_offline_audit",new JSONObject(),(ok,value)->ui.post(()->{
+            auditing=false;
+            if(!alive)return;
+            if(!ok){toast("Analyse impossible : "+value);return;}
+            try{
+                JSONObject data=new JSONObject(value),beat=data.optJSONObject("audio")==null
+                    ?null:data.getJSONObject("audio").optJSONObject("beat");
+                StringBuilder summary=new StringBuilder();
+                summary.append("Analyse sur téléphone uniquement. Aucune API.\n\n");
+                summary.append(data.optInt("clip_count")).append(" segments · ")
+                    .append(data.optInt("frames_sampled")).append(" images examinées\n");
+                summary.append("Fichiers réellement identiques : ")
+                    .append(data.optInt("identical_separate_files")).append("\n");
+                summary.append("Réutilisations intentionnelles de source : ")
+                    .append(data.optInt("source_reuses")).append("\n");
+                if(beat!=null&&beat.optBoolean("available"))
+                    summary.append("Tempo indicatif : ").append(beat.optInt("bpm_estimated"))
+                        .append(" BPM (confiance indicative : ")
+                        .append(beat.optDouble("confidence_indicator")).append(")\n");
+                else if(beat!=null)summary.append("BPM : ")
+                    .append(beat.optString("reason","indisponible")).append("\n");
+                JSONArray alerts=data.optJSONArray("warnings");
+                summary.append("\nPoints à vérifier :\n");
+                if(alerts==null||alerts.length()==0)summary.append("Aucune alerte détectée.\n");
+                else for(int i=0;i<Math.min(alerts.length(),14);i++)
+                    summary.append("• ").append(alerts.optString(i)).append("\n");
+                summary.append("\nL'audit ne modifie pas le montage et ne garantit pas le lip-sync.");
+                new AgentDialog.Builder(this).setTitle("CHK Réalisateur · Audit local")
+                    .setMessage(summary.toString()).setPositiveButton("Terminer",null).show();
+            }catch(Exception e){toast("Résultat d'audit illisible : "+e.getMessage());}
+        }));
+    }
+
+    /** Fine timeline positioning at 30 fps approximation; never duplicates footage. */
+    private void stepFrame(int direction){
+        if(project==null||clips().length()==0)return;
+        pausePreview();
+        long target=Math.max(0,Math.min(total()-1,timelinePosition()+direction*33L));
+        seekPreview(target);
+        clock.setText(time(target)+" / "+time(total()));
+    }
+
+    private void gradeMenu(){
+        if(clip()==null)return;
+        new AgentDialog.Builder(this).setTitle("Étalonnage local · GPU")
+            .setItems(new String[]{
+                "Réglage manuel (exposition, couleur, saturation)",
+                "Lumière progressive (keyframes)",
+                "Refroidir le plan",
+                "Réchauffer le plan",
+                "Réinitialiser l'étalonnage"
+            },(dialog,index)->{
+                if(index==0)gradeManual();
+                else try{
+                    remember();
+                    JSONObject c=clip();
+                    if(index==1){
+                        c.put("grade_exposure",-.12).put("grade_exposure_end",.35)
+                          .put("grade_warmth",-.10).put("grade_warmth_end",.20)
+                          .put("grade_saturation",.92).put("grade_saturation_end",1.08);
+                    }else if(index==2){
+                        c.put("grade_exposure",.08).put("grade_warmth",-.22)
+                          .put("grade_saturation",.90);
+                        c.remove("grade_exposure_end");c.remove("grade_warmth_end");
+                        c.remove("grade_saturation_end");
+                    }else if(index==3){
+                        c.put("grade_exposure",.08).put("grade_warmth",.22)
+                          .put("grade_saturation",1.02);
+                        c.remove("grade_exposure_end");c.remove("grade_warmth_end");
+                        c.remove("grade_saturation_end");
+                    }else for(String key:new String[]{
+                        "grade_exposure","grade_exposure_end","grade_warmth",
+                        "grade_warmth_end","grade_saturation","grade_saturation_end"})c.remove(key);
+                    save();
+                }catch(Exception e){toast(e.getMessage());}
+            }).show();
+    }
+    private void gradeManual(){
+        if(clip()==null)return;
+        LinearLayout layout=MobileUi.column(this);
+        layout.setPadding(dp(18),dp(16),dp(18),dp(12));
+        TextView info=MobileUi.text(this,"Réglages GPU appliqués au MP4 exporté. L'aperçu reste brut.",
+            12,MobileUi.MUTED);layout.addView(info);
+        SeekBar exposure=new SeekBar(this),warmth=new SeekBar(this),sat=new SeekBar(this);
+        exposure.setMax(100);warmth.setMax(100);sat.setMax(200);
+        exposure.setProgress((int)Math.round((clip().optDouble("grade_exposure",0)+.5)*100));
+        warmth.setProgress((int)Math.round((clip().optDouble("grade_warmth",0)+.5)*100));
+        sat.setProgress((int)Math.round(clip().optDouble("grade_saturation",1)*100));
+        layout.addView(MobileUi.text(this,"Exposition (-0,5 à +0,5 EV)",13,MobileUi.TEXT));
+        layout.addView(exposure);
+        layout.addView(MobileUi.text(this,"Température froide ↔ chaude",13,MobileUi.TEXT));
+        layout.addView(warmth);
+        layout.addView(MobileUi.text(this,"Saturation (0 % à 200 %)",13,MobileUi.TEXT));
+        layout.addView(sat);
+        new AgentDialog.Builder(this).setTitle("Étalonnage du plan "+(selected+1))
+            .setView(layout).setNegativeButton("Annuler",null)
+            .setPositiveButton("Appliquer",(d,w)->{
+                try{
+                    remember();
+                    JSONObject c=clip();
+                    c.put("grade_exposure",(exposure.getProgress()-50)/100.0);
+                    c.put("grade_warmth",(warmth.getProgress()-50)/100.0);
+                    c.put("grade_saturation",sat.getProgress()/100.0);
+                    c.remove("grade_exposure_end");c.remove("grade_warmth_end");
+                    c.remove("grade_saturation_end");
+                    save();
+                }catch(Exception e){toast(e.getMessage());}
+            }).show();
+    }
+
     private void filter(){
         String[] labels={"Original","Noir et blanc","Cinéma","Chaud","Froid",
             "Contraste","Nuit","Vintage","Vibrant (couleurs +)","Cinéma doux",
@@ -522,7 +640,12 @@ public final class VideoEditorActivity extends Activity {
                             }catch(Exception e){toast(e.getMessage());}
                         }));
                     }catch(Exception e){toast("Fichier projet JSON invalide : "+e.getMessage());}
-                });return;}JSONObject metadata=MediaInspection.info(this,path);long duration=metadata.optLong("duration_ms",0);if(duration<500)throw new Exception("Durée du média indisponible ou trop courte");ui.post(()->{try{remember();JSONObject c=new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration);if(kind.equals("video"))clips().put(c);else{long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().getJSONObject(i).optLong("duration_ms");if(remaining<500){toast("Ajoute une vidéo ou raccourcis l’audio précédent");return;}c.put("duration_ms",Math.min(duration,remaining));JSONArray a=audio();a.put(c);project.put("audio",a);}selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
+                });return;}JSONObject metadata=MediaInspection.info(this,path);long duration=metadata.optLong("duration_ms",0);if(duration<500)throw new Exception("Durée du média indisponible ou trop courte");ui.post(()->{try{if(kind.equals("video")){for(int j=0;j<clips().length();j++)
+                    if(path.equals(clips().getJSONObject(j).optString("path"))){
+                        toast("Ce fichier est déjà dans le montage. Aucun doublon ajouté.");
+                        return;
+                    }}
+                    remember();JSONObject c=new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration);if(kind.equals("video"))clips().put(c);else{long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().getJSONObject(i).optLong("duration_ms");if(remaining<500){toast("Ajoute une vidéo ou raccourcis l’audio précédent");return;}c.put("duration_ms",Math.min(duration,remaining));JSONArray a=audio();a.put(c);project.put("audio",a);}selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
         if(request==811&&result==RESULT_OK&&data!=null&&data.getData()!=null){android.net.Uri target=data.getData();String path=exportCopyPath;WorkspaceCommands.IO.execute(()->{try(java.io.InputStream in=new java.io.FileInputStream(new WorkspaceStore(this).file(path));java.io.OutputStream out=getContentResolver().openOutputStream(target,"w")){if(out==null)throw new java.io.IOException("Destination indisponible");byte[] buffer=new byte[65536];int count;while((count=in.read(buffer))!=-1)out.write(buffer,0,count);ui.post(()->toast("Montage complet enregistré sur le téléphone"));}catch(Exception e){ui.post(()->toast(e.getMessage()));}});return;}
         if(request!=810||result!=RESULT_OK||data==null||project==null)return;String kind=importKind;ArrayList<android.net.Uri> uris=new ArrayList<>();if(data.getClipData()!=null)for(int i=0;i<Math.min(20,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)uris.add(data.getData());if(uris.isEmpty())return;importing=true;status.setText("Importation de "+uris.size()+" média(s)…");
