@@ -56,7 +56,8 @@ public final class OfflineStudioAudit {
                     if (file.length() <= 300L * 1024 * 1024) {
                         String hash = sha256(file);
                         report.put("sha256", hash);
-                        String other = byChecksum.putIfAbsent(hash, path);
+                        String other = byChecksum.get(hash);
+                        if (other == null) byChecksum.put(hash, path);
                         if (other != null && !other.equals(path)) {
                             identicalFiles++;
                             report.put("duplicate_of", other);
@@ -163,6 +164,30 @@ public final class OfflineStudioAudit {
             }
         }
         return new double[]{count == 0 ? 0 : lum / count, count == 0 ? 0 : delta / count};
+    }
+
+    /**
+     * Byte-for-byte comparison after a local file-picker import. Compare sizes
+     * first; stream in 64-KiB buffers and never delete the user's original file.
+     */
+    static boolean sameContent(File first, File second) throws Exception {
+        if (!first.isFile() || !second.isFile() || first.length() != second.length()) return false;
+        if (first.getCanonicalPath().equals(second.getCanonicalPath())) return true;
+        byte[] a = new byte[65536], b = new byte[65536];
+        try (FileInputStream left = new FileInputStream(first);
+             FileInputStream right = new FileInputStream(second)) {
+            int n;
+            while ((n = left.read(a)) != -1) {
+                int at = 0;
+                while (at < n) {
+                    int read = right.read(b, at, n - at);
+                    if (read <= 0) return false;
+                    at += read;
+                }
+                for (int i = 0; i < n; i++) if (a[i] != b[i]) return false;
+            }
+            return right.read() == -1;
+        }
     }
 
     private static String sha256(File file) throws Exception {
