@@ -1,3 +1,14 @@
+## Navigation rapide, gestion des onglets et traduction EN/FR (16 octobre 2026)
+
+- Onglets en grille de cartes inspirée des navigateurs mobiles : voir, ouvrir, sélectionner ou fermer un onglet.
+- Menu Web réorganisé et bouton de traduction dans la barre d’adresse.
+- Traduction de texte directement dans la page : anglais vers français, français vers anglais et retour au texte original. Les modèles ML Kit sont téléchargés au premier usage, puis fonctionnent hors ligne ; les pages HTML et cookies ne sont pas envoyés au relais.
+- Jusqu’à 12 onglets dans la session visible et dans le moteur MCP autonome, au lieu de 8 pour ce dernier.
+- Commandes Android nouvelles : `new_tab`/`open_tab`, `list_tabs`, `close_tab`, `translate_page`. Compatibilité `tabs`, `switch_tab`, `close_popup` conservée.
+- Les nouvelles commandes peuvent être exécutées via `browser_task_submit` sans ajouter d’outil direct au relais (mode autonome requis). L’enregistrement d’outils MCP directs distincts sur Render reste une opération indépendante.
+- Les URLs de création via MCP doivent être HTTPS publiques. Les autres espaces Fichiers, Cut, Studio et Notes ne changent pas.
+- Test instrumenté de création, sélection, inventaire et fermeture d’onglets. Conservation de l’application et de sa signature pour préserver les données lors de l’installation.
+
 ## Lecteur universel IA — documents, images, audio et vidéo (12 octobre 2026)
 
 - Lecture des fichiers PDF par extraction native PDFBox (jusqu'à 8 pages par demande), et reconnaissance OCR locale des pages scannées avec ML Kit.
