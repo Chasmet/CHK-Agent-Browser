@@ -69,6 +69,54 @@ public final class BrowserMediaUploadTest {
         }
     }
 
+    /**
+     * Regression: large files must travel as a native content URI, not through
+     * the 32 MiB JavaScript/base64 path. The sparse fixture avoids media copies.
+     */
+    @Test public void largeWorkspaceVideoUsesNativeFileChooser()throws Exception{
+        Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
+        Context app=instrumentation.getTargetContext();
+        app.getSharedPreferences("update_monitor",0).edit().putBoolean("enabled",false).commit();
+        WorkspaceStore store=new WorkspaceStore(app);
+        String path="test-native-large-"+UUID.randomUUID()+".mp4";
+        long length=34L*1024L*1024L;
+        try(java.io.RandomAccessFile file=new java.io.RandomAccessFile(store.file(path),"rw")){
+            file.setLength(length);
+        }
+        MainActivity activity=(MainActivity)instrumentation.startActivitySync(
+            new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try{
+            Field current=MainActivity.class.getDeclaredField("current");current.setAccessible(true);
+            WebView web=(WebView)current.get(activity);
+            String html="<html><body><input id='media' type='file' accept='video/mp4' "
+                +"style='display:block;width:240px;height:70px;margin:35px'>"
+                +"<output id='selected'></output><script>"
+                +"document.querySelector('#media').addEventListener('change',function(e){"
+                +"var f=e.target.files[0];document.querySelector('#selected').textContent="
+                +"f?f.name+':'+f.size:'none';});</script></body></html>";
+            WebFixture.load(instrumentation,web,"https://example.com/native-large-video",html,
+                "!!document.getElementById('media')");
+            CountDownLatch received=new CountDownLatch(1);
+            AtomicBoolean success=new AtomicBoolean(false);
+            AtomicReference<String> message=new AtomicReference<>("");
+            instrumentation.runOnMainSync(()->BrowserNativeUploader.upload(
+                app,web,"#media",new Uri[]{store.uri(path)},(ok,response)->{
+                    success.set(ok);message.set(response);received.countDown();
+                }));
+            assertTrue("Native upload result timed out",received.await(25,TimeUnit.SECONDS));
+            assertTrue("Expected native 34 MiB URI upload: "+message.get(),success.get());
+            String after=evaluate(instrumentation,web,
+                "JSON.stringify({size:document.querySelector('#media').files[0].size,"
+                +"name:document.querySelector('#media').files[0].name})");
+            org.json.JSONObject obj=new org.json.JSONObject(new JSONArray("["+after+"]").getString(0));
+            assertEquals(length,obj.getLong("size"));
+            assertEquals(path,obj.getString("name"));
+        }finally{
+            instrumentation.runOnMainSync(activity::finish);
+            store.file(path).delete();
+        }
+    }
+
     @Test public void queuedUploadStopsAfterReloadingTheSameUrl()throws Exception{
         Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
         Context app=instrumentation.getTargetContext();
