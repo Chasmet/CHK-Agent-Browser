@@ -88,6 +88,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.nav_video).setOnClickListener(v->startActivity(new Intent(this,StudioProjectsActivity.class)));
          findViewById(R.id.nav_cut).setOnClickListener(v->startActivity(new Intent(this,CutStudioHomeActivity.class)));
         findViewById(R.id.menu).setOnClickListener(v->browserMenu());
+        findViewById(R.id.translate_page).setOnClickListener(v->translateMenu());
         findViewById(R.id.tab_count).setOnClickListener(v->tabOverview());
         findViewById(R.id.tab_count).setOnLongClickListener(v->{newTab(HOME);return true;});
         findViewById(R.id.connection_badge).setOnClickListener(v->startActivity(new Intent(this,SettingsActivity.class)));
@@ -396,7 +397,10 @@ public class MainActivity extends Activity {
         else if(KeyboardCommands.handles(action,args))extra="Utiliser le clavier agent pour inspecter ou remplir les champs";
         else switch(action){
             case "read_page":extra="Lire le texte actuellement visible dans la page";break;
-            case "tabs":extra="Lister les onglets et leurs adresses";break;
+            case "tabs":case "list_tabs":extra="Lister les onglets, leurs indices et leurs adresses";break;
+            case "new_tab":case "open_tab":extra="Ouvrir un nouvel onglet : "+args.optString("url",HOME);break;
+            case "close_tab":extra="Fermer l’onglet demandé";break;
+            case "translate_page":extra="Traduire le contenu de la page (anglais / français)";break;
             case "open_url":extra="Ouvrir : "+args.optString("url","");break;
             case "click_verified":extra="Cliquer une seule fois et vérifier le résultat";break;
             case "click":extra="Cliquer sur : "+args.optString("selector","");break;
@@ -469,15 +473,43 @@ public class MainActivity extends Activity {
                 case "preview":case "screenshot":{
                     captureVisiblePreview(callback);return;
                 }
-                case "tabs":{
+                case "tabs":case "list_tabs":{
                     JSONArray list=new JSONArray();
-                    for(WebView web:tabs){
+                    for(int index=0;index<tabs.size();index++){
+                        WebView web=tabs.get(index);
                         JSONObject entry=new JSONObject();
+                        entry.put("index",index);entry.put("active",web==current);
                         entry.put("title",web.getTitle()==null?"":web.getTitle());
                         entry.put("url",web.getUrl()==null?"":web.getUrl());
                         list.put(entry);
                     }
                     callback.finish(true,list.toString());return;
+                }
+                case "new_tab":case "open_tab":{
+                    String url=args.optString("url",HOME);
+                    if(url.isEmpty())url=HOME;
+                    if(url.length()>2000||!BackgroundBrowser.isPublicHttps(Uri.parse(url))){
+                        callback.finish(false,"Une URL HTTPS publique est requise.");return;
+                    }
+                    if(tabs.size()>=12){callback.finish(false,"Maximum de 12 onglets atteint.");return;}
+                    newTab(url);
+                    callback.finish(true,"Onglet "+(tabs.size()-1)+" ouvert : "+url);return;
+                }
+                case "close_tab":{
+                    int index=args.has("index")?args.optInt("index",-1):tabs.indexOf(current);
+                    String contains=args.optString("url_contains","");
+                    if(!contains.isEmpty()&&!args.has("index")){
+                        index=-1;
+                        for(int i=0;i<tabs.size();i++){String url=tabs.get(i).getUrl();
+                            if(url!=null&&url.contains(contains)){index=i;break;}}
+                    }
+                    if(index<0||index>=tabs.size()){callback.finish(false,"Onglet introuvable.");return;}
+                    close(tabs.get(index));
+                    callback.finish(true,"Onglet fermé. "+tabs.size()+" onglet(s) restant(s).");return;
+                }
+                case "translate_page":{
+                    String direction=args.optString("direction","en-fr");
+                    BrowserTranslator.translate(current,direction,(ok,message)->callback.finish(ok,message));return;
                 }
                 case "read_page":{
                     final WebView web=current;
@@ -718,6 +750,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.address_bar).setVisibility(browser?View.VISIBLE:View.GONE);
         findViewById(R.id.new_tab).setVisibility(browser?View.VISIBLE:View.GONE);
         findViewById(R.id.tab_count).setVisibility(browser?View.VISIBLE:View.GONE);
+        findViewById(R.id.translate_page).setVisibility(browser?View.VISIBLE:View.GONE);
         ((TextView)findViewById(R.id.space_title)).setText(browser?"CHK Browser":space.equals("files")?"Fichiers":"Notes");
         boolean light=space.equals("files");findViewById(R.id.space_nav).setBackgroundColor(light?0xfff4f6fb:0xff202124);
         getWindow().setStatusBarColor(0xff17181c);getWindow().setNavigationBarColor(light?0xfff4f6fb:0xff202124);
@@ -727,12 +760,44 @@ public class MainActivity extends Activity {
         if(!browser&&workspace!=null&&!space.equals(activeSpace))workspace.show(space);
         activeSpace=space;updatePageError();
     }
+    private void translateMenu(){
+        if(current==null){toast("Aucune page ouverte");return;}
+        new AgentDialog.Builder(this).setTitle("Traduire la page")
+            .setItems(new String[]{"Anglais → français","Français → anglais","Afficher le texte original"},(dialog,index)->{
+                String mode=new String[]{"en-fr","fr-en","original"}[index];
+                WebView requested=current;
+                toast(index==2?"Restauration de la page":"Traduction en cours (premier usage : téléchargement du modèle)");
+                BrowserTranslator.translate(requested,mode,(ok,message)->{
+                    if(!isFinishing()&&!isDestroyed())toast(message);
+                });
+            }).setNegativeButton("Annuler",null).show();
+    }
     private void browserMenu(){
         if(!activeSpace.equals("browser")){new AgentDialog.Builder(this).setTitle("Espace de travail").setItems(new String[]{"Réglages","Revenir au navigateur"},(d,i)->{if(i==0)startActivity(new Intent(this,SettingsActivity.class));else showSpace("browser");}).show();return;}
-        new AgentDialog.Builder(this).setTitle("Actions de la page").setItems(new String[]{"Actualiser","Page suivante",store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris","Favoris et historique","Rechercher dans la page","Partager le lien","Enregistrer la page dans Notes","Lire / copier le texte","Taille du texte","Mode lecture plein écran","Réglages","Nouvel onglet"},(d,i)->{
-            switch(i){case 0:if(current!=null)current.reload();break;case 1:if(current!=null&&current.canGoForward())current.goForward();break;case 2:toggleBookmark();break;case 3:library();break;case 4:findInPage();break;
-                case 5:if(current!=null)startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,current.getUrl()),"Partager la page"));break;
-                case 6:savePageNote();break;case 7:readPage();break;case 8:textSize();break;case 9:setFocusMode(true);break;case 10:startActivity(new Intent(this,SettingsActivity.class));break;case 11:newTab(HOME);break;}
+        new AgentDialog.Builder(this).setTitle("Menu navigateur").setItems(new String[]{
+            "＋ Nouvel onglet","▣ Mes onglets","Traduire la page (EN / FR)",
+            "Actualiser","Page suivante","Fermer cet onglet",
+            store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris",
+            "Favoris et historique","Rechercher dans la page","Partager le lien",
+            "Enregistrer dans Notes","Lire / copier le texte","Taille du texte",
+            "Mode lecture plein écran","Réglages"},(d,i)->{
+            switch(i){
+                case 0:newTab(HOME);break;
+                case 1:tabOverview();break;
+                case 2:translateMenu();break;
+                case 3:if(current!=null)current.reload();break;
+                case 4:if(current!=null&&current.canGoForward())current.goForward();break;
+                case 5:if(current!=null)close(current);break;
+                case 6:toggleBookmark();break;
+                case 7:library();break;
+                case 8:findInPage();break;
+                case 9:if(current!=null)startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,current.getUrl()),"Partager la page"));break;
+                case 10:savePageNote();break;
+                case 11:readPage();break;
+                case 12:textSize();break;
+                case 13:setFocusMode(true);break;
+                case 14:startActivity(new Intent(this,SettingsActivity.class));break;
+            }
         }).setNegativeButton("Fermer",null).show();
     }
     private void textSize(){new AgentDialog.Builder(this).setTitle("Taille du texte des pages").setItems(new String[]{"100 % · Standard","115 % · Confort","130 % · Grand","150 % · Très grand"},(d,i)->{int zoom=new int[]{100,115,130,150}[i];getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putInt("text_zoom",zoom).apply();for(WebView web:tabs)web.getSettings().setTextZoom(zoom);}).show();}
@@ -742,10 +807,62 @@ public class MainActivity extends Activity {
     private void setFocusMode(boolean enabled){focusMode=enabled;findViewById(R.id.space_nav).setVisibility(enabled?View.GONE:View.VISIBLE);findViewById(R.id.address_bar).setVisibility(enabled?View.GONE:View.VISIBLE);if(enabled)toast("Lecture agrandie · Retour pour retrouver les commandes");}
     private void savePageNote(){if(current==null)return;WebView web=current;String title=web.getTitle(),url=web.getUrl();web.evaluateJavascript("(document.body && document.body.innerText || '').slice(0,12000)",raw->{if(isFinishing())return;startActivity(new Intent(this,NoteEditorActivity.class).putExtra("title",title).putExtra("body",fromJavascript(raw)).putExtra("source",url));});}
     private void tabOverview(){
-        android.app.Dialog dialog=AgentDialog.watch(new android.app.Dialog(this));LinearLayout box=MobileUi.column(this);box.setPadding(dp(16),dp(16),dp(16),dp(16));box.setBackgroundColor(Color.rgb(13,20,35));box.addView(MobileUi.text(this,"Tes onglets · "+tabs.size()+" / 12",22,MobileUi.TEXT));
-        android.widget.ScrollView sc=new android.widget.ScrollView(this);box.addView(sc,new LinearLayout.LayoutParams(-1,0,1));LinearLayout rows=MobileUi.column(this);sc.addView(rows);
-        for(WebView web:new ArrayList<>(tabs)){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);String title=web.getTitle()==null?"Nouvel onglet":web.getTitle();TextView label=MobileUi.action(this,(web==current?"●  ":"")+title+"\n"+(web.getUrl()==null?"":web.getUrl()));label.setMaxLines(3);label.setTextColor(web==current?MobileUi.ACCENT:MobileUi.TEXT);row.addView(label,new LinearLayout.LayoutParams(0,-2,1));label.setOnClickListener(v->{select(web);showSpace("browser");dialog.dismiss();});TextView x=MobileUi.action(this,"×");x.setTextSize(24);x.setContentDescription("Fermer l’onglet "+title);row.addView(x,new LinearLayout.LayoutParams(dp(48),dp(64)));x.setOnClickListener(v->{close(web);dialog.dismiss();tabOverview();});rows.addView(row);}
-        TextView add=MobileUi.action(this,"＋ Nouvel onglet");box.addView(add);add.setOnClickListener(v->{showSpace("browser");newTab(HOME);dialog.dismiss();address.requestFocus();((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(address,InputMethodManager.SHOW_IMPLICIT);});TextView done=MobileUi.action(this,"Revenir à la page");box.addView(done);done.setOnClickListener(v->dialog.dismiss());dialog.setContentView(box);android.view.Window w=dialog.getWindow();if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.setLayout(-1,Math.round(getResources().getDisplayMetrics().heightPixels*0.80f));w.setGravity(Gravity.BOTTOM);}dialog.show();if(w!=null)w.setLayout(-1,Math.round(getResources().getDisplayMetrics().heightPixels*0.80f));
+        final android.app.Dialog dialog=AgentDialog.watch(new android.app.Dialog(this));
+        LinearLayout root=MobileUi.column(this);
+        root.setBackgroundColor(0xff202124);
+        root.setPadding(dp(12),dp(14),dp(12),dp(12));
+        LinearLayout header=new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        root.addView(header,new LinearLayout.LayoutParams(-1,dp(58)));
+        TextView heading=MobileUi.text(this,"Onglets · "+tabs.size(),21,MobileUi.TEXT);
+        header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        TextView add=MobileUi.action(this,"＋");
+        add.setTextSize(28);add.setContentDescription("Nouvel onglet");
+        header.addView(add,new LinearLayout.LayoutParams(dp(52),dp(50)));
+        add.setOnClickListener(v->{if(tabs.size()<12){dialog.dismiss();newTab(HOME);address.requestFocus();
+            ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(address,InputMethodManager.SHOW_IMPLICIT);}
+            else toast("Maximum 12 onglets");});
+        android.widget.ScrollView scroll=new android.widget.ScrollView(this);
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        android.widget.GridLayout grid=new android.widget.GridLayout(this);
+        grid.setColumnCount(2);
+        scroll.addView(grid);
+        int cardWidth=Math.max(dp(130),(getResources().getDisplayMetrics().widthPixels-dp(46))/2);
+        for(WebView web:new ArrayList<>(tabs)){
+            LinearLayout card=MobileUi.column(this);
+            card.setPadding(dp(12),dp(8),dp(12),dp(12));
+            card.setBackground(MobileUi.bg(this,web==current?0xff343449:0xff303136));
+            android.widget.GridLayout.LayoutParams cell=new android.widget.GridLayout.LayoutParams();
+            cell.width=cardWidth;cell.height=dp(158);
+            cell.setMargins(dp(4),dp(5),dp(4),dp(5));
+            grid.addView(card,cell);
+            LinearLayout first=new LinearLayout(this);first.setGravity(Gravity.CENTER_VERTICAL);
+            card.addView(first,new LinearLayout.LayoutParams(-1,dp(42)));
+            TextView marker=MobileUi.text(this,web==current?"●  Onglet actif":"Onglet "+(tabs.indexOf(web)+1),12,MobileUi.MUTED);
+            first.addView(marker,new LinearLayout.LayoutParams(0,-2,1));
+            TextView x=MobileUi.action(this,"×");x.setTextSize(26);x.setContentDescription("Fermer l’onglet");
+            first.addView(x,new LinearLayout.LayoutParams(dp(40),dp(40)));
+            String title=web.getTitle();if(title==null||title.isEmpty())title="Nouvel onglet";
+            TextView name=MobileUi.text(this,title,16,MobileUi.TEXT);
+            name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            card.addView(name);
+            Uri uri=Uri.parse(web.getUrl()==null?"":web.getUrl());
+            String host=uri.getHost()==null?"Page en chargement":uri.getHost();
+            TextView domain=MobileUi.text(this,host,12,MobileUi.MUTED);
+            domain.setMaxLines(2);card.addView(domain);
+            card.setContentDescription(title+" · "+host);
+            card.setOnClickListener(v->{select(web);showSpace("browser");dialog.dismiss();});
+            x.setOnClickListener(v->{close(web);dialog.dismiss();tabOverview();});
+        }
+        TextView done=MobileUi.action(this,"Retour à la page");
+        root.addView(done,new LinearLayout.LayoutParams(-1,dp(50)));
+        done.setOnClickListener(v->dialog.dismiss());
+        dialog.setContentView(root);
+        dialog.show();
+        android.view.Window window=dialog.getWindow();
+        if(window!=null){window.setBackgroundDrawableResource(android.R.color.transparent);
+            window.setLayout(-1,Math.round(getResources().getDisplayMetrics().heightPixels*0.92f));
+            window.setGravity(Gravity.BOTTOM);}
     }
     private void saveTabs(){if(tabs.isEmpty())return;JSONArray urls=new JSONArray();for(WebView web:tabs){String url=web.getUrl();urls.put(url!=null&&url.startsWith("https://")?url:BrowserWebState.url(web));}getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putString("tabs",urls.toString()).putInt("active_tab",Math.max(0,tabs.indexOf(current))).apply();}
     private void restoreTabs(Bundle state){
