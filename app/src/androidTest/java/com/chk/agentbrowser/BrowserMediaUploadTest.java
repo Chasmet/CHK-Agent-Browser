@@ -99,8 +99,9 @@ public final class BrowserMediaUploadTest {
             CountDownLatch received=new CountDownLatch(1);
             AtomicBoolean success=new AtomicBoolean(false);
             AtomicReference<String> message=new AtomicReference<>("");
+            Uri source=store.uri(path);
             instrumentation.runOnMainSync(()->BrowserNativeUploader.upload(
-                app,web,"#media",new Uri[]{store.uri(path)},(ok,response)->{
+                app,web,"#media",new Uri[]{source},(ok,response)->{
                     success.set(ok);message.set(response);received.countDown();
                 }));
             assertTrue("Native upload result timed out",received.await(25,TimeUnit.SECONDS));
