@@ -10,7 +10,7 @@ import java.util.*;
 final class AgentTasks {
     private static final Set<String> running=new HashSet<>();
     private static final java.util.concurrent.ConcurrentHashMap<String,Boolean> active=new java.util.concurrent.ConcurrentHashMap<>(); // Accessed only on WorkspaceCommands.IO.
-    private static final Set<String> ACTIONS=new HashSet<>(Arrays.asList("keyboard","desktop","files_list","files_catalog","files_mkdir","files_copy","files_move","files_trash","files_read_text","files_write_text","notes_list","notes_read","notes_save","media_info","workspace_status"));
+    private static final Set<String> ACTIONS=new HashSet<>(Arrays.asList("keyboard","desktop","files_list","files_catalog","files_mkdir","files_copy","files_move","files_trash","files_read_text","files_write_text","notes_list","notes_read","notes_save","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page","open_url","new_tab","open_tab","switch_tab","close_tab","translate_page"));
     private AgentTasks(){}
     static void requestCancel(String id){active.put(id,false);}
     static void validate(JSONArray steps)throws Exception{
@@ -32,7 +32,7 @@ final class AgentTasks {
             if(tool.equals("vision")&&p.optBoolean("capture",false))throw new Exception("Utilise la vision structurée dans une tâche, puis capture séparément.");
         }
     }
-    private static boolean readOnly(String action,JSONObject p){return action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","workspace_status").contains(action);}
+    private static boolean readOnly(String action,JSONObject p){return action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page").contains(action);}
     static JSONObject command(Context c,JSONObject p)throws Exception{
         String id=p.getString("id"),op=p.optString("operation","status");File file=AgentFiles.journal(c,"tasks",id);JSONObject state;
         if(op.equals("submit")){
