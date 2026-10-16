@@ -97,6 +97,35 @@ public final class BrowserScripts {
         return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");return !!el;}catch(e){return false;}})()";
     }
 
+    /**
+     * Locate the real visible upload control associated with an inspected
+     * input[type=file]. Returns only geometry; native Android delivers the tap.
+     * Hidden inputs are supported only when a clearly labelled file picker
+     * button is found in the same upload dialog or form.
+     */
+    public static String nativeFileTarget(String selectorLiteral) {
+        return "(function(){try{"+finder()
+            +"var input=deepFind("+selectorLiteral+");"
+            +"if(!input||(input.type||'').toLowerCase()!=='file'||input.disabled)"
+            +"return JSON.stringify({ok:false,error:'Champ fichier invalide'});"
+            +"var target=input;"
+            +"function visible(e){if(!e||!e.getBoundingClientRect)return false;"
+            +"var r=e.getBoundingClientRect(),cs=getComputedStyle(e);"
+            +"return r.width>4&&r.height>4&&cs.display!=='none'&&cs.visibility!=='hidden';}"
+            +"if(!visible(target)){"
+            +"var scope=input.closest('ytcp-uploads-dialog,[role=dialog],dialog,form')||input.parentElement;"
+            +"var list=scope?Array.from(scope.querySelectorAll('button,[role=button]')):[];"
+            +"var pattern=/(s[eé]lectionner des fichiers|select files|choose files|choisir des fichiers|parcourir|browse files|add files|ajouter des fichiers)/i;"
+            +"target=list.find(function(b){return visible(b)&&pattern.test((b.innerText||b.getAttribute('aria-label')||'').trim());});"
+            +"if(!target)return JSON.stringify({ok:false,error:'Bouton natif de choix des fichiers introuvable'});}"
+            +"target.scrollIntoView({block:'center',inline:'center'});"
+            +"var r=target.getBoundingClientRect(),w=innerWidth,h=innerHeight;"
+            +"var x=r.left+r.width/2,y=r.top+r.height/2;"
+            +"if(!(x>0&&x<w&&y>0&&y<h))return JSON.stringify({ok:false,error:'Bouton hors ecran'});"
+            +"return JSON.stringify({ok:true,x:x,y:y,viewportWidth:w,viewportHeight:h,multiple:!!input.multiple});"
+            +"}catch(e){return JSON.stringify({ok:false,error:String(e.message)});}})()";
+    }
+
     public static String fileClick(String selectorLiteral) {
         return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Champ fichier introuvable';"
             +"if((el.type||'').toLowerCase()!=='file')return 'Le sélecteur ne cible pas input[type=file]';if(el.disabled)return 'Champ fichier désactivé';"

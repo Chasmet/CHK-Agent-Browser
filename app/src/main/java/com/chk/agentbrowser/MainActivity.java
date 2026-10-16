@@ -223,6 +223,7 @@ public class MainActivity extends Activity {
             }
             @Override public void onCloseWindow(WebView window){if(tabs.contains(window))close(window);}
             @Override public boolean onShowFileChooser(WebView v,ValueCallback<Uri[]> callback,FileChooserParams params){
+                if(BrowserNativeUploader.offer(v,callback,params))return true;
                 if(deliverPendingUpload(v,callback))return true;
                 if(fileCallback!=null)fileCallback.onReceiveValue(null);
                 fileCallback=callback;
@@ -653,9 +654,9 @@ public class MainActivity extends Activity {
             if(!callback.isActive())return;
             if(!BrowserWebState.alive(web)||!document.equals(web.getUrl())){callback.finish(false,"La page a changé pendant la préparation. Relance l’importation sur la bonne page.");return;}
             if(!ok){callback.finish(false,message);return;}
-            // Native HTML input selection is often blocked from off-screen JavaScript clicks.
-            // Populate only this owner-approved file input directly with the staged CHK media.
-            BrowserJsUploader.upload(this,web,selector,uris,callback);
+            // Select the locally stored URI through the WebView's native file chooser.
+            // This avoids base64 relay buffers and supports original large videos.
+            BrowserNativeUploader.upload(this,web,selector,uris,callback);
         });
     }
     private void startMcpDownload(WebView web,JSONObject args,AgentClient.ResultCallback callback){
