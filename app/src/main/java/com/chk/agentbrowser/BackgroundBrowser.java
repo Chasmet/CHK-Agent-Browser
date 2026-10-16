@@ -90,7 +90,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         });
         web.setWebChromeClient(new WebChromeClient(){
             @Override public boolean onCreateWindow(WebView view,boolean isDialog,boolean isUserGesture,android.os.Message resultMsg){
-                if(closed||tabs.size()>=8)return false;
+                if(closed||tabs.size()>=12)return false;
                 WebView popup=createWebView();tabs.add(popup);current=popup;
                 WebView.WebViewTransport transport=(WebView.WebViewTransport)resultMsg.obj;
                 transport.setWebView(popup);resultMsg.sendToTarget();return true;
@@ -152,7 +152,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         if(current==null){current=createWebView();tabs.add(current);}
         if(current.getUrl()==null&&!loading){loading=true;current.loadUrl(url);}
     }
-    private static boolean isPublicHttps(Uri uri){
+    static boolean isPublicHttps(Uri uri){
         if(uri==null||!"https".equalsIgnoreCase(uri.getScheme()))return false;
         String host=uri.getHost();if(host==null||uri.getUserInfo()!=null)return false;
         host=host.toLowerCase(java.util.Locale.ROOT);
@@ -201,12 +201,17 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             if(KeyboardCommands.nativeTarget(command)){KeyboardCommands.run(app,null,action,args,callback);return;}
             restore();afterLoad(()->KeyboardCommands.run(app,current,action,parameters,callback));return;
         }
-        if("open_url".equals(action)){
-            String url=args.optString("url","");
+        if("open_url".equals(action)||"new_tab".equals(action)||"open_tab".equals(action)){
+            boolean create="new_tab".equals(action)||"open_tab".equals(action)||args.optBoolean("new_tab",false);
+            String url=args.optString("url",create?DEFAULT_URL:"");
+            if(url.isEmpty()&&create)url=DEFAULT_URL;
             if(url.length()>2000||!isPublicHttps(Uri.parse(url))){callback.finish(false,"URL HTTPS publique requise.");return;}
-            if(current==null){current=createWebView();tabs.add(current);}
+            if(create){
+                if(tabs.size()>=12){callback.finish(false,"Maximum 12 onglets.");return;}
+                current=createWebView();tabs.add(current);
+            }else if(current==null){current=createWebView();tabs.add(current);}
             loading=true;current.loadUrl(url);saveLast(url);
-            callback.finish(true,"Navigation demandée vers "+url);return;
+            callback.finish(true,(create?"Nouvel onglet "+(tabs.size()-1)+" : ":"Navigation vers ")+url);return;
         }
         restore();
         afterLoad(()->execute(action,parameters,callback));
@@ -222,8 +227,14 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         }
         try{
             switch(action){
-                case "tabs":{
-                    JSONArray out=new JSONArray();for(WebView tab:tabs){JSONObject e=new JSONObject();e.put("title",tab.getTitle()==null?"":tab.getTitle());e.put("url",tab.getUrl()==null?"":tab.getUrl());out.put(e);}
+                case "tabs":case "list_tabs":{
+                    JSONArray out=new JSONArray();
+                    for(int index=0;index<tabs.size();index++){
+                        WebView tab=tabs.get(index);JSONObject e=new JSONObject();
+                        e.put("index",index);e.put("active",tab==current);
+                        e.put("title",tab.getTitle()==null?"":tab.getTitle());
+                        e.put("url",tab.getUrl()==null?"":tab.getUrl());out.put(e);
+                    }
                     cb.finish(true,out.toString());return;
                 }
                 case "read_page":{
@@ -269,6 +280,21 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 }
                 case "close_popup":{
                     if(tabs.size()<=1){cb.finish(false,"Aucune fenêtre secondaire à fermer.");return;}WebView closing=current;closeTab(closing);cb.finish(true,"Fenêtre secondaire fermée.");return;
+                }
+                case "close_tab":{
+                    int index=args.has("index")?args.optInt("index",-1):tabs.indexOf(current);
+                    String contains=args.optString("url_contains","");
+                    if(!args.has("index")&&!contains.isEmpty()){
+                        index=-1;
+                        for(int i=0;i<tabs.size();i++){String url=tabs.get(i).getUrl();
+                            if(url!=null&&url.contains(contains)){index=i;break;}}
+                    }
+                    if(index<0||index>=tabs.size()){cb.finish(false,"Onglet introuvable.");return;}
+                    closeTab(tabs.get(index));cb.finish(true,"Onglet fermé.");return;
+                }
+                case "translate_page":{
+                    BrowserTranslator.translate(current,args.optString("direction","en-fr"),
+                        (ok,message)->cb.finish(ok,message));return;
                 }
                 case "upload_file":startMcpUpload(current,args,cb);return;
                 case "download_file":startMcpDownload(current,args,cb);return;
