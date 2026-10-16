@@ -1,3 +1,12 @@
+## Import vidéo CHK haute qualité via sélecteur natif (16 octobre 2026)
+
+- Nouveau chemin d'importation pour `browser_upload_workspace_file` : les fichiers explicitement désignés dans CHK Files sont fournis au WebView par URI Android `content://`, sans recopier leur contenu dans le relais Render ni encoder le média en base64.
+- Préparation locale jusqu'à 512 Mo par sélection, avec contrôle du nom, de la taille, de la destination HTTPS et du document de navigation ; un seul téléchargement est remis au champ demandé.
+- Le navigateur cherche un bouton visible « Sélectionner des fichiers » associé au champ du site, puis effectue un toucher natif borné pour solliciter `onShowFileChooser` ; les WebViews visible et autonome utilisent le même chemin.
+- Un sélecteur qui ne s'ouvre pas, une navigation pendant l'opération ou une réception non confirmée ne sont jamais considérés comme des publications réussies.
+- La méthode JavaScript historique reste uniquement un repli pour les petits fichiers (32 Mo maximum) ; les médias volumineux ne sont pas dupliqués en mémoire du moteur JS.
+- Test Android ajouté pour un fichier vidéo de 34 Mio, sans compresser ni supprimer la source. Validation réelle sur YouTube Studio requise après installation de l'APK.
+
 ## Navigation rapide, gestion des onglets et traduction EN/FR (16 octobre 2026)
 
 - Onglets en grille de cartes inspirée des navigateurs mobiles : voir, ouvrir, sélectionner ou fermer un onglet.
