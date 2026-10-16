@@ -97,6 +97,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             }
             @Override public void onCloseWindow(WebView window){closeTab(window);}
             @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){
+                if(BrowserNativeUploader.offer(view,callback,params))return true;
                 return deliverPendingUpload(view,callback);
             }
         });
@@ -333,9 +334,8 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             if(!cb.isActive())return;
             if(!BrowserWebState.alive(web)||!document.equals(web.getUrl())){cb.finish(false,"La page a changé pendant la préparation du fichier.");return;}
             if(!ok){cb.finish(false,message);return;}
-            // Native HTML input selection is often blocked from off-screen JavaScript clicks.
-            // Populate only this owner-approved file input directly with the staged CHK media.
-            BrowserJsUploader.upload(app,web,selector,uris,cb);
+            // Pass the original CHK file directly to WebView's native chooser.
+            BrowserNativeUploader.upload(app,web,selector,uris,cb);
         });
     }
     private void startMcpDownload(WebView web,JSONObject args,AgentClient.ResultCallback cb){
