@@ -56,6 +56,11 @@ public final class SettingsActivity extends Activity {
             Toast.makeText(this,enabled?"Mode éco activé : le traitement en veille peut être retardé":"Mode MCP réactif activé",Toast.LENGTH_LONG).show();
         });
         group.addView(ecoMode);
+        Button publications=new Button(this);
+        publications.setText("Publications et campagnes CHK · historique MCP");
+        publications.setAllCaps(false);
+        publications.setOnClickListener(v->showPublicationJobs());
+        group.addView(publications);
 
         Switch autoUpdate=findViewById(R.id.auto_update);autoUpdate.setChecked(getSharedPreferences("update_monitor",MODE_PRIVATE).getBoolean("enabled",true));autoUpdate.setOnCheckedChangeListener((b,on)->getSharedPreferences("update_monitor",MODE_PRIVATE).edit().putBoolean("enabled",on).apply());
         autonomousMode=findViewById(R.id.autonomous_mode);
@@ -131,6 +136,40 @@ public final class SettingsActivity extends Activity {
         }catch(Exception ignored){}
         status.setText("GitHub Releases publiques : mises à jour directement sur ce téléphone.");
         showMcp();showInstall();
+    }
+    private void showPublicationJobs(){
+        try{
+            org.json.JSONArray items=PublicationJobs.command(this,"publication_list",new org.json.JSONObject())
+                .getJSONArray("items");
+            if(items.length()==0){
+                new AgentDialog.Builder(this).setTitle("Publications CHK")
+                    .setMessage("Aucune campagne enregistrée. Les agents peuvent préparer une publication avec publication_prepare via les tâches MCP.")
+                    .setPositiveButton("Fermer",null).show();
+                return;
+            }
+            String[] labels=new String[items.length()];
+            for(int i=0;i<items.length();i++){
+                org.json.JSONObject item=items.getJSONObject(i);
+                labels[i]=item.optString("platform").toUpperCase(java.util.Locale.ROOT)+" · "
+                    +item.optString("status")+"\n"+item.optString("title");
+            }
+            new AgentDialog.Builder(this).setTitle("Campagnes CHK · "+items.length())
+                .setItems(labels,(dialog,index)->{
+                    try{
+                        String id=items.getJSONObject(index).getString("id");
+                        org.json.JSONObject detail=PublicationJobs.command(this,"publication_status",
+                            new org.json.JSONObject().put("id",id));
+                        String summary="Plateforme : "+detail.optString("platform")
+                            +"\nCompte : "+detail.optString("account")
+                            +"\nÉtat : "+detail.optString("status")
+                            +"\nProgrammation : "+detail.optString("schedule_at","immédiate")
+                            +"\nConfirmation du navigateur : "+detail.optBoolean("remote_verified")
+                            +"\n\n"+detail.optString("next",detail.optString("proof_message"));
+                        new AgentDialog.Builder(this).setTitle(detail.optString("title","Publication"))
+                            .setMessage(summary).setPositiveButton("OK",null).show();
+                    }catch(Exception error){Toast.makeText(this,"Journal Publication illisible.",Toast.LENGTH_LONG).show();}
+                }).setNegativeButton("Fermer",null).show();
+        }catch(Exception error){Toast.makeText(this,"Historique Publications indisponible.",Toast.LENGTH_LONG).show();}
     }
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putBoolean("awaiting_install_permission",awaitingInstallPermission);}
     @Override protected void onPause(){refresh.removeCallbacks(statusTick);super.onPause();}

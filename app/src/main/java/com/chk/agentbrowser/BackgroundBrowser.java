@@ -193,6 +193,9 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             restore();afterLoad(()->DesktopCommands.execute(app,current,action,parameters,callback));return;
         }
         if(WorkspaceCommands.handles(action)){if(!AgentClient.get(app).isEnabled()){callback.finish(false,"MCP désactivé");return;}WorkspaceCommands.run(app,action,args,callback);return;}
+        if(PublicationJobs.ACTION_SUBMIT.equals(action)){
+            PublicationBrowserCommands.submit(app,current,args,main,callback);return;
+        }
         if(KeyboardCommands.handles(action,args)){
             if(KeyboardCommands.nativeTarget(command)){KeyboardCommands.run(app,null,action,args,callback);return;}
             restore();afterLoad(()->KeyboardCommands.run(app,current,action,parameters,callback));return;

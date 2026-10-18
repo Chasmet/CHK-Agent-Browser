@@ -10,7 +10,7 @@ import java.util.*;
 final class AgentTasks {
     private static final Set<String> running=new HashSet<>();
     private static final java.util.concurrent.ConcurrentHashMap<String,Boolean> active=new java.util.concurrent.ConcurrentHashMap<>(); // Accessed only on WorkspaceCommands.IO.
-    private static final Set<String> ACTIONS=new HashSet<>(Arrays.asList("get_form","wait_for_element","click_verified","type","select_option","check","upload_file","keyboard","desktop","files_list","files_catalog","files_mkdir","files_copy","files_move","files_trash","files_read_text","files_write_text","notes_list","notes_read","notes_save","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page","open_url","new_tab","open_tab","resume_visible_page","switch_tab","close_tab","translate_page"));
+    private static final Set<String> ACTIONS=new HashSet<>(Arrays.asList("get_form","wait_for_element","click_verified","type","select_option","check","upload_file","keyboard","desktop","files_list","files_catalog","files_mkdir","files_copy","files_move","files_trash","files_read_text","files_write_text","notes_list","notes_read","notes_save","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page","open_url","new_tab","open_tab","resume_visible_page","publication_prepare","publication_status","publication_list","publication_cancel","publication_submit","switch_tab","close_tab","translate_page"));
     private AgentTasks(){}
     static void requestCancel(String id){active.put(id,false);}
     static void validate(JSONArray steps)throws Exception{
@@ -31,6 +31,18 @@ final class AgentTasks {
     }
     private static void validateAction(String action,JSONObject p)throws Exception{
         if(!ACTIONS.contains(action)||p==null)throw new Exception("Action de tâche non autorisée : "+action);
+        if(action.equals("publication_submit")){
+            String selector=p.optString("selector","");
+            String expected=p.optString("expected_host","");
+            String proofUrl=p.optString("expected_url_contains","");
+            String proofText=p.optString("expected_text","");
+            if(!p.optString("id","").matches("[A-Za-z0-9_-]{1,80}")
+                ||selector.length()<2||selector.length()>340
+                ||!expected.matches("[A-Za-z0-9.-]{3,253}")
+                ||(proofUrl.length()<10&&proofText.trim().length()<6)
+                ||!java.util.Arrays.asList("publish","schedule").contains(p.optString("mode","publish")))
+                throw new Exception("Publication : ID, domaine, cible et résultat observable requis.");
+        }
         if(action.equals("desktop")){
             String tool=p.optString("tool");if(!Arrays.asList("vision","pointer","files").contains(tool))throw new Exception("Pas de tâche ou script imbriqué.");
             if(tool.equals("vision")&&p.optBoolean("capture",false))throw new Exception("Utilise la vision structurée dans une tâche, puis capture séparément.");
@@ -56,7 +68,7 @@ final class AgentTasks {
                 throw new Exception("Importation : entre 1 et 8 fichiers autorisés sont requis.");
         }
     }
-    private static boolean readOnly(String action,JSONObject p){return action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","workspace_status","tabs","list_tabs","get_page_status","get_form","wait_for_element","read_page").contains(action);}
+    private static boolean readOnly(String action,JSONObject p){return action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","workspace_status","tabs","list_tabs","get_page_status","get_form","wait_for_element","read_page","publication_status","publication_list").contains(action);}
     static JSONObject command(Context c,JSONObject p)throws Exception{
         String id=p.getString("id"),op=p.optString("operation","status");File file=AgentFiles.journal(c,"tasks",id);JSONObject state;
         if(op.equals("submit")){
