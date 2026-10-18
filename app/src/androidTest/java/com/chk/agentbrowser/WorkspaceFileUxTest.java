@@ -91,6 +91,107 @@ public final class WorkspaceFileUxTest {
             wave.delete();
         }
     }
+    @Test public void renameOnlyChangesStemAndNeverLosesMediaExtension() throws Exception {
+        assertEquals(".mp4",WorkspaceRenameDialog.protectedExtension("SKANO_30s.mp4",false));
+        assertEquals("SKANO_30s",WorkspaceRenameDialog.editableStem("SKANO_30s.mp4",false));
+        assertEquals("Version finale.mp4",
+            WorkspaceRenameDialog.resultName("SKANO_30s.mp4",false,"Version finale"));
+        assertEquals("Version finale.mp4",
+            WorkspaceRenameDialog.resultName("SKANO_30s.mp4",false,"Version finale.mp4"));
+        assertEquals("clip.tar.gz",
+            WorkspaceRenameDialog.resultName("archive.tar.gz",false,"clip"));
+        assertEquals("Dossier.2026",
+            WorkspaceRenameDialog.resultName("Dossier.2026",true,"Dossier.2026"));
+        assertEquals("archive",
+            WorkspaceRenameDialog.editableStem("archive",false));
+        try{
+            WorkspaceRenameDialog.resultName("SKANO_30s.mp4",false,"");
+            fail("Empty name is forbidden");
+        }catch(java.io.IOException expected){}
+        try{
+            WorkspaceRenameDialog.resultName("SKANO_30s.mp4",false,"../../private");
+            fail("Path traversal is forbidden");
+        }catch(java.io.IOException expected){}
+        WorkspaceStore store=new WorkspaceStore(context);
+        String id=UUID.randomUUID().toString();
+        String old="rename-"+id+".mp4",renamed="renamed-"+id+".mp4";
+        File source=store.file(old),target=store.file(renamed);
+        try{
+            assertTrue(source.createNewFile());
+            store.move(old,WorkspaceRenameDialog.resultName(old,false,"renamed-"+id));
+            assertFalse(source.exists());
+            assertTrue(target.isFile());
+            assertTrue(store.mime(renamed).startsWith("video/"));
+        }finally{source.delete();target.delete();}
+    }
+
+    @Test public void renameDialogDisplaysCompleteEditableStemAndReadOnlyExtension()
+        throws Exception {
+        context.getSharedPreferences("update_monitor",0).edit().putBoolean("enabled",false).commit();
+        MainActivity activity=(MainActivity)instrument.startActivitySync(
+            new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        final android.app.Dialog[] opened=new android.app.Dialog[1];
+        final String[] value={null};
+        try{
+            instrument.runOnMainSync(()->{
+                opened[0]=WorkspaceRenameDialog.rename(activity,
+                    "SKANO_PREMIER_OMBRE_SUR_LA_VILLE_30s.mp4",false,
+                    newName->value[0]=newName);
+                android.widget.EditText input=opened[0].findViewWithTag("workspace_rename_name");
+                android.widget.TextView extension=opened[0].findViewWithTag("workspace_rename_extension");
+                View save=opened[0].findViewWithTag("workspace_rename_save");
+                assertNotNull(input);assertNotNull(extension);assertNotNull(save);
+                assertEquals("SKANO_PREMIER_OMBRE_SUR_LA_VILLE_30s",
+                    input.getText().toString());
+                assertEquals("Extension protégée : .mp4",extension.getText().toString());
+                assertEquals(0xff172537,input.getCurrentTextColor());
+                assertTrue("Long filename must wrap",input.getMaxLines()>=3);
+                assertEquals(0,input.getSelectionStart());
+                assertEquals(input.length(),input.getSelectionEnd());
+                input.setText("SKANO_RENOMMÉ");
+                save.performClick();
+                assertEquals("SKANO_RENOMMÉ.mp4",value[0]);
+                assertFalse(opened[0].isShowing());
+            });
+        }finally{
+            instrument.runOnMainSync(()->{
+                if(opened[0]!=null&&opened[0].isShowing())opened[0].dismiss();
+                activity.finish();
+            });
+        }
+    }
+
+    @Test public void thumbnailGridUsesReadableCellsAndVisibleMenu()throws Exception{
+        context.getSharedPreferences("update_monitor",0).edit().putBoolean("enabled",false).commit();
+        MainActivity activity=(MainActivity)instrument.startActivitySync(
+            new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try{
+            JSONArray data=new JSONArray().put(new JSONObject()
+                .put("name","SKANO_PREMIER_OMBRE_SUR_LA_VILLE_30s.mp4")
+                .put("path","test/SKANO_PREMIER_OMBRE_SUR_LA_VILLE_30s.mp4")
+                .put("size",12345).put("mime_type","video/mp4").put("directory",false));
+            instrument.runOnMainSync(()->{
+                WorkspaceFileAdapter adapter=new WorkspaceFileAdapter(activity,
+                    new LinkedHashSet<>(),new WorkspaceFileAdapter.Actions(){
+                        public void openFolder(String path){}
+                        public void openFile(String path){}
+                        public void menu(String path){}
+                        public void startSelection(String path){}
+                        public void selectedChanged(){}
+                    });
+                adapter.submit(data,true,false,1);
+                WorkspaceFileAdapter.Holder holder=adapter.onCreateViewHolder(
+                    new FrameLayout(activity),1);
+                adapter.onBindViewHolder(holder,0);
+                assertEquals(4,holder.title.getMaxLines());
+                assertEquals(0,holder.title.getPaddingLeft());
+                assertEquals(0,holder.more.getPaddingLeft());
+                assertEquals(View.VISIBLE,holder.more.getVisibility());
+                assertTrue(holder.card.getLayoutParams().height>=MobileUi.dp(activity,220));
+            });
+        }finally{instrument.runOnMainSync(activity::finish);}
+    }
+
     private static boolean storeExists(File file){return file.isFile();}
     private static void writeSilenceWave(File output)throws Exception{
         int sampleRate=8000,bytes=sampleRate*2;
