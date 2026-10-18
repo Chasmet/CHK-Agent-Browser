@@ -139,13 +139,8 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         if(url!=null&&isPublicHttps(Uri.parse(url)))
             app.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit().putString("last_page",url).apply();
     }
-    public void syncFromVisible(String url){
-        if(closed||url==null||!isPublicHttps(Uri.parse(url)))return;
-        saveLast(url);
-        if(current==null){current=createWebView();tabs.add(current);}
-        String active=current.getUrl();
-        if(!url.equals(active)){loading=true;current.loadUrl(url);}
-    }
+    // The last visible URL is recorded by AgentService. Do not force a loadUrl
+    // into this autonomous WebView: that could discard a pending form or upload.
     public void restore(){
         if(closed)return;
         String url=app.getSharedPreferences(PREF,Context.MODE_PRIVATE).getString("last_page",DEFAULT_URL);

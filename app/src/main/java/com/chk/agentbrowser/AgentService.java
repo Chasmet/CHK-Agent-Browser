@@ -70,13 +70,21 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         return running!=null&&running.background!=null
             ?running.background.pageUrl():"";
     }
+    /**
+     * Never navigate a background WebView while switching away from a visible form.
+     * Cookies are shared, but form state and document JS are NOT shared across WebViews.
+     * Preserve two explicit page snapshots instead of overwriting the agent's session.
+     */
     public static void syncVisible(Context context,String url) {
         if(url==null||!url.startsWith("https://"))return;
+        android.net.Uri requested=android.net.Uri.parse(url);
+        if(!BackgroundBrowser.isPublicHttps(requested))return;
         context.getApplicationContext().getSharedPreferences("browser_mcp_v1",MODE_PRIVATE)
-            .edit().putString("last_page",url).apply();
-        AgentService running=instance;
-        if(running!=null&&running.background!=null)
-            running.background.syncFromVisible(url);
+            .edit().putString("last_visible_page",url).apply();
+    }
+    public static String latestVisibleUrl(Context context) {
+        return context.getApplicationContext().getSharedPreferences("browser_mcp_v1",MODE_PRIVATE)
+            .getString("last_visible_page","");
     }
     @Override public void onCreate() {
         super.onCreate();

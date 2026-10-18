@@ -1,3 +1,12 @@
+## Session protégée et Fichiers virtualisés (18 octobre 2026)
+
+- La navigation dans Fichiers utilise désormais RecyclerView + GridLayoutManager + DiffUtil, ce qui ne crée des vues et miniatures que pour les fichiers affichés à l'écran.
+- Les catégories, dossiers, opérations par lot, recherche, grilles, listes et Notes conservent les mêmes chemins et paramètres.
+- La session MCP autonome garde son onglet lorsque le navigateur visible passe en arrière-plan : plus de chargement silencieux ni d'écrasement de la dernière page autonome.
+- Les deux moteurs WebView partagent les cookies Android, mais pas l'état JavaScript des formulaires ; un même moteur unique demeure un chantier séparé.
+- Le relais Render et les routes existantes restent inchangés ; aucune activation de SSE sans contrat serveur confirmé.
+- Signature persistante, identité Android et système de mise à jour GitHub conservés.
+
 ## CHK Agent Browser — MCP rapide et ergonomie (18 octobre 2026)
 
 - Session sûre : le retour à l'application ne remplace plus automatiquement l'onglet visible par la page du moteur MCP autonome. Action explicite « Reprendre la page MCP » dans le menu navigateur.
