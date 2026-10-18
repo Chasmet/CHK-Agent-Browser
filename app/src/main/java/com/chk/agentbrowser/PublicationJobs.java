@@ -38,6 +38,11 @@ final class PublicationJobs {
             case "threads":base="threads.net";break;
             case "x":base="x.com";break;
             case "linkedin":base="linkedin.com";break;
+            case "soundcloud":base="soundcloud.com";break;
+            case "bluesky":base="bsky.app";break;
+            case "pinterest":base="pinterest.com";break;
+            case "reddit":base="reddit.com";break;
+            case "bandcamp":base="bandcamp.com";break;
             default:return false;
         }
         return host.equals(base)||host.endsWith("."+base)
@@ -98,8 +103,15 @@ final class PublicationJobs {
         if(!"organic".equals(mode)&&!"paid".equals(mode))
             throw new Exception("promotion_mode : organic ou paid.");
         String schedule=args.optString("schedule_at","");
-        if(!schedule.isEmpty()&&!schedule.matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?(Z|[+-]\\d{2}:\\d{2})"))
-            throw new Exception("schedule_at doit indiquer une date ISO avec fuseau (ex. 2026-11-01T19:00:00+01:00).");
+        if(!schedule.isEmpty()){
+            if(!schedule.matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})"))
+                throw new Exception("schedule_at doit indiquer une date ISO avec fuseau (ex. 2026-11-01T19:00:00+01:00).");
+            java.text.SimpleDateFormat iso=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX",Locale.US);
+            iso.setLenient(false);
+            java.util.Date planned=iso.parse(schedule);
+            if(planned==null||planned.getTime()<=System.currentTimeMillis())
+                throw new Exception("Date de programmation passée ou invalide.");
+        }
         JSONArray paths=args.optJSONArray("media_paths");if(paths==null)paths=new JSONArray();
         if(paths.length()>8)throw new Exception("Maximum huit médias par publication.");
         JSONArray checked=new JSONArray();
@@ -164,6 +176,9 @@ final class PublicationJobs {
         if(active.getHost()==null||!expected.equalsIgnoreCase(active.getHost()))
             throw new Exception("Le nom de domaine de l'onglet ne correspond pas à celui attendu.");
         String selector=args.optString("selector","");
+        if(!job.optString("account","").isEmpty() &&
+            args.optString("account_selector","").length()<2)
+            throw new Exception("Le compte connecté doit être vérifié avant publication.");
         String proofUrl=args.optString("expected_url_contains","");
         String proofText=args.optString("expected_text","");
         if(selector.length()<2||selector.length()>340||

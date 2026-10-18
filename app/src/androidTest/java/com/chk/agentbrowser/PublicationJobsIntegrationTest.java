@@ -31,6 +31,9 @@ public final class PublicationJobsIntegrationTest {
         assertTrue(PublicationJobs.validDestination("tiktok","https://www.tiktok.com/"));
         assertTrue(PublicationJobs.validDestination("facebook","https://www.facebook.com/"));
         assertTrue(PublicationJobs.validDestination("linkedin","https://www.linkedin.com/"));
+        assertTrue(PublicationJobs.validDestination("soundcloud","https://soundcloud.com/upload"));
+        assertTrue(PublicationJobs.validDestination("bluesky","https://bsky.app/"));
+        assertTrue(PublicationJobs.validDestination("bandcamp","https://artist.bandcamp.com/"));
         assertFalse(PublicationJobs.validDestination("youtube","https://youtube.com.evil.invalid/"));
         assertFalse(PublicationJobs.validDestination("youtube","http://studio.youtube.com/"));
         assertFalse(PublicationJobs.validDestination("youtube","https://user@studio.youtube.com/"));
@@ -75,6 +78,29 @@ public final class PublicationJobsIntegrationTest {
                 fail("An uncertain result must never repeat the click");
             }catch(Exception expected){}
         }finally{journal.delete();file.delete();store.file(dir).delete();}
+    }
+    @Test public void accountGuardIsRequiredForNamedAccounts()throws Exception{
+        Context context=app();String id=uid();
+        File journal=AgentFiles.journal(context,"publications",id);
+        try{
+            PublicationJobs.command(context,"publication_prepare",
+                draft(id,"x","https://x.com/compose/post").put("account","CHK"));
+            JSONObject args=new JSONObject().put("id",id).put("expected_host","x.com")
+                .put("selector","#post").put("expected_text","Your post was sent");
+            try{
+                PublicationJobs.begin(context,args,"https://x.com/compose/post");
+                fail("The agent must verify the account before posting");
+            }catch(Exception expected){}
+            assertEquals("prepared",PublicationJobs.command(context,"publication_status",
+                new JSONObject().put("id",id)).getString("status"));
+            args.put("account_selector","#signed-in-identity");
+            PublicationJobs.begin(context,args,"https://x.com/compose/post");
+            PublicationJobs.finish(context,id,false,"Compte de test : aucun clic","https://x.com/");
+            assertEquals("uncertain",PublicationJobs.command(context,"publication_status",
+                new JSONObject().put("id",id)).getString("status"));
+            assertTrue(BrowserScripts.accountMatches("\"#signed-in-identity\"",
+                "\"CHK\"").contains("ACCOUNT_MISMATCH"));
+        }finally{journal.delete();}
     }
     @Test public void paidPromotionNeverExecutesAPublishClick()throws Exception{
         Context context=app();String id=uid();

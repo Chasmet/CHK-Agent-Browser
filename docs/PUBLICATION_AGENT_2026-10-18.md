@@ -10,7 +10,7 @@ Version 1 de l'assistant de publication sur le **téléphone**. Elle conserve la
 - **Publier** `publication_submit` : **un seul clic** ciblant la bonne plateforme HTTPS, avec condition observable (`expected_text` ou `expected_url_contains`) et journal anti-doublon conservé avant l'action. Fonctionne aussi pour une programmation demandée (`mode=schedule`).
 - **Auditer** : jamais de « publié » simplement parce qu'un clic ou une sélection de fichier a réussi. Le résultat distingue `prepared`, `click_pending`, `browser_confirmed`, `schedule_browser_confirmed`, `uncertain`, `cancelled`.
 
-Plateformes validées comme destinations HTTPS : **YouTube / Studio, TikTok, Instagram, Facebook, Threads, X, LinkedIn**. Aucun sélecteur CSS ou URL de bouton final n'est codé en dur : l'agent les lit sur l'interface réelle, connectée, et confirme une condition propre à cette publication.
+Plateformes validées comme destinations HTTPS : **YouTube / Studio, TikTok, Instagram, Facebook, Threads, X, LinkedIn, SoundCloud, Bluesky, Pinterest, Reddit, Bandcamp**. Aucun sélecteur CSS ou URL de bouton final n'est codé en dur : l'agent les lit sur l'interface réelle, connectée, et confirme une condition propre à cette publication.
 
 ### Exemple d'une préparation avec l'outil MCP `browser_task_submit`
 
@@ -51,6 +51,7 @@ La soumission finale utilise une **nouvelle tâche** avec l'action `publication_
       "args": {
         "id": "chk-chanson-001",
         "expected_host": "studio.youtube.com",
+        "account_selector": "SELECTEUR_COMPTE_CHK_OBSERVE_SUR_LA_PAGE",
         "selector": "SELECTEUR_DU_BOUTON_VERIFIE_SUR_CETTE_PAGE",
         "expected_text": "TEXTE_DE_CONFIRMATION_OBSERVABLE_ET_SPECIFIQUE",
         "mode": "publish"
@@ -60,7 +61,7 @@ La soumission finale utilise une **nouvelle tâche** avec l'action `publication_
 }
 ```
 
-Les valeurs `selector` et `expected_text` doivent provenir d'une inspection du site courant (pas d'une supposition). Une vérification réellement impossible donne `uncertain` et interdit tout re-clic automatique. Après une interruption, vérifier manuellement le statut du site avant de créer une nouvelle opération.
+Les valeurs `selector`, `account_selector` (si le plan nomme un compte) et `expected_text` doivent provenir d'une inspection du site courant (pas d'une supposition). L'identité du compte doit être lisible dans l'élément désigné, sinon aucun clic n'a lieu. Une vérification réellement impossible donne `uncertain` et interdit tout re-clic automatique. Après une interruption, vérifier manuellement le statut du site avant de créer une nouvelle opération.
 
 ### Publications programmées et promotion
 
