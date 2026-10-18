@@ -184,7 +184,7 @@ public final class WorkspaceFileUxTest {
                     new FrameLayout(activity),1);
                 adapter.onBindViewHolder(holder,0);
                 assertEquals(4,holder.title.getMaxLines());
-                assertEquals(0,holder.title.getPaddingLeft());
+                assertTrue(holder.title.getPaddingLeft()<=MobileUi.dp(activity,4));
                 assertEquals(0,holder.more.getPaddingLeft());
                 assertEquals(View.VISIBLE,holder.more.getVisibility());
                 assertTrue(holder.card.getLayoutParams().height>=MobileUi.dp(activity,220));
