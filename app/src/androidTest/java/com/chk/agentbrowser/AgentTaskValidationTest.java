@@ -30,6 +30,7 @@ public final class AgentTaskValidationTest {
         valid("wait_for_element",new JSONObject().put("selector","#done"),false);
         valid("get_page_status",new JSONObject(),false);
         valid("read_page",new JSONObject(),false);
+        valid("resume_visible_page",new JSONObject(),false);
     }
     @Test public void sensitiveWebOperationsNeedObservability()throws Exception{
         JSONObject click=new JSONObject().put("selector","#save")

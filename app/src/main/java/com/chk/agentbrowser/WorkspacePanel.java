@@ -20,7 +20,10 @@ public final class WorkspacePanel {
     private static final int IMPORT=701,EXPORT=702;
     private final Activity a;
     private final FrameLayout host;
-    private LinearLayout list;
+    private LinearLayout list,legacyList,fileHeader,fileFooter;
+    private View legacyScroller,filePane;
+    private androidx.recyclerview.widget.RecyclerView recycler;
+    private WorkspaceFileAdapter fileAdapter;
     private TextView selectionIndicator;
     private TextView location;
     private EditText search;
@@ -77,26 +80,96 @@ public final class WorkspacePanel {
         search=new EditText(a);search.setTag("workspace_search");search.setSingleLine(true);search.setTextColor(ink());search.setHintTextColor(muted());search.setBackgroundColor(space.equals("files")?0xffedf0f5:0xff30333b);search.setTextSize(16);search.setPadding(MobileUi.dp(a,16),0,MobileUi.dp(a,16),0);search.setText(space.equals("files")?filesQuery:notesQuery);search.setVisibility((space.equals("files")?filesSearch:notesSearch)?View.VISIBLE:View.GONE);root.addView(search,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,52)));
         find.setOnClickListener(v->{search.setVisibility(search.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE);if(search.getVisibility()==View.VISIBLE){search.requestFocus();((android.view.inputmethod.InputMethodManager)a.getSystemService(Activity.INPUT_METHOD_SERVICE)).showSoftInput(search,0);}else{search.setText("");((android.view.inputmethod.InputMethodManager)a.getSystemService(Activity.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(search.getWindowToken(),0);}});
         search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int aft){}public void onTextChanged(CharSequence s,int st,int before,int count){handler.removeCallbacks(filter);handler.postDelayed(filter,180);}public void afterTextChanged(Editable e){}});
-        ScrollView sc=new ScrollView(a);root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));list=MobileUi.column(a);list.setTag("workspace_content");list.addView(label("Chargement…",14));list.setPadding(MobileUi.dp(a,10),0,MobileUi.dp(a,10),MobileUi.dp(a,76));sc.addView(list);
+        FrameLayout contentHost=new FrameLayout(a);
+        root.addView(contentHost,new LinearLayout.LayoutParams(-1,0,1));
+        ScrollView sc=new ScrollView(a);
+        legacyScroller=sc;
+        contentHost.addView(sc,new FrameLayout.LayoutParams(-1,-1));
+        list=MobileUi.column(a);
+        legacyList=list;
+        list.setTag("workspace_content");
+        list.addView(label("Chargement…",14));
+        list.setPadding(MobileUi.dp(a,10),0,MobileUi.dp(a,10),MobileUi.dp(a,76));
+        sc.addView(list);
+        LinearLayout fileLayout=MobileUi.column(a);
+        filePane=fileLayout;
+        fileLayout.setVisibility(View.GONE);
+        contentHost.addView(fileLayout,new FrameLayout.LayoutParams(-1,-1));
+        fileHeader=MobileUi.column(a);
+        fileLayout.addView(fileHeader,new LinearLayout.LayoutParams(-1,-2));
+        recycler=new androidx.recyclerview.widget.RecyclerView(a);
+        recycler.setTag("workspace_file_list");
+        recycler.setHasFixedSize(false);
+        recycler.setItemAnimator(null);
+        recycler.setClipToPadding(false);
+        recycler.setPadding(MobileUi.dp(a,8),0,MobileUi.dp(a,8),MobileUi.dp(a,6));
+        androidx.recyclerview.widget.GridLayoutManager manager=
+            new androidx.recyclerview.widget.GridLayoutManager(a,3);
+        fileAdapter=new WorkspaceFileAdapter(a,selected,new WorkspaceFileAdapter.Actions(){
+            public void openFolder(String path){
+                folder=path;offset=0;search.setText("");refresh();
+            }
+            public void openFile(String path){WorkspacePanel.this.openFile(path,false);}
+            public void menu(String path){fileMenu(path);}
+            public void selectedChanged(){
+                if(selectionIndicator!=null)
+                    selectionIndicator.setText("✓ "+selected.size()+" sélectionné(s) · actions");
+            }
+        });
+        manager.setSpanSizeLookup(new androidx.recyclerview.widget.GridLayoutManager.SpanSizeLookup(){
+            @Override public int getSpanSize(int position){
+                return fileAdapter.fullSpan(position)?3:1;
+            }
+        });
+        recycler.setLayoutManager(manager);
+        recycler.setAdapter(fileAdapter);
+        fileLayout.addView(recycler,new LinearLayout.LayoutParams(-1,0,1));
+        fileFooter=MobileUi.column(a);
+        fileFooter.setPadding(MobileUi.dp(a,10),0,MobileUi.dp(a,10),MobileUi.dp(a,75));
+        fileLayout.addView(fileFooter,new LinearLayout.LayoutParams(-1,-2));
         TextView add=MobileUi.action(a,space.equals("files")?"＋  Créer / Importer":"＋  Nouvelle note");add.setTextColor(0xffffffff);add.setBackground(MobileUi.bg(a,0xff087cf0));add.setElevation(MobileUi.dp(a,4));FrameLayout.LayoutParams floating=new FrameLayout.LayoutParams(-2,MobileUi.dp(a,50),android.view.Gravity.BOTTOM|android.view.Gravity.END);floating.setMargins(0,0,MobileUi.dp(a,14),MobileUi.dp(a,14));frame.addView(add,floating);add.setOnClickListener(v->{if(space.equals("files"))createMenu();else openNote("");});refresh();
+    }
+    private void showFileRows(){
+        legacyScroller.setVisibility(View.GONE);
+        filePane.setVisibility(View.VISIBLE);
+        list=fileHeader;
+    }
+    private void showLegacyRows(){
+        filePane.setVisibility(View.GONE);
+        legacyScroller.setVisibility(View.VISIBLE);
+        list=legacyList;
     }
     public void refresh(){
         if(list==null||disposed||a.isFinishing()||a.isDestroyed())return;final int ticket=++generation;String mode=space,p=folder,q=search.getText().toString(),requestedCategory=category,order=sort;int page=offset;
         search.setHint(mode.equals("files")?(p.isEmpty()&&category.equals("all")?"Rechercher un fichier ou un dossier":p.isEmpty()?"Rechercher dans "+categoryName(category):"Rechercher ici et dans les sous-dossiers"):"Rechercher dans les notes");
         if(mode.equals("files")&&p.isEmpty()&&category.equals("all")&&q.isEmpty()&&!selectMode){
-            list.removeAllViews();location.setText("Mes fichiers");dashboard();return;
+            showLegacyRows();list.removeAllViews();location.setText("Mes fichiers");dashboard();return;
         }
         WorkspaceCommands.IO.execute(()->{try{WorkspaceStore s=new WorkspaceStore(a);JSONObject files=mode.equals("files")?WorkspaceCategoryView.query(a,p,requestedCategory,q,order,page):null;JSONArray notes=files==null?s.notes(q,false,page):null;
-            WorkspaceCommands.UI.post(()->{if(disposed||a.isFinishing()||a.isDestroyed()||ticket!=generation)return;try{list.removeAllViews();
-                if(files!=null){selectionIndicator=null;location.setText(category.equals("all")?(p.isEmpty()?"Mes fichiers":p):categoryName(category));
-                    gridRow=null;gridColumn=0;
+            WorkspaceCommands.UI.post(()->{if(disposed||a.isFinishing()||a.isDestroyed()||ticket!=generation)return;try{
+                if(files!=null){
+                    showFileRows();
+                    fileHeader.removeAllViews();
+                    fileFooter.removeAllViews();
+                    selectionIndicator=null;
+                    location.setText(category.equals("all")?(p.isEmpty()?"Mes fichiers":p):categoryName(category));
                     if(selectMode)selectionBar();
                     breadcrumbs();
-                    JSONArray rows=files.getJSONArray("items");for(int i=0;i<rows.length();i++)fileRow(rows.getJSONObject(i));if(grid&&gridRow!=null&&gridColumn<3){for(int filler=gridColumn;filler<3;filler++)gridRow.addView(new android.view.View(a),new LinearLayout.LayoutParams(0,1,1));}if(files.optBoolean("truncated"))empty("Affichage limité aux 5 000 premiers éléments analysés.");
+                    JSONArray rows=files.getJSONArray("items");
+                    fileAdapter.submit(rows,grid,selectMode,ticket);
+                    list=fileFooter;
+                    if(files.optBoolean("truncated"))empty("Affichage limité aux 5 000 premiers éléments analysés.");
                     if(rows.length()==0)empty(q.isEmpty()?"Aucun élément ici. Appuie sur Créer / Importer pour ajouter un dossier ou un fichier.":"Aucun résultat dans cette catégorie.");
-                    int next=files.getInt("next_offset");pager(next);
-                }else{for(int i=0;i<notes.length();i++)noteRow(notes.getJSONObject(i));if(notes.length()==0)empty(q.isEmpty()?"Une idée à garder ? Crée ta première note.":"Aucune note ne correspond à ta recherche.");pager(notes.length()==50?page+50:-1);}
-            }catch(Exception e){empty("Affichage impossible");}});
+                    pager(files.getInt("next_offset"));
+                    list=fileHeader;
+                }else{
+                    showLegacyRows();
+                    list.removeAllViews();
+                    for(int i=0;i<notes.length();i++)noteRow(notes.getJSONObject(i));
+                    if(notes.length()==0)empty(q.isEmpty()?"Une idée à garder ? Crée ta première note.":"Aucune note ne correspond à ta recherche.");
+                    pager(notes.length()==50?page+50:-1);
+                }
+            }catch(Exception e){showLegacyRows();list.removeAllViews();empty("Affichage impossible");}});
         }catch(Exception e){WorkspaceCommands.UI.post(()->{if(ticket==generation){list.removeAllViews();empty(e.getMessage());}});}});
     }
     private void pager(int next){if(offset>0){TextView prev=action("‹ Éléments précédents");list.addView(prev);prev.setOnClickListener(v->{offset=Math.max(0,offset-50);refresh();});}if(next>=0){TextView v=action("Éléments suivants ›");list.addView(v);v.setOnClickListener(w->{offset=next;refresh();});}}
@@ -315,5 +388,8 @@ public final class WorkspacePanel {
     private void prompt(String title,String value,Name cb){EditText input=new EditText(a);input.setSingleLine(true);input.setText(value);input.selectAll();new AgentDialog.Builder(a).setTitle(title).setView(input).setNegativeButton("Annuler",null).setPositiveButton("Créer / enregistrer",(d,i)->cb.done(input.getText().toString())).show();}
     private void confirm(String title,Runnable action){new AgentDialog.Builder(a).setTitle(title).setMessage("Tu pourras le restaurer depuis Options > Corbeille.").setNegativeButton("Annuler",null).setPositiveButton("Mettre à la corbeille",(d,i)->action.run()).show();}
     private void toast(String s){Toast.makeText(a,s==null?"Opération impossible":s,Toast.LENGTH_SHORT).show();}
-    public void destroy(){disposed=true;generation++;handler.removeCallbacksAndMessages(null);}
+    public void destroy(){
+        disposed=true;generation++;handler.removeCallbacksAndMessages(null);
+        if(recycler!=null)recycler.setAdapter(null);
+    }
 }
