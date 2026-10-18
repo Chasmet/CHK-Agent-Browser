@@ -66,6 +66,7 @@ public final class DiagnosticActivity extends Activity {
             "\nAperçus : "+(agent.isPreviewAllowed()?"autorisés":"désactivés")+
             "\nBatterie : "+battery+
             "\nDernière commande : "+agent.lastCommandStatus()+
+            "\n"+agent.telemetrySummary()+
             "\nDernière erreur réseau : "+agent.lastErrorSummary()+
             "\nRelais : Render /agentbrowser/* · protocole 2.1"+
             "\nSécurité : mots de passe, cookies, jetons et URL MCP privée masqués.";

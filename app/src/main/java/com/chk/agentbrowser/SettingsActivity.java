@@ -45,6 +45,17 @@ public final class SettingsActivity extends Activity {
         android.view.ViewGroup group=(android.view.ViewGroup)findViewById(R.id.battery_settings).getParent();
         Button folders=new Button(this);folders.setText("Dossiers externes autorisés à l’agent");
         folders.setOnClickListener(v->startActivity(new Intent(this,ExternalFilesActivity.class)));group.addView(folders);
+        Switch ecoMode=new Switch(this);
+        ecoMode.setText("Mode éco MCP (écran éteint : commandes potentiellement retardées)");
+        ecoMode.setTextSize(14);
+        ecoMode.setPadding(16,14,16,14);
+        ecoMode.setChecked(agent.isEcoMode());
+        ecoMode.setOnCheckedChangeListener((button,enabled)->{
+            agent.setEcoMode(enabled);
+            AgentService.refresh(this);
+            Toast.makeText(this,enabled?"Mode éco activé : le traitement en veille peut être retardé":"Mode MCP réactif activé",Toast.LENGTH_LONG).show();
+        });
+        group.addView(ecoMode);
 
         Switch autoUpdate=findViewById(R.id.auto_update);autoUpdate.setChecked(getSharedPreferences("update_monitor",MODE_PRIVATE).getBoolean("enabled",true));autoUpdate.setOnCheckedChangeListener((b,on)->getSharedPreferences("update_monitor",MODE_PRIVATE).edit().putBoolean("enabled",on).apply());
         autonomousMode=findViewById(R.id.autonomous_mode);

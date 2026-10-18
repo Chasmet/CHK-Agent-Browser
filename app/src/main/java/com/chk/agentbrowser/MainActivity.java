@@ -296,9 +296,12 @@ public class MainActivity extends Activity {
         current=web;
         if(web.getParent() instanceof ViewGroup)((ViewGroup)web.getParent()).removeView(web);
         container.addView(web,new FrameLayout.LayoutParams(-1,-1));
-        address.setText(web.getUrl()==null?"":web.getUrl());
-        if(home!=null)home.page(web.getUrl());
+        String page=web.getUrl()==null?BrowserWebState.url(web):web.getUrl();
+        address.setText(page);
+        if(home!=null)home.page(page);
         progress.setVisibility(View.GONE);refreshTabs();updatePageError();
+        // Restored background tabs are lazy: only the selected tab loads over the network.
+        if(web.getUrl()==null&&BrowserWebState.alive(web))web.loadUrl(page);
     }
     private void close(WebView web){
         int i=tabs.indexOf(web);if(i<0)return;
@@ -358,13 +361,8 @@ public class MainActivity extends Activity {
         if(workspace!=null&&!activeSpace.equals("browser"))workspace.refresh();
         if(agentClient!=null){
             AgentService.ensureRunning(this);
-            if(!explicitPageOnResume&&agentClient.isAutonomous()&&current!=null){
-                String latest=AgentService.latestBackgroundUrl();
-                String open=current.getUrl();
-                if(latest!=null&&latest.startsWith("https://")&&!latest.equals(open)){
-                    current.loadUrl(latest);
-                }
-            }
+            // Do not overwrite the user's visible tab with the autonomous engine's URL.
+            // A separate, explicit "Reprendre la page MCP" action is available in the menu.
             agentClient.attach(this,new AgentClient.CommandHandler(){
                 @Override public String pageUrl(){return current==null||current.getUrl()==null?"":current.getUrl();}
                 @Override public String pageTitle(){return current==null||current.getTitle()==null?"":current.getTitle();}
@@ -781,7 +779,7 @@ public class MainActivity extends Activity {
             store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris",
             "Favoris et historique","Rechercher dans la page","Partager le lien",
             "Enregistrer dans Notes","Lire / copier le texte","Taille du texte",
-            "Mode lecture plein écran","Réglages"},(d,i)->{
+            "Mode lecture plein écran","Reprendre la page MCP","Réglages"},(d,i)->{
             switch(i){
                 case 0:newTab(HOME);break;
                 case 1:tabOverview();break;
@@ -797,9 +795,27 @@ public class MainActivity extends Activity {
                 case 11:readPage();break;
                 case 12:textSize();break;
                 case 13:setFocusMode(true);break;
-                case 14:startActivity(new Intent(this,SettingsActivity.class));break;
+                case 14:openAgentPage();break;
+                case 15:startActivity(new Intent(this,SettingsActivity.class));break;
             }
         }).setNegativeButton("Fermer",null).show();
+    }
+    private void openAgentPage(){
+        String url=AgentService.latestBackgroundUrl();
+        if(url==null||!url.startsWith("https://")){
+            toast("Aucune page MCP récente à reprendre");return;
+        }
+        for(WebView tab:tabs){
+            String known=tab.getUrl()==null?BrowserWebState.url(tab):tab.getUrl();
+            if(url.equals(known)){select(tab);showSpace("browser");return;}
+        }
+        if(tabs.size()<12){newTab(url);showSpace("browser");return;}
+        final String destination=url;
+        new AgentDialog.Builder(this).setTitle("Ouvrir la page MCP")
+            .setMessage("Les 12 onglets sont utilisés. Remplacer la page actuelle ? Les formulaires non enregistrés seront perdus.")
+            .setNegativeButton("Annuler",null)
+            .setPositiveButton("Remplacer",(dialog,which)->{if(current!=null)current.loadUrl(destination);})
+            .show();
     }
     private void textSize(){new AgentDialog.Builder(this).setTitle("Taille du texte des pages").setItems(new String[]{"100 % · Standard","115 % · Confort","130 % · Grand","150 % · Très grand"},(d,i)->{int zoom=new int[]{100,115,130,150}[i];getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putInt("text_zoom",zoom).apply();for(WebView web:tabs)web.getSettings().setTextZoom(zoom);}).show();}
     private void findInPage(){if(current==null)return;WebView web=current;EditText input=new EditText(this);input.setSingleLine(true);input.setHint("Mot à rechercher");LinearLayout box=MobileUi.column(this);box.setPadding(dp(16),dp(8),dp(16),dp(8));box.addView(input);TextView count=MobileUi.text(this,"Saisis un mot",14,MobileUi.MUTED);box.addView(count);web.setFindListener((index,total,done)->{if(done)count.setText(total==0?"Aucun résultat":(index+1)+" / "+total);});input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int aft){}public void onTextChanged(CharSequence s,int st,int b,int c){web.findAllAsync(s.toString());}public void afterTextChanged(android.text.Editable e){}});
@@ -847,7 +863,15 @@ public class MainActivity extends Activity {
             TextView name=MobileUi.text(this,title,16,MobileUi.TEXT);
             name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             card.addView(name);
-            Uri uri=Uri.parse(web.getUrl()==null?"":web.getUrl());
+            android.graphics.Bitmap favicon=web.getFavicon();
+            if(favicon!=null){
+                ImageView icon=new ImageView(this);
+                icon.setImageBitmap(favicon);
+                icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                icon.setContentDescription("Icône de la page");
+                card.addView(icon,new LinearLayout.LayoutParams(dp(26),dp(26)));
+            }
+            Uri uri=Uri.parse(web.getUrl()==null?BrowserWebState.url(web):web.getUrl());
             String host=uri.getHost()==null?"Page en chargement":uri.getHost();
             TextView domain=MobileUi.text(this,host,12,MobileUi.MUTED);
             domain.setMaxLines(2);card.addView(domain);
@@ -868,7 +892,16 @@ public class MainActivity extends Activity {
     private void saveTabs(){if(tabs.isEmpty())return;JSONArray urls=new JSONArray();for(WebView web:tabs){String url=web.getUrl();urls.put(url!=null&&url.startsWith("https://")?url:BrowserWebState.url(web));}getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putString("tabs",urls.toString()).putInt("active_tab",Math.max(0,tabs.indexOf(current))).apply();}
     private void restoreTabs(Bundle state){
         try{JSONArray urls=new JSONArray(state==null?getSharedPreferences("mobile_ui",MODE_PRIVATE).getString("tabs","[]"):state.getString("tabs","[]"));int selected=state==null?getSharedPreferences("mobile_ui",MODE_PRIVATE).getInt("active_tab",0):state.getInt("active_tab",0);
-            for(int i=0;i<Math.min(12,urls.length());i++){String url=urls.optString(i,HOME);newTab(url.startsWith("https://")?url:HOME);}if(!tabs.isEmpty())select(tabs.get(Math.min(tabs.size()-1,Math.max(0,selected))));
+            for(int i=0;i<Math.min(12,urls.length());i++){
+                String url=urls.optString(i,HOME);
+                if(!url.startsWith("https://"))url=HOME;
+                WebView restored=new WebView(this);
+                restored.setBackgroundColor(Color.WHITE);
+                configure(restored);
+                BrowserWebState.remember(restored,url);
+                tabs.add(restored);
+            }
+            if(!tabs.isEmpty())select(tabs.get(Math.min(tabs.size()-1,Math.max(0,selected))));
         }catch(Exception ignored){}if(tabs.isEmpty())newTab(HOME);
     }
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);saveTabs();out.putString("tabs",getSharedPreferences("mobile_ui",MODE_PRIVATE).getString("tabs","[]"));out.putInt("active_tab",Math.max(0,tabs.indexOf(current)));out.putString("space",activeSpace);if(workspace!=null)workspace.saveState(out);}
