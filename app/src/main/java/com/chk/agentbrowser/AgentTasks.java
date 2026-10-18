@@ -10,7 +10,7 @@ import java.util.*;
 final class AgentTasks {
     private static final Set<String> running=new HashSet<>();
     private static final java.util.concurrent.ConcurrentHashMap<String,Boolean> active=new java.util.concurrent.ConcurrentHashMap<>(); // Accessed only on WorkspaceCommands.IO.
-    private static final Set<String> ACTIONS=new HashSet<>(Arrays.asList("keyboard","desktop","files_list","files_catalog","files_mkdir","files_copy","files_move","files_trash","files_read_text","files_write_text","notes_list","notes_read","notes_save","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page","open_url","new_tab","open_tab","switch_tab","close_tab","translate_page"));
+    private static final Set<String> ACTIONS=new HashSet<>(Arrays.asList("get_form","wait_for_element","click_verified","type","select_option","check","upload_file","keyboard","desktop","files_list","files_catalog","files_mkdir","files_copy","files_move","files_trash","files_read_text","files_write_text","notes_list","notes_read","notes_save","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page","open_url","new_tab","open_tab","switch_tab","close_tab","translate_page"));
     private AgentTasks(){}
     static void requestCancel(String id){active.put(id,false);}
     static void validate(JSONArray steps)throws Exception{
@@ -22,7 +22,11 @@ final class AgentTasks {
             JSONObject verify=step.optJSONObject("verify");if(verify!=null){String action=verify.getString("action");JSONObject args=verify.optJSONObject("args");validateAction(action,args);
                 if(!readOnly(action,args))throw new Exception("Une vérification doit uniquement lire l’état.");
                 if(verify.optJSONObject("expect")==null&&verify.optJSONObject("contains")==null)throw new Exception("Précise le résultat attendu par la vérification.");}
-            if(step.getString("action").equals("desktop")&&step.getJSONObject("args").optString("tool").equals("pointer")&&verify==null)throw new Exception("Un geste dans une tâche exige une vérification explicite.");
+            String action=step.getString("action");
+            if(action.equals("desktop")&&step.getJSONObject("args").optString("tool").equals("pointer")&&verify==null)
+                throw new Exception("Un geste dans une tâche exige une vérification explicite.");
+            if(Arrays.asList("type","select_option","check","upload_file","click_verified").contains(action)&&verify==null)
+                throw new Exception("La saisie, le choix, le clic vérifié et l'importation exigent une lecture de contrôle après l'action.");
         }
     }
     private static void validateAction(String action,JSONObject p)throws Exception{
@@ -31,8 +35,28 @@ final class AgentTasks {
             String tool=p.optString("tool");if(!Arrays.asList("vision","pointer","files").contains(tool))throw new Exception("Pas de tâche ou script imbriqué.");
             if(tool.equals("vision")&&p.optBoolean("capture",false))throw new Exception("Utilise la vision structurée dans une tâche, puis capture séparément.");
         }
+        if(Arrays.asList("type","select_option","check","click_verified","upload_file","wait_for_element").contains(action)){
+            String selector=p.optString("selector","");
+            if(selector.trim().isEmpty()||selector.length()>340)throw new Exception("Sélecteur CSS précis obligatoire pour "+action+".");
+        }
+        if(action.equals("click_verified")){
+            if(p.optString("expected_selector","").isEmpty()&&p.optString("expected_text","").isEmpty()
+                    &&p.optString("expected_url_contains","").isEmpty())
+                throw new Exception("Le clic vérifié exige une condition de réussite observable.");
+            if(p.optInt("timeout_ms",10000)>20000)throw new Exception("Vérification du clic limitée à 20 secondes.");
+        }
+        if(action.equals("type")&&p.optString("text","").length()>8000)
+            throw new Exception("Saisie trop longue : maximum 8 000 caractères.");
+        if(action.equals("upload_file")){
+            String host=p.optString("expected_host","");
+            JSONArray files=p.optJSONArray("files");
+            if(!host.matches("[A-Za-z0-9.-]{3,253}")||host.startsWith(".")||host.endsWith("."))
+                throw new Exception("Importation : domaine de destination attendu obligatoire.");
+            if(files==null||files.length()<1||files.length()>8)
+                throw new Exception("Importation : entre 1 et 8 fichiers autorisés sont requis.");
+        }
     }
-    private static boolean readOnly(String action,JSONObject p){return action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page").contains(action);}
+    private static boolean readOnly(String action,JSONObject p){return action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","workspace_status","tabs","list_tabs","get_page_status","get_form","wait_for_element","read_page").contains(action);}
     static JSONObject command(Context c,JSONObject p)throws Exception{
         String id=p.getString("id"),op=p.optString("operation","status");File file=AgentFiles.journal(c,"tasks",id);JSONObject state;
         if(op.equals("submit")){
@@ -101,7 +125,9 @@ final class AgentTasks {
                 java.util.concurrent.atomic.AtomicBoolean received=new java.util.concurrent.atomic.AtomicBoolean();
                 AgentClient.ResultCallback callback=new AgentClient.ResultCallback(){public boolean isActive(){return !received.get()&&allowed();}public void finish(boolean ok,String text){if(!received.compareAndSet(false,true))return;WorkspaceCommands.IO.execute(()->receipt(stepIndex,verifying,ok,text));}};
                 WorkspaceCommands.UI.post(()->{if(callback.isActive())AgentClient.get(app).executeTaskStep(command,callback);else WorkspaceCommands.IO.execute(this::next);});
-                WorkspaceCommands.UI.postDelayed(()->{if(received.compareAndSet(false,true))WorkspaceCommands.IO.execute(()->receipt(stepIndex,verifying,false,"Délai dépassé : résultat non confirmé."));},30000);
+                long timeout=verifying?35000L:"upload_file".equals(source.optString("action"))?180000L:
+                    "wait_for_element".equals(source.optString("action"))?35000L:45000L;
+                WorkspaceCommands.UI.postDelayed(()->{if(received.compareAndSet(false,true))WorkspaceCommands.IO.execute(()->receipt(stepIndex,verifying,false,"Délai dépassé ("+timeout+" ms) : résultat non confirmé, aucune répétition automatique."));},timeout);
             }catch(Exception e){if(state!=null)stop(state,e.getMessage());else running.remove(id);}
         }
         void receipt(int index,boolean verify,boolean ok,String text){

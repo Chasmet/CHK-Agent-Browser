@@ -171,10 +171,15 @@ public final class BrowserScripts {
     /** Inspect forms plus modern dynamic controls outside <form> (Google Play-like wizards). */
     public static String getForm() {
         return "(function(){try{"+finder()+"var rs=roots(),forms=[],seen=[];"
+            +"function selector(el){if(el.id&&typeof CSS!=='undefined'&&CSS.escape)return '#'+CSS.escape(el.id);"
+            +"var parts=[],n=el;while(n&&n.nodeType===1&&parts.length<7){var idx=1,sib=n.previousElementSibling;"
+            +"while(sib){if(sib.tagName===n.tagName)idx++;sib=sib.previousElementSibling;}"
+            +"parts.unshift(n.tagName.toLowerCase()+':nth-of-type('+idx+')');n=n.parentElement;}"
+            +"return parts.join('>').slice(0,340);}"
             +"rs.forEach(function(r){var list=[];try{list=Array.from(r.querySelectorAll('form'));}catch(e){}list.forEach(function(form){if(seen.indexOf(form)>=0)return;seen.push(form);"
             +"var item={action:(form.action||'').slice(0,500),method:(form.method||'get').toLowerCase(),controls:[]};"
-            +"Array.from(form.querySelectorAll('input,textarea,select,button,[role=radio],[role=checkbox],[role=switch],[role=combobox]')).slice(0,80).forEach(function(el){var t=(el.type||'').toLowerCase();if(t==='password'||t==='hidden')return;"
-            +"item.controls.push({tag:(el.tagName||'').toLowerCase(),type:t,name:(el.name||'').slice(0,120),label:(el.getAttribute('aria-label')||el.placeholder||el.innerText||'').trim().slice(0,120),required:!!el.required||el.getAttribute('aria-required')==='true',invalid:el.getAttribute('aria-invalid')==='true',disabled:!!el.disabled,checked:('checked' in el)?!!el.checked:el.getAttribute('aria-checked')==='true'});});"
+            +"Array.from(form.querySelectorAll('input,textarea,select,button,[role=radio],[role=checkbox],[role=switch],[role=combobox]')).slice(0,25).forEach(function(el){var t=(el.type||'').toLowerCase();if(t==='password'||t==='hidden')return;"
+            +"item.controls.push({selector:selector(el),tag:(el.tagName||'').toLowerCase(),type:t,name:(el.name||'').slice(0,120),label:(el.getAttribute('aria-label')||el.placeholder||el.innerText||'').trim().slice(0,120),required:!!el.required||el.getAttribute('aria-required')==='true',invalid:el.getAttribute('aria-invalid')==='true',disabled:!!el.disabled,checked:('checked' in el)?!!el.checked:el.getAttribute('aria-checked')==='true'});});"
             +"forms.push(item);});});"
             +"var dynamic=[],errors=[],taken=[];"
             +"function describe(el){var t=(el.type||'').toLowerCase(),role=el.getAttribute('role')||'';"
@@ -183,15 +188,14 @@ public final class BrowserScripts {
             +"if(el.getClientRects&&el.getClientRects().length===0&&t!=='file')return;"
             +"if(taken.indexOf(el)>=0)return;taken.push(el);"
             +"var name=(el.getAttribute('aria-label')||el.getAttribute('title')||el.placeholder||el.innerText||el.name||'').trim().replace(/\\s+/g,' ').slice(0,120);"
-            +"var ctrl={tag:(el.tagName||'').toLowerCase(),type:t,role:role,label:name,required:!!el.required||el.getAttribute('aria-required')==='true',invalid:el.getAttribute('aria-invalid')==='true',disabled:!!el.disabled};"
+            +"var ctrl={selector:selector(el),tag:(el.tagName||'').toLowerCase(),type:t,role:role,label:name,required:!!el.required||el.getAttribute('aria-required')==='true',invalid:el.getAttribute('aria-invalid')==='true',disabled:!!el.disabled};"
             +"if('checked' in el&&(t==='radio'||t==='checkbox'))ctrl.checked=!!el.checked;"
             +"else if(el.hasAttribute('aria-checked'))ctrl.checked=el.getAttribute('aria-checked')==='true';"
-            +"if(el.id&&typeof CSS!=='undefined'&&CSS.escape)ctrl.selector='#'+CSS.escape(el.id);"
             +"if(ctrl.invalid&&errors.length<12)errors.push({label:name,role:role});"
-            +"if(dynamic.length<55)dynamic.push(ctrl);}"
+            +"if(dynamic.length<35)dynamic.push(ctrl);}"
             +"rs.forEach(function(root){var controls=[];try{controls=Array.from(root.querySelectorAll('input,textarea,select,button,[role=radio],[role=checkbox],[role=switch],[role=combobox],[contenteditable=true],[aria-invalid=true]'));}catch(e){}"
             +"controls.forEach(describe);});"
-            +"return JSON.stringify({forms:forms.slice(0,20),count:forms.length,dynamic_controls:dynamic,validation_errors:errors});"
+            +"return JSON.stringify({forms:forms.slice(0,8),count:forms.length,dynamic_controls:dynamic,validation_errors:errors});"
             +"}catch(e){return JSON.stringify({forms:[],count:0,dynamic_controls:[],validation_errors:[],error:e.message});}})()";
     }
 
