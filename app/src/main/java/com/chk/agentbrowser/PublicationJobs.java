@@ -106,9 +106,13 @@ final class PublicationJobs {
         if(!schedule.isEmpty()){
             if(!schedule.matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})"))
                 throw new Exception("schedule_at doit indiquer une date ISO avec fuseau (ex. 2026-11-01T19:00:00+01:00).");
-            java.text.SimpleDateFormat iso=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX",Locale.US);
+            // Android API 23 has no SimpleDateFormat pattern 'X'; normalize ISO zone to RFC-822.
+            String normalized=schedule.endsWith("Z")
+                ?schedule.substring(0,schedule.length()-1)+"+0000"
+                :schedule.substring(0,schedule.length()-3)+schedule.substring(schedule.length()-2);
+            java.text.SimpleDateFormat iso=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ",Locale.US);
             iso.setLenient(false);
-            java.util.Date planned=iso.parse(schedule);
+            java.util.Date planned=iso.parse(normalized);
             if(planned==null||planned.getTime()<=System.currentTimeMillis())
                 throw new Exception("Date de programmation passée ou invalide.");
         }

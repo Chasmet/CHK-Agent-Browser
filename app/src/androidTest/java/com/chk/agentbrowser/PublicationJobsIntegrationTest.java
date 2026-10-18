@@ -121,6 +121,23 @@ public final class PublicationJobsIntegrationTest {
                 new JSONObject().put("id",id)).getString("status"));
         }finally{journal.delete();}
     }
+    @Test public void scheduleDatesRequireRealFutureTimeAndExplicitZone()throws Exception{
+        Context context=app();String id=uid();
+        File journal=AgentFiles.journal(context,"publications",id);
+        try{
+            JSONObject draft=draft(id,"youtube","https://studio.youtube.com/");
+            for(String value:new String[]{"2020-10-18T15:00:00+02:00",
+                    "2099-02-30T19:00:00+01:00","2099-11-01T19:00:00"}){
+                draft.put("schedule_at",value);
+                try{PublicationJobs.command(context,"publication_prepare",draft);
+                    fail("Invalid or past date must never be scheduled: "+value);
+                }catch(Exception expected){}
+            }
+            draft.put("schedule_at","2099-11-01T19:00:00+01:00");
+            assertEquals("prepared",PublicationJobs.command(context,
+                "publication_prepare",draft).getString("status"));
+        }finally{journal.delete();}
+    }
     @Test public void taskPlannerAcceptsPublicationActionsAndRequiresPostcondition()throws Exception{
         JSONArray tasks=new JSONArray().put(new JSONObject().put("id","prepare")
             .put("action","publication_prepare").put("args",new JSONObject()))
