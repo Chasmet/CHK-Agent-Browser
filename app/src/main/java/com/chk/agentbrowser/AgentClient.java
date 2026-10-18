@@ -46,6 +46,12 @@ public final class AgentClient {
     private volatile long lastContact;
     private long lastHeartbeat;
     private volatile String lastError = "";
+    private volatile long lastRelayLatencyMs = -1L;
+    private volatile long meanRelayLatencyMs = -1L;
+    private volatile long lastCommandDurationMs = -1L;
+    private volatile int successfulRequests;
+    private volatile int failedRequests;
+    private long lastReconnectRequest;
     private final Runnable tick = this::poll;
     private final Runnable expiry = () -> finishPending(false, "Commande expirée. Vérifie la connexion et le mode autonome.");
 
@@ -83,6 +89,12 @@ public final class AgentClient {
         return action+" · "+(result.isEmpty()?"en cours":result);
     }
     public String lastErrorSummary(){return lastError.isEmpty()?"aucune":lastError;}
+    public String telemetrySummary(){
+        return "Latence relais : "+(lastRelayLatencyMs<0?"non mesurée":lastRelayLatencyMs+" ms")+
+            "\nMoyenne mobile : "+(meanRelayLatencyMs<0?"non mesurée":meanRelayLatencyMs+" ms")+
+            "\nÉchanges réussis / échecs : "+successfulRequests+" / "+failedRequests+
+            "\nDernière commande : "+(lastCommandDurationMs<0?"non mesurée":lastCommandDurationMs+" ms");
+    }
     public String shortConnectionStatus(){
         if(!isEnabled())return "MCP désactivé";
         if(!running)return "Connexion arrêtée · ouvrir Réglages";
@@ -103,6 +115,9 @@ public final class AgentClient {
     public void reconnect(){
         ui.post(()->{
             if(!running||!isEnabled())return;
+            long now=SystemClock.elapsedRealtime();
+            if(now-lastReconnectRequest<1200L)return;
+            lastReconnectRequest=now;
             ui.removeCallbacks(tick);ui.post(tick);
         });
     }
@@ -111,6 +126,10 @@ public final class AgentClient {
             finishPending(false,"Page interrompue par Android. Résultat inconnu : relis la page avant de recommencer l'action.");
     }
     public boolean isAutonomous(){return settings.getBoolean("autonomous_mode",false);}
+    /** Optional reduced background wake usage, never enabled silently. */
+    public boolean isEcoMode(){return settings.getBoolean("eco_mode",false);}
+    public boolean isExecuting(){return pending!=null;}
+    public void setEcoMode(boolean enabled){settings.edit().putBoolean("eco_mode",enabled).apply();}
     public void setAutonomous(boolean allow){
         settings.edit().putBoolean("autonomous_mode",allow).apply();
         deliverPending();
@@ -246,7 +265,7 @@ public final class AgentClient {
                     deliverPending();
                 }
                 ui.removeCallbacks(tick);
-                ui.postDelayed(tick, RelayPolicy.pollDelay(networkErrors,pending!=null));
+                ui.postDelayed(tick, RelayPolicy.pollDelay(networkErrors,pending!=null,screen!=null));
             });
         });
     }
@@ -287,6 +306,7 @@ public final class AgentClient {
     }
     private void finishPending(boolean ok, String message) {
         if(pending == null) return;
+        lastCommandDurationMs=Math.max(0L,SystemClock.elapsedRealtime()-receivedAt);
         String id = pending.optString("id", "");
         String action = pending.optString("action","");
         pending = null;
@@ -337,6 +357,8 @@ public final class AgentClient {
     }
     private JSONObject request(String method, String path, JSONObject body, boolean auth) throws Exception {
         HttpURLConnection c = null;
+        final long requestStarted=SystemClock.elapsedRealtime();
+        boolean completed=false;
         try {
             c = (HttpURLConnection)new URL(BASE+path).openConnection();
             c.setConnectTimeout(10000); c.setReadTimeout(10000);
@@ -360,8 +382,18 @@ public final class AgentClient {
                     output.write(buf,0,n);
                     if(output.size()>(path.equals("/agentbrowser/api/poll")?230000:48000)) throw new Exception("Réponse trop longue");
                 }
-                return new JSONObject(new String(output.toByteArray(),StandardCharsets.UTF_8));
+                JSONObject parsed=new JSONObject(new String(output.toByteArray(),StandardCharsets.UTF_8));
+                completed=true;
+                return parsed;
             }
-        } finally { if(c!=null)c.disconnect(); }
+        } finally {
+            long elapsed=Math.max(0L,SystemClock.elapsedRealtime()-requestStarted);
+            lastRelayLatencyMs=elapsed;
+            if(completed){
+                successfulRequests++;
+                meanRelayLatencyMs=meanRelayLatencyMs<0?elapsed:(meanRelayLatencyMs*3+elapsed)/4;
+            }else failedRequests++;
+            if(c!=null)c.disconnect();
+        }
     }
 }

@@ -21,6 +21,7 @@ public final class WorkspacePanel {
     private final Activity a;
     private final FrameLayout host;
     private LinearLayout list;
+    private TextView selectionIndicator;
     private TextView location;
     private EditText search;
     private String folder="",space="files",exportPath="",importFolder="";
@@ -87,7 +88,7 @@ public final class WorkspacePanel {
         }
         WorkspaceCommands.IO.execute(()->{try{WorkspaceStore s=new WorkspaceStore(a);JSONObject files=mode.equals("files")?WorkspaceCategoryView.query(a,p,requestedCategory,q,order,page):null;JSONArray notes=files==null?s.notes(q,false,page):null;
             WorkspaceCommands.UI.post(()->{if(disposed||a.isFinishing()||a.isDestroyed()||ticket!=generation)return;try{list.removeAllViews();
-                if(files!=null){location.setText(category.equals("all")?(p.isEmpty()?"Mes fichiers":p):categoryName(category));
+                if(files!=null){selectionIndicator=null;location.setText(category.equals("all")?(p.isEmpty()?"Mes fichiers":p):categoryName(category));
                     gridRow=null;gridColumn=0;
                     if(selectMode)selectionBar();
                     breadcrumbs();
@@ -124,12 +125,25 @@ public final class WorkspacePanel {
         TextView detail=MobileUi.text(a,dir?"Dossier":android.text.format.Formatter.formatShortFileSize(a,row.getLong("size")),11,muted());detail.setPadding(MobileUi.dp(a,tile?1:8),MobileUi.dp(a,2),0,0);info.addView(detail);
         if(tile){if(gridRow==null||gridColumn==3){gridRow=new LinearLayout(a);list.addView(gridRow);gridColumn=0;}LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,MobileUi.dp(a,132),1);lp.setMargins(MobileUi.dp(a,3),MobileUi.dp(a,4),MobileUi.dp(a,3),MobileUi.dp(a,4));gridRow.addView(card,lp);gridColumn++;}
         else{if(gridRow!=null&&gridColumn<3){for(int i=gridColumn;i<3;i++)gridRow.addView(new View(a),new LinearLayout.LayoutParams(0,1,1));}gridRow=null;gridColumn=0;if(dir){TextView next=label("›",24);card.addView(next);}LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,MobileUi.dp(a,62));lp.bottomMargin=MobileUi.dp(a,2);list.addView(card,lp);}
-        card.setOnClickListener(v->{if(selectMode){if(selected.contains(path))selected.remove(path);else selected.add(path);refresh();}else if(dir){folder=path;offset=0;search.setText("");refresh();}else openFile(path,false);});card.setOnLongClickListener(v->{fileMenu(path);return true;});
+        card.setOnClickListener(v->{
+            if(selectMode){
+                if(selected.contains(path))selected.remove(path);else selected.add(path);
+                // Update the affected card only: do not reset scrolling or decode thumbnails again.
+                boolean checked=selected.contains(path);
+                card.setBackground(MobileUi.bg(a,checked?0xffd7eaff:0xffffffff));
+                text.setText((checked?"✓ ":"")+name);
+                if(selectionIndicator!=null)selectionIndicator.setText("✓ "+selected.size()+" sélectionné(s) · actions");
+            }else if(dir){
+                folder=path;offset=0;search.setText("");refresh();
+            }else openFile(path,false);
+        });card.setOnLongClickListener(v->{fileMenu(path);return true;});
         if(!dir&&(mime.startsWith("image/")||mime.startsWith("video/"))){final int ticket=generation;ThumbnailLoader.load(a,path,0,mime.startsWith("video/"),new ThumbnailLoader.Result(){public boolean current(){return ticket==generation&&!a.isFinishing();}public void ready(android.graphics.Bitmap b){thumb.setImageBitmap(b);}});}
     }
     private void selectionBar(){
         TextView action=action("✓ "+selected.size()+" sélectionné(s) · actions");list.addView(action);
+        selectionIndicator=action;
         action.setOnClickListener(v->{
+            if(selected.isEmpty()){toast("Sélectionne un fichier ou un dossier");return;}
             if(batchRunning){toast("Opération en cours…");return;}
             new AgentDialog.Builder(a).setTitle("Sélection").setItems(new String[]{"Copier les fichiers dans un dossier","Déplacer dans un dossier","Mettre à la corbeille","Terminer la sélection"},(d,n)->{
                 java.util.List<String> paths=new java.util.ArrayList<>(selected);
