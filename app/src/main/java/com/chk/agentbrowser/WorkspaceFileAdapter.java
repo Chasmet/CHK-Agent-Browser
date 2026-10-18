@@ -16,6 +16,7 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.HashSet;
 
 /**
  * Only visible rows own Android views and thumbnail requests.
@@ -57,6 +58,7 @@ final class WorkspaceFileAdapter extends RecyclerView.Adapter<WorkspaceFileAdapt
     private final Set<String> selection;
     private final Actions actions;
     private final List<Entry> rows=new ArrayList<>();
+    private final Set<String> renderedSelection=new HashSet<>();
     private boolean grid=true,selectMode;
     private int generation;
     WorkspaceFileAdapter(Activity context,Set<String> selection,Actions actions){
@@ -73,8 +75,11 @@ final class WorkspaceFileAdapter extends RecyclerView.Adapter<WorkspaceFileAdapt
             if(item!=null)incoming.add(new Entry(item));
         }
         final boolean oldGrid=this.grid;
+        final boolean oldMode=this.selectMode;
+        final boolean selectionChanged=!renderedSelection.equals(selection);
         final List<Entry> before=new ArrayList<>(rows);
         this.grid=grid;this.selectMode=selectMode;this.generation=generation;
+        renderedSelection.clear();renderedSelection.addAll(selection);
         DiffUtil.DiffResult diff=DiffUtil.calculateDiff(new DiffUtil.Callback(){
             @Override public int getOldListSize(){return before.size();}
             @Override public int getNewListSize(){return incoming.size();}
@@ -86,7 +91,7 @@ final class WorkspaceFileAdapter extends RecyclerView.Adapter<WorkspaceFileAdapt
             }
         },false);
         rows.clear();rows.addAll(incoming);
-        if(oldGrid!=grid)notifyDataSetChanged();
+        if(oldGrid!=grid||oldMode!=selectMode||selectionChanged)notifyDataSetChanged();
         else diff.dispatchUpdatesTo(this);
     }
     void selectionMode(boolean enabled){
@@ -139,6 +144,7 @@ final class WorkspaceFileAdapter extends RecyclerView.Adapter<WorkspaceFileAdapt
         holder.card.setOnClickListener(v->{
             if(selectMode){
                 if(selection.contains(path))selection.remove(path);else selection.add(path);
+                renderedSelection.clear();renderedSelection.addAll(selection);
                 int index=holder.getBindingAdapterPosition();
                 if(index!=RecyclerView.NO_POSITION)notifyItemChanged(index);
                 actions.selectedChanged();
