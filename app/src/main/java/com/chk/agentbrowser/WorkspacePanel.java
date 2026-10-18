@@ -121,7 +121,7 @@ public final class WorkspacePanel {
         recycler.setClipToPadding(false);
         recycler.setPadding(MobileUi.dp(a,8),0,MobileUi.dp(a,8),MobileUi.dp(a,6));
         androidx.recyclerview.widget.GridLayoutManager manager=
-            new androidx.recyclerview.widget.GridLayoutManager(a,3);
+            new androidx.recyclerview.widget.GridLayoutManager(a,2);
         fileAdapter=new WorkspaceFileAdapter(a,selected,new WorkspaceFileAdapter.Actions(){
             public void openFolder(String path){
                 folder=path;offset=0;search.setText("");refresh();
@@ -138,7 +138,7 @@ public final class WorkspacePanel {
         });
         manager.setSpanSizeLookup(new androidx.recyclerview.widget.GridLayoutManager.SpanSizeLookup(){
             @Override public int getSpanSize(int position){
-                return fileAdapter.fullSpan(position)?3:1;
+                return fileAdapter.fullSpan(position)?2:1;
             }
         });
         recycler.setLayoutManager(manager);
@@ -330,8 +330,12 @@ public final class WorkspacePanel {
         buttons.addView(batchButton("Corbeille",()->batchAction(2)));
     }
     private void renameItem(String path){
-        prompt("Nouveau nom",path.substring(path.lastIndexOf('/')+1),name->
-            work(()->{
+        boolean directory=false;
+        try{directory=new WorkspaceStore(a).file(path).isDirectory();}
+        catch(Exception e){toast("Fichier inaccessible");return;}
+        WorkspaceRenameDialog.rename(a,
+            path.substring(path.lastIndexOf('/')+1),directory,
+            name->work(()->{
                 String parent=path.contains("/")?path.substring(0,path.lastIndexOf('/')):"";
                 new WorkspaceStore(a).move(path,WorkspacePaths.child(parent,name));
                 WorkspaceCommands.UI.post(()->{
@@ -557,7 +561,9 @@ public final class WorkspacePanel {
     public interface Job{String run()throws Exception;}
     private void work(Job job){toast("En cours…");WorkspaceCommands.IO.execute(()->{String result;try{result=job.run();}catch(Exception e){result=e.getMessage();}String message=result;WorkspaceCommands.UI.post(()->{if(disposed||a.isFinishing()||a.isDestroyed())return;toast(message);refresh();});});}
     private interface Name{void done(String text);}
-    private void prompt(String title,String value,Name cb){EditText input=new EditText(a);input.setSingleLine(true);input.setText(value);input.selectAll();new AgentDialog.Builder(a).setTitle(title).setView(input).setNegativeButton("Annuler",null).setPositiveButton("Créer / enregistrer",(d,i)->cb.done(input.getText().toString())).show();}
+    private void prompt(String title,String value,Name cb){
+        WorkspaceRenameDialog.text(a,title,value,cb::done);
+    }
     private void confirm(String title,Runnable action){new AgentDialog.Builder(a).setTitle(title).setMessage("Tu pourras le restaurer depuis Options > Corbeille.").setNegativeButton("Annuler",null).setPositiveButton("Mettre à la corbeille",(d,i)->action.run()).show();}
     private void toast(String s){Toast.makeText(a,s==null?"Opération impossible":s,Toast.LENGTH_SHORT).show();}
     public void destroy(){
