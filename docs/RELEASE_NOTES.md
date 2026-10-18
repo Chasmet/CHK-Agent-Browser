@@ -1,3 +1,12 @@
+## CHK Publication Agent · 18 octobre 2026
+
+- Outils MCP de publication et programmation via les tâches locales existantes : `publication_prepare`, `publication_status`, `publication_list`, `publication_cancel`, `publication_submit`.
+- Préparation de campagnes organiques multi-plateformes, métadonnées, hashtags, médias locaux, calendrier ISO avec fuseau et journal anti-doublon.
+- Sécurisation du clic final : domaine HTTPS exact, identité du compte vérifiée dans le document, médias non modifiés, preuve visible avant confirmation ; pas de répétition d'une tentative incertaine.
+- Historique des publications dans Réglages ; aucune collecte de mots de passe, aucune modification des routes Render.
+- Les publicités payantes restent en préparation uniquement. Aucun achat ni engagement budgétaire automatique.
+- Tests Android pour les domaines sociaux, la persistance, les états incertains, le verrouillage des comptes et les promotions payantes.
+
 ## Session protégée et Fichiers virtualisés (18 octobre 2026)
 
 - La navigation dans Fichiers utilise désormais RecyclerView + GridLayoutManager + DiffUtil, ce qui ne crée des vues et miniatures que pour les fichiers affichés à l'écran.

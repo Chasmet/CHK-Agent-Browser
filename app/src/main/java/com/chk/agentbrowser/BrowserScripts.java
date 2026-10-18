@@ -93,6 +93,18 @@ public final class BrowserScripts {
             +"}catch(e){return 'Erreur : '+e.message;}})()";
     }
 
+    /** Read-only account identity guard before a publication. */
+    public static String accountMatches(String selectorLiteral,String accountLiteral) {
+        return "(function(){try{"+finder()
+            +"var el=deepFind("+selectorLiteral+");if(!el)return 'ACCOUNT_MISSING';"
+            +"var expected=("+accountLiteral+").trim().toLowerCase();"
+            +"if(!expected)return 'ACCOUNT_UNSET';"
+            +"var text=[el.innerText||'',el.textContent||'',el.getAttribute('aria-label')||'',"
+            +"el.getAttribute('title')||'',el.getAttribute('alt')||''].join(' ').toLowerCase();"
+            +"return text.indexOf(expected)>=0?'MATCH':'ACCOUNT_MISMATCH';"
+            +"}catch(e){return 'ACCOUNT_CHECK_FAILED';}})()";
+    }
+
     public static String exists(String selectorLiteral) {
         return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");return !!el;}catch(e){return false;}})()";
     }

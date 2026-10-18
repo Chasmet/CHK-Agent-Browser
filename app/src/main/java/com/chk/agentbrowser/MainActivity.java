@@ -405,6 +405,7 @@ public class MainActivity extends Activity {
         final JSONObject parameters=args;
         String extra="";
         if(WorkspaceCommands.handles(action))extra="Utiliser l’espace Fichiers et Notes : "+action;
+        else if(action.equals("publication_submit"))extra="Publier ou programmer UNE fois sur la plateforme prévue, avec contrôle du résultat et journal anti-doublon";
         else if(DesktopCommands.handles(action,args))extra="Utiliser les outils IA CHK : souris, vision, fichiers, tâches ou scripts";
         else if(KeyboardCommands.handles(action,args))extra="Utiliser le clavier agent pour inspecter ou remplir les champs";
         else switch(action){
@@ -481,6 +482,10 @@ public class MainActivity extends Activity {
         if(home!=null)home.revealWeb();
         showAgentAction(action);
         if(current==null){callback.finish(false,"Aucun onglet.");return;}
+        if(PublicationJobs.ACTION_SUBMIT.equals(action)){
+            PublicationBrowserCommands.submit(this,current,args,transferHandler,callback);
+            return;
+        }
         try{
             switch(action){
                 case "preview":case "screenshot":{

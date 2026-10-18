@@ -229,6 +229,7 @@ public final class AgentClient {
                     info.put("workspace_version",3);
                     info.put("keyboard_version",1);
                     info.put("desktop_version",1);
+                    info.put("publication_version",1);
                     info.put("session_source",currentHandler==null?"none":currentHandler.sessionSource());
                     info.put("executing_id",settings.getString("executing_id",""));
                     request("POST", "/agentbrowser/api/heartbeat", info, true);
