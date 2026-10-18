@@ -27,6 +27,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -49,6 +50,7 @@ public class MainActivity extends Activity {
     private WorkspacePanel workspace;
     private String activeSpace="browser";
     private boolean focusMode;
+    private boolean bottomNavCollapsed;
     private boolean explicitPageOnResume;
     private BrowserHome home;
     private View fullScreenVideo;
@@ -147,7 +149,8 @@ public class MainActivity extends Activity {
         if(tabs.size()>=12){toast("Maximum 12 onglets : ferme un onglet pour en ouvrir un autre");return;}
         if(home!=null&&HOME.equals(url))home.newStart();
         WebView web=new WebView(this);web.setBackgroundColor(Color.WHITE);configure(web);
-        tabs.add(web);select(web);web.loadUrl(url);
+        BrowserWebState.remember(web,url);
+        tabs.add(web);select(web);
     }
     private void configure(WebView web){
         WebSettings s=web.getSettings();
@@ -188,6 +191,12 @@ public class MainActivity extends Activity {
                 if(url!=null)store.add("history",v.getTitle(),url);
                 if(v==current){if(home!=null)home.page(url);if(!address.hasFocus())address.setText(home!=null&&home.isHome(url)?"google.com":url);refreshTabs();saveTabs();}
             }
+        });
+        web.setOnScrollChangeListener((view,x,y,oldX,oldY)->{
+            if(web!=current||focusMode||!"browser".equals(activeSpace))return;
+            int delta=y-oldY;
+            if(delta>8&&y>260)setBottomNavCollapsed(true);
+            else if(delta< -8||y<48)setBottomNavCollapsed(false);
         });
         web.setOnLongClickListener(v->{WebView.HitTestResult hit=web.getHitTestResult();if(hit==null||hit.getExtra()==null||!(hit.getType()==WebView.HitTestResult.SRC_ANCHOR_TYPE||hit.getType()==WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE))return false;String link=hit.getExtra();if(!link.startsWith("https://"))return false;new AgentDialog.Builder(this).setTitle("Lien").setMessage(link).setItems(new String[]{"Ouvrir dans un nouvel onglet","Copier le lien","Partager"},(d,i)->{if(i==0)newTab(link);else if(i==1){((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Lien",link));toast("Lien copié");}else startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,link),"Partager le lien"));}).show();return true;});
         web.setWebChromeClient(new WebChromeClient(){
@@ -299,6 +308,10 @@ public class MainActivity extends Activity {
         String page=web.getUrl()==null?BrowserWebState.url(web):web.getUrl();
         address.setText(page);
         if(home!=null)home.page(page);
+        if(bottomNavCollapsed){
+            bottomNavCollapsed=false;
+            findViewById(R.id.space_nav).setVisibility(focusMode?View.GONE:View.VISIBLE);
+        }
         progress.setVisibility(View.GONE);refreshTabs();updatePageError();
         // Restored background tabs are lazy: only the selected tab loads over the network.
         if(web.getUrl()==null&&BrowserWebState.alive(web))web.loadUrl(page);
@@ -740,8 +753,17 @@ public class MainActivity extends Activity {
         banner.setText("●  ChatGPT · "+label);banner.setVisibility(View.VISIBLE);banner.setOnClickListener(v->new AgentDialog.Builder(this).setTitle("Navigation visible").setMessage("Les actions du connecteur s’exécutent dans cet onglet. Tu peux arrêter le connecteur depuis Réglages.").setNegativeButton("Fermer",null).setPositiveButton("Réglages",(d,n)->startActivity(new Intent(this,SettingsActivity.class))).show());
     }
     private void finishAgentAction(boolean ok){int ticket=agentActionGeneration;TextView banner=findViewById(R.id.agent_action);if(banner.getVisibility()!=View.VISIBLE)return;banner.setText(ok?"✓  ChatGPT · action effectuée":"!  ChatGPT · action à vérifier");transferHandler.postDelayed(()->{if(ticket==agentActionGeneration)banner.setVisibility(View.GONE);},2200);}
+    private void setBottomNavCollapsed(boolean collapsed){
+        if(focusMode||!"browser".equals(activeSpace)||bottomNavCollapsed==collapsed)return;
+        bottomNavCollapsed=collapsed;
+        findViewById(R.id.space_nav).setVisibility(collapsed?View.GONE:View.VISIBLE);
+    }
     private void showSpace(String space){
         boolean browser=space.equals("browser");
+        if(!browser||!space.equals(activeSpace)){
+            bottomNavCollapsed=false;
+            findViewById(R.id.space_nav).setVisibility(focusMode?View.GONE:View.VISIBLE);
+        }
         findViewById(R.id.space_header).setVisibility(View.GONE);
         if(home!=null)home.space(browser,current==null?HOME:current.getUrl());
         findViewById(R.id.web_container).setVisibility(browser?View.VISIBLE:View.GONE);
@@ -821,7 +843,7 @@ public class MainActivity extends Activity {
     private void findInPage(){if(current==null)return;WebView web=current;EditText input=new EditText(this);input.setSingleLine(true);input.setHint("Mot à rechercher");LinearLayout box=MobileUi.column(this);box.setPadding(dp(16),dp(8),dp(16),dp(8));box.addView(input);TextView count=MobileUi.text(this,"Saisis un mot",14,MobileUi.MUTED);box.addView(count);web.setFindListener((index,total,done)->{if(done)count.setText(total==0?"Aucun résultat":(index+1)+" / "+total);});input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int aft){}public void onTextChanged(CharSequence s,int st,int b,int c){web.findAllAsync(s.toString());}public void afterTextChanged(android.text.Editable e){}});
         AlertDialog dialog=new AgentDialog.Builder(this).setTitle("Rechercher dans la page").setView(box).setPositiveButton("Suivant",null).setNeutralButton("Précédent",null).setNegativeButton("Fermer",null).create();dialog.setOnDismissListener(d->{web.clearMatches();web.setFindListener(null);});dialog.setOnShowListener(d->{dialog.getButton(-1).setOnClickListener(v->web.findNext(true));dialog.getButton(-3).setOnClickListener(v->web.findNext(false));});dialog.show();
     }
-    private void setFocusMode(boolean enabled){focusMode=enabled;findViewById(R.id.space_nav).setVisibility(enabled?View.GONE:View.VISIBLE);findViewById(R.id.address_bar).setVisibility(enabled?View.GONE:View.VISIBLE);if(enabled)toast("Lecture agrandie · Retour pour retrouver les commandes");}
+    private void setFocusMode(boolean enabled){focusMode=enabled;bottomNavCollapsed=false;findViewById(R.id.space_nav).setVisibility(enabled?View.GONE:View.VISIBLE);findViewById(R.id.address_bar).setVisibility(enabled?View.GONE:View.VISIBLE);if(enabled)toast("Lecture agrandie · Retour pour retrouver les commandes");}
     private void savePageNote(){if(current==null)return;WebView web=current;String title=web.getTitle(),url=web.getUrl();web.evaluateJavascript("(document.body && document.body.innerText || '').slice(0,12000)",raw->{if(isFinishing())return;startActivity(new Intent(this,NoteEditorActivity.class).putExtra("title",title).putExtra("body",fromJavascript(raw)).putExtra("source",url));});}
     private void tabOverview(){
         final android.app.Dialog dialog=AgentDialog.watch(new android.app.Dialog(this));

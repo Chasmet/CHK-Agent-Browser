@@ -4,6 +4,10 @@ public final class ScriptChecks {
     public static void main(String[] args) throws Exception {
         if(RelayPolicy.pollDelay(0,false)!=3000L || RelayPolicy.pollDelay(0,true)!=10000L)
             throw new AssertionError("Normal polling");
+        if(RelayPolicy.pollDelay(0,false,true)!=1200L
+            || RelayPolicy.pollDelay(0,true,true)!=10000L
+            || RelayPolicy.pollDelay(4,false,true)!=RelayPolicy.pollDelay(4,false))
+            throw new AssertionError("Foreground fast polling and bounded retry");
         for(int failures=1;failures<100;failures++){
             long delay=RelayPolicy.pollDelay(failures,false);
             if(delay<3000||delay>30000)throw new AssertionError("Retry bounds");

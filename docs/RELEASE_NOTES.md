@@ -1,3 +1,17 @@
+## CHK Agent Browser — MCP rapide et ergonomie (18 octobre 2026)
+
+- Session sûre : le retour à l'application ne remplace plus automatiquement l'onglet visible par la page du moteur MCP autonome. Action explicite « Reprendre la page MCP » dans le menu navigateur.
+- Restauration économe : seuls les onglets réellement ouverts chargent la page à la reprise ; les autres attendent leur sélection. Suppression de la double navigation lors de la création d'un onglet.
+- Navigation : la barre inférieure se masque au défilement vers le bas et revient en remontant ; favicons affichés lorsque disponibles dans la grille d'onglets.
+- MCP : interrogation du relais plus fréquente lorsque l'application est au premier plan (1,2 s au lieu de 3 s en régime normal), sans augmentation de la fréquence en arrière-plan et avec temporisation des erreurs.
+- MCP : limitation des reconnexions rapprochées lors des changements de Wi-Fi ou de réseau mobile.
+- Diagnostic : latence réseau, moyenne mobile, nombre d'échanges réussis/échoués et durée de dernière commande.
+- Batterie : option explicite de mode éco dans Réglages, désactivée par défaut pour préserver la continuité de la connexion en veille.
+- Fichiers : la sélection multiple ne reconstruit plus intégralement la liste, ne perd plus le défilement et ne redécode plus toutes les miniatures à chaque sélection.
+- Tests : nouvelles assertions Java pour le mode de polling réactif et test Android de restauration différée des onglets.
+- La signature Android, le package, les routes Render et les données existantes sont conservés. Aucun changement au Cut Vidéo indépendant.
+- Restent à valider sur un appareil réel : autonomie batterie, performances sur dossiers très volumineux et navigation sur comptes tiers connectés.
+
 ## Import vidéo CHK haute qualité via sélecteur natif (16 octobre 2026)
 
 - Nouveau chemin d'importation pour `browser_upload_workspace_file` : les fichiers explicitement désignés dans CHK Files sont fournis au WebView par URI Android `content://`, sans recopier leur contenu dans le relais Render ni encoder le média en base64.

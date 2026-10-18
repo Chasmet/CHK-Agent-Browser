@@ -72,6 +72,38 @@ public final class BrowserTabsTranslationIntegrationTest {
         }
     }
 
+    @Test public void restoredTabsStayLazyUntilSelected()throws Exception {
+        Context app=instrument.getTargetContext();
+        SharedPreferences ui=app.getSharedPreferences("mobile_ui",0);
+        String oldTabs=ui.getString("tabs","[]");
+        int oldActive=ui.getInt("active_tab",0);
+        app.getSharedPreferences("update_monitor",0).edit().putBoolean("enabled",false).commit();
+        JSONArray saved=new JSONArray()
+            .put("https://example.com/first")
+            .put("https://example.com/second")
+            .put("https://example.com/third");
+        ui.edit().putString("tabs",saved.toString()).putInt("active_tab",1).commit();
+        MainActivity activity=null;
+        try {
+            activity=(MainActivity)instrument.startActivitySync(
+                new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            java.lang.reflect.Field field=MainActivity.class.getDeclaredField("tabs");
+            field.setAccessible(true);
+            java.util.List<?> tabs=(java.util.List<?>)field.get(activity);
+            assertEquals(3,tabs.size());
+            assertNull("First restored tab should not load until selected",
+                ((android.webkit.WebView)tabs.get(0)).getUrl());
+            assertNull("Third restored tab should not load until selected",
+                ((android.webkit.WebView)tabs.get(2)).getUrl());
+            assertEquals("https://example.com/third",BrowserWebState.url(
+                (android.webkit.WebView)tabs.get(2)));
+            assertSame(tabs.get(1),getCurrent(activity));
+        }finally{
+            if(activity!=null){MainActivity finishing=activity;instrument.runOnMainSync(finishing::finish);instrument.waitForIdleSync();}
+            ui.edit().putString("tabs",oldTabs).putInt("active_tab",oldActive).commit();
+        }
+    }
+
     private Object getCurrent(MainActivity activity){
         try {java.lang.reflect.Field f=MainActivity.class.getDeclaredField("current");
             f.setAccessible(true);return f.get(activity);}
