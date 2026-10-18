@@ -1,3 +1,13 @@
+## Correctif urgent Fichiers — renommage et lisibilité (18 octobre 2026)
+
+- **Renommage sans risque pour le format :** le nom du fichier est modifié sans exposer son extension à l'édition. `.mp4`, `.mp3`, `.jpg` et les extensions composites d'archives sont automatiquement conservées.
+- Fenêtre compacte, claire et à contraste élevé ; saisie du nom sur plusieurs lignes, nom initial pré-sélectionné et extension affichée séparément en lecture seule.
+- Coller un nom contenant déjà l'extension n'ajoute plus un doublon `.mp4.mp4`.
+- Noms de fichiers plus lisibles : grille à deux colonnes, miniatures et cartes plus hautes, plusieurs lignes de titre ; bouton d'options individuel visible.
+- Les actions de création/import utilisent aussi la nouvelle fenêtre de saisie plus lisible.
+- Tests Android supplémentaires pour la conservation réelle des extensions, la fenêtre de renommage, les textes longs et les cartes de la grille.
+- Aucun changement des routes Render, de l'identité Android, de la signature persistante, du navigateur, du Cut ni des données conservées.
+
 ## CHK Publication Agent · 18 octobre 2026
 
 - Outils MCP de publication et programmation via les tâches locales existantes : `publication_prepare`, `publication_status`, `publication_list`, `publication_cancel`, `publication_submit`.
