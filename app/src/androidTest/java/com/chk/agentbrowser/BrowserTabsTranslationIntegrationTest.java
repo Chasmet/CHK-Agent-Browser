@@ -90,14 +90,18 @@ public final class BrowserTabsTranslationIntegrationTest {
             java.lang.reflect.Field field=MainActivity.class.getDeclaredField("tabs");
             field.setAccessible(true);
             java.util.List<?> tabs=(java.util.List<?>)field.get(activity);
-            assertEquals(3,tabs.size());
-            assertNull("First restored tab should not load until selected",
-                ((android.webkit.WebView)tabs.get(0)).getUrl());
-            assertNull("Third restored tab should not load until selected",
-                ((android.webkit.WebView)tabs.get(2)).getUrl());
-            assertEquals("https://example.com/third",BrowserWebState.url(
-                (android.webkit.WebView)tabs.get(2)));
-            assertSame(tabs.get(1),getCurrent(activity));
+            MainActivity active=activity;
+            // WebView methods must always run on the WebView-owning main Looper.
+            instrument.runOnMainSync(()->{
+                assertEquals(3,tabs.size());
+                assertNull("First restored tab should not load until selected",
+                    ((android.webkit.WebView)tabs.get(0)).getUrl());
+                assertNull("Third restored tab should not load until selected",
+                    ((android.webkit.WebView)tabs.get(2)).getUrl());
+                assertEquals("https://example.com/third",BrowserWebState.url(
+                    (android.webkit.WebView)tabs.get(2)));
+                assertSame(tabs.get(1),getCurrent(active));
+            });
         }finally{
             if(activity!=null){MainActivity finishing=activity;instrument.runOnMainSync(finishing::finish);instrument.waitForIdleSync();}
             ui.edit().putString("tabs",oldTabs).putInt("active_tab",oldActive).commit();
