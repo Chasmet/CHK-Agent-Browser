@@ -111,30 +111,33 @@ final class WorkspaceFileAdapter extends RecyclerView.Adapter<WorkspaceFileAdapt
         card.setOrientation(tile?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         card.setPadding(dp(5),dp(5),dp(5),dp(5));
-        RecyclerView.LayoutParams layout=new RecyclerView.LayoutParams(-1,dp(tile?136:66));
+        RecyclerView.LayoutParams layout=new RecyclerView.LayoutParams(-1,dp(tile?226:88));
         layout.setMargins(dp(3),dp(3),dp(3),dp(3));
         card.setLayoutParams(layout);
         ImageView icon=new ImageView(context);
         icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
         icon.setContentDescription("Aperçu du fichier");
-        card.addView(icon,new LinearLayout.LayoutParams(tile?-1:dp(46),dp(tile?77:46)));
+        card.addView(icon,new LinearLayout.LayoutParams(tile?-1:dp(54),dp(tile?108:54)));
         LinearLayout info=new LinearLayout(context);info.setOrientation(LinearLayout.VERTICAL);
         card.addView(info,new LinearLayout.LayoutParams(tile?-1:0,-2,tile?0:1));
         LinearLayout headline=new LinearLayout(context);
         headline.setOrientation(LinearLayout.HORIZONTAL);
         headline.setGravity(Gravity.CENTER_VERTICAL);
-        info.addView(headline,new LinearLayout.LayoutParams(-1,dp(34)));
-        TextView title=MobileUi.text(context,"",tile?12:15,0xff202124);
-        title.setMaxLines(tile?2:1);
+        info.addView(headline,new LinearLayout.LayoutParams(-1,dp(tile?80:54)));
+        TextView title=MobileUi.text(context,"",tile?14:15,0xff202124);
+        title.setPadding(dp(3),0,dp(3),0);
+        title.setMaxLines(tile?4:2);
         title.setEllipsize(TextUtils.TruncateAt.END);
         headline.addView(title,new LinearLayout.LayoutParams(0,-2,1));
         TextView more=MobileUi.text(context,"⋮",22,0xff566274);
         more.setGravity(Gravity.CENTER);
+        more.setPadding(0,0,0,0);
         more.setContentDescription("Plus d'options pour le fichier");
         more.setFocusable(true);
-        headline.addView(more,new LinearLayout.LayoutParams(dp(36),dp(34)));
+        headline.addView(more,new LinearLayout.LayoutParams(dp(36),dp(tile?52:44)));
         TextView detail=MobileUi.text(context,"",11,0xff687080);
         detail.setSingleLine(true);
+        detail.setPadding(dp(3),0,dp(3),0);
         detail.setEllipsize(TextUtils.TruncateAt.END);
         info.addView(detail);
         return new Holder(card,icon,title,detail,more);
@@ -146,6 +149,7 @@ final class WorkspaceFileAdapter extends RecyclerView.Adapter<WorkspaceFileAdapt
         boolean checked=selection.contains(path);
         holder.card.setBackground(MobileUi.bg(context,checked?0xffd7eaff:0xffffffff));
         holder.title.setText((checked?"✓ ":"")+entry.name);
+        holder.title.setContentDescription(entry.name);
         String when=entry.updated>0?android.text.format.DateFormat.format("dd MMM yyyy",entry.updated).toString():"";
         holder.detail.setText((entry.folder?"Dossier":
             android.text.format.Formatter.formatShortFileSize(context,entry.size))+
