@@ -501,7 +501,7 @@ public class MainActivity extends Activity {
                 case "resume_visible_page":{
                     // The current Android Activity already owns the visible page.
                     // The background engine can explicitly recreate its URL after pause.
-                    callback.finish(true,"Page visible déjà ouverte. Pour reprendre son adresse dans le moteur MCP autonome, placer CHK en arrière-plan.");return;
+                    callback.finish(false,"Reprise non exécutée : la page est encore visible. Passe CHK en arrière-plan puis relance la reprise MCP.");return;
                 }
                 case "new_tab":case "open_tab":{
                     String url=args.optString("url",HOME);
