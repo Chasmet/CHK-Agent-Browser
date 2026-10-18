@@ -26,6 +26,10 @@ public final class ScriptChecks {
         java.nio.file.Files.write(root.resolve("exists.js"),
             BrowserScripts.exists("\"#target\"").getBytes("UTF-8"));
         java.nio.file.Files.write(root.resolve("status.js"),BrowserScripts.pageStatus().getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("native-target.js"),
+            BrowserScripts.nativeFileTarget("\"#media\"").getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("form-dynamic.js"),
+            BrowserScripts.getForm().getBytes("UTF-8"));
         java.nio.file.Files.write(root.resolve("condition.js"),
             BrowserScripts.condition("\"#done\"","\"Saved successfully\"","\"/done\"").getBytes("UTF-8"));
     }

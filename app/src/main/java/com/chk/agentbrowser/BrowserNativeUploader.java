@@ -111,7 +111,14 @@ public final class BrowserNativeUploader {
             }
             try {
                 JSONObject target=new JSONObject(new JSONArray("["+raw+"]").getString(0));
-                if(!target.optBoolean("ok"))throw new Exception(target.optString("error","Champ de fichier absent."));
+                if(!target.optBoolean("ok")) {
+                    String problem=target.optString("error","Champ de fichier absent.");
+                    if(pending.totalBytes<=JS_FALLBACK_LIMIT) {
+                        BrowserJsUploader.upload(pending.context,web,selector,uris,cb);
+                    } else cb.finish(false,"Sélecteur natif non identifié : "+problem
+                        +". Aucun fichier envoyé. Ouvre le dialogue d'importation du site.");
+                    return;
+                }
                 if(uris.length>1 && !target.optBoolean("multiple"))
                     throw new Exception("Ce champ n'accepte qu'un seul fichier.");
                 float x=(float)(target.getDouble("x")*web.getWidth()/target.getDouble("viewportWidth"));
@@ -174,7 +181,7 @@ public final class BrowserNativeUploader {
                     try {
                         JSONObject info=new JSONObject(new JSONArray("["+raw+"]").getString(0));
                         boolean ok=info.optBoolean("ok")&&info.optInt("count")==p.files.length;
-                        p.cb.finish(ok,ok?"Sélection native confirmée par la page : "+info
+                        p.cb.finish(ok,ok?"Fichiers sélectionnés dans le champ HTML (transfert serveur encore à vérifier) : "+info
                             :"Sélection transmise au WebView, mais champ non confirmé : "+info);
                     }catch(Exception e){
                         p.cb.finish(false,"La sélection a été remise au WebView, mais sa réception reste non confirmée.");

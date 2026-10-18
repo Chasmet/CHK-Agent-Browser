@@ -60,4 +60,47 @@ assert.equal(vm.runInNewContext(condition,{document:conditionPage,location}),'DO
 conditionPage.body.innerText='Saving again';
 assert.equal(vm.runInNewContext(condition,{document:conditionPage,location}),'WAIT');
 
+
+/** Modern upload controls are often outside HTML forms (Google Play Console). */
+function uploadFixture(labels) {
+  const doc={};
+  const win={getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'})};
+  doc.defaultView=win;
+  const buttons=labels.map((text,i)=>({
+    nodeType:1,tagName:'BUTTON',type:'button',innerText:text,ownerDocument:doc,
+    id:'',getAttribute:()=>null,getClientRects:()=>[{}],hasAttribute:()=>false,
+    getBoundingClientRect:()=>({left:10+i*150,top:40,width:140,height:44}),
+    scrollIntoView(){},closest:()=>null
+  }));
+  const scope={parentElement:null,querySelectorAll:()=>buttons};
+  const input={
+    nodeType:1,tagName:'INPUT',type:'file',disabled:false,multiple:false,
+    ownerDocument:doc,parentElement:scope,labels:[],getAttribute:()=>null,
+    getBoundingClientRect:()=>({left:0,top:0,width:0,height:0}),
+    getClientRects:()=>[],closest:()=>null,getRootNode:()=>doc,
+    id:'media',hasAttribute:()=>false
+  };
+  doc.querySelector=s=>s==='#media'?input:null;
+  doc.querySelectorAll=s=>s==='*'?[input,...buttons]:
+    s==='form'?[]:[input,...buttons];
+  return {document:doc,window:win,innerWidth:430,innerHeight:800,CSS:{escape:s=>s},buttons,input};
+}
+const nativeTarget=fs.readFileSync(root+'/native-target.js','utf8');
+let upload=JSON.parse(vm.runInNewContext(nativeTarget,uploadFixture(['Upload APK'])));
+assert.equal(upload.ok,true);
+assert.equal(upload.multiple,false);
+assert.ok(upload.x>0&&upload.x<430);
+assert.equal(upload.method,'button');
+upload=JSON.parse(vm.runInNewContext(nativeTarget,uploadFixture(['Importer un fichier'])));
+assert.equal(upload.ok,true);
+upload=JSON.parse(vm.runInNewContext(nativeTarget,uploadFixture(['Upload','Upload'])));
+assert.equal(upload.ok,false);assert.match(upload.error,/Plusieurs/);
+upload=JSON.parse(vm.runInNewContext(nativeTarget,uploadFixture(['Publier'])));
+assert.equal(upload.ok,false);assert.match(upload.error,/introuvable/);
+const dynamicForm=JSON.parse(vm.runInNewContext(
+  fs.readFileSync(root+'/form-dynamic.js','utf8'),uploadFixture(['Upload APK'])));
+assert.equal(dynamicForm.count,0);
+assert.ok(dynamicForm.dynamic_controls.some(x=>x.label==='Upload APK'));
+assert.ok(dynamicForm.dynamic_controls.some(x=>x.type==='file'));
+
 console.log('PASS: retry bounds, native forms, dynamic controls, upload confirmation helpers and bounded page extraction and verified-click postconditions');
