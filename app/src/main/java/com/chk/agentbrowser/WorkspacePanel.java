@@ -334,7 +334,11 @@ public final class WorkspacePanel {
             work(()->{
                 String parent=path.contains("/")?path.substring(0,path.lastIndexOf('/')):"";
                 new WorkspaceStore(a).move(path,WorkspacePaths.child(parent,name));
-                selected.remove(path);
+                WorkspaceCommands.UI.post(()->{
+                    selected.remove(path);
+                    if(selected.isEmpty())selectMode=false;
+                    updateSelectionToolbar();
+                });
                 return "Élément renommé";
             }));
     }
@@ -345,14 +349,19 @@ public final class WorkspacePanel {
         if(operation==2)
             confirm("Mettre "+paths.size()+" élément(s) à la corbeille ?",
                 ()->selectionBatch(paths,2,""));
-        else chooseDestinationAt(paths,operation,folder);
+        else {
+            String first=folder;
+            if(first.isEmpty()&&WorkspaceCategoryView.isContainerCategory(category))
+                first=WorkspaceCategoryView.storageRoot(category);
+            chooseDestinationAt(paths,operation,first);
+        }
     }
     private void chooseDestinationAt(java.util.List<String> paths,int operation,String at){
         WorkspaceCommands.IO.execute(()->{
             String dest=at;
             try{
                 WorkspaceStore store=new WorkspaceStore(a);
-                if(!store.file(dest).isDirectory())dest="";
+                if(!dest.isEmpty()&&!store.file(dest).isDirectory())dest="";
                 JSONObject page=store.list(dest,"",0);
                 java.util.List<String> destinations=new java.util.ArrayList<>();
                 java.util.List<String> choices=new java.util.ArrayList<>();
