@@ -49,6 +49,14 @@ public final class SessionAndVirtualFilesTest {
             new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         try {
             AtomicInteger changed=new AtomicInteger();
+            JSONArray rows=new JSONArray();
+            rows.put(new JSONObject().put("path","test/folder").put("name","folder")
+                .put("mime_type","inode/directory").put("directory",true).put("size",0));
+            for(int i=0;i<80;i++){
+                rows.put(new JSONObject().put("path","test/text-"+i+".txt")
+                    .put("name","text-"+i+".txt").put("mime_type","text/plain")
+                    .put("directory",false).put("size",100+i));
+            }
             instrument.runOnMainSync(()->{
                 RecyclerView recycler=new RecyclerView(activity);
                 androidx.recyclerview.widget.GridLayoutManager manager=
@@ -63,14 +71,6 @@ public final class SessionAndVirtualFilesTest {
                     });
                 recycler.setLayoutManager(manager);
                 recycler.setAdapter(adapter);
-                JSONArray rows=new JSONArray();
-                rows.put(new JSONObject().put("path","test/folder").put("name","folder")
-                    .put("mime_type","inode/directory").put("directory",true).put("size",0));
-                for(int i=0;i<80;i++){
-                    rows.put(new JSONObject().put("path","test/text-"+i+".txt")
-                        .put("name","text-"+i+".txt").put("mime_type","text/plain")
-                        .put("directory",false).put("size",100+i));
-                }
                 adapter.submit(rows,true,true,1);
                 assertEquals(81,adapter.getItemCount());
                 assertTrue(adapter.fullSpan(0));
