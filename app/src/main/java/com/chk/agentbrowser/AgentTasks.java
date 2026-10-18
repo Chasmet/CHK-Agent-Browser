@@ -10,7 +10,7 @@ import java.util.*;
 final class AgentTasks {
     private static final Set<String> running=new HashSet<>();
     private static final java.util.concurrent.ConcurrentHashMap<String,Boolean> active=new java.util.concurrent.ConcurrentHashMap<>(); // Accessed only on WorkspaceCommands.IO.
-    private static final Set<String> ACTIONS=new HashSet<>(Arrays.asList("get_form","wait_for_element","click_verified","type","select_option","check","upload_file","keyboard","desktop","files_list","files_catalog","files_mkdir","files_copy","files_move","files_trash","files_read_text","files_write_text","notes_list","notes_read","notes_save","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page","open_url","new_tab","open_tab","switch_tab","close_tab","translate_page"));
+    private static final Set<String> ACTIONS=new HashSet<>(Arrays.asList("get_form","wait_for_element","click_verified","type","select_option","check","upload_file","keyboard","desktop","files_list","files_catalog","files_mkdir","files_copy","files_move","files_trash","files_read_text","files_write_text","notes_list","notes_read","notes_save","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page","open_url","new_tab","open_tab","resume_visible_page","switch_tab","close_tab","translate_page"));
     private AgentTasks(){}
     static void requestCancel(String id){active.put(id,false);}
     static void validate(JSONArray steps)throws Exception{

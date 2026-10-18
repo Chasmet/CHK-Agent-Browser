@@ -414,6 +414,7 @@ public class MainActivity extends Activity {
             case "close_tab":extra="Fermer l’onglet demandé";break;
             case "translate_page":extra="Traduire le contenu de la page (anglais / français)";break;
             case "open_url":extra="Ouvrir : "+args.optString("url","");break;
+            case "resume_visible_page":extra="Reprendre l'adresse visible dans un nouvel onglet MCP, sans recopier les données du formulaire";break;
             case "click_verified":extra="Cliquer une seule fois et vérifier le résultat";break;
             case "click":extra="Cliquer sur : "+args.optString("selector","");break;
             case "type":
@@ -496,6 +497,11 @@ public class MainActivity extends Activity {
                         list.put(entry);
                     }
                     callback.finish(true,list.toString());return;
+                }
+                case "resume_visible_page":{
+                    // The current Android Activity already owns the visible page.
+                    // The background engine can explicitly recreate its URL after pause.
+                    callback.finish(true,"Page visible déjà ouverte. Pour reprendre son adresse dans le moteur MCP autonome, placer CHK en arrière-plan.");return;
                 }
                 case "new_tab":case "open_tab":{
                     String url=args.optString("url",HOME);

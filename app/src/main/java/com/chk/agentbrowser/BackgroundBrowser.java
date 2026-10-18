@@ -197,9 +197,10 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             if(KeyboardCommands.nativeTarget(command)){KeyboardCommands.run(app,null,action,args,callback);return;}
             restore();afterLoad(()->KeyboardCommands.run(app,current,action,parameters,callback));return;
         }
-        if("open_url".equals(action)||"new_tab".equals(action)||"open_tab".equals(action)){
-            boolean create="new_tab".equals(action)||"open_tab".equals(action)||args.optBoolean("new_tab",false);
-            String url=args.optString("url",create?DEFAULT_URL:"");
+        if("open_url".equals(action)||"new_tab".equals(action)||"open_tab".equals(action)||"resume_visible_page".equals(action)){
+            boolean resume="resume_visible_page".equals(action);
+            boolean create=resume||"new_tab".equals(action)||"open_tab".equals(action)||args.optBoolean("new_tab",false);
+            String url=resume?AgentService.latestVisibleUrl(app):args.optString("url",create?DEFAULT_URL:"");
             if(url.isEmpty()&&create)url=DEFAULT_URL;
             if(url.length()>2000||!isPublicHttps(Uri.parse(url))){callback.finish(false,"URL HTTPS publique requise.");return;}
             if(create){
@@ -207,7 +208,8 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 current=createWebView();tabs.add(current);
             }else if(current==null){current=createWebView();tabs.add(current);}
             loading=true;current.loadUrl(url);saveLast(url);
-            callback.finish(true,(create?"Nouvel onglet "+(tabs.size()-1)+" : ":"Navigation vers ")+url);return;
+            callback.finish(true,(resume?"Adresse du navigateur visible reprise dans un nouvel onglet MCP (état des formulaires non transféré) : ":
+                create?"Nouvel onglet "+(tabs.size()-1)+" : ":"Navigation vers ")+url);return;
         }
         restore();
         afterLoad(()->execute(action,parameters,callback));

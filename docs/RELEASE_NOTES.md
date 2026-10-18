@@ -4,6 +4,7 @@
 - Les catégories, dossiers, opérations par lot, recherche, grilles, listes et Notes conservent les mêmes chemins et paramètres.
 - La session MCP autonome garde son onglet lorsque le navigateur visible passe en arrière-plan : plus de chargement silencieux ni d'écrasement de la dernière page autonome.
 - Les deux moteurs WebView partagent les cookies Android, mais pas l'état JavaScript des formulaires ; un même moteur unique demeure un chantier séparé.
+- Une nouvelle action de tâche MCP `resume_visible_page` ouvre explicitement dans un nouvel onglet autonome l'URL mémorisée de la dernière page visible ; cela ne copie jamais les champs et ne remplace pas l'onglet MCP courant.
 - Le relais Render et les routes existantes restent inchangés ; aucune activation de SSE sans contrat serveur confirmé.
 - Signature persistante, identité Android et système de mise à jour GitHub conservés.
 
