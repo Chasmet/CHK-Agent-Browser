@@ -24,6 +24,10 @@ public final class WorkspacePanel {
     private View legacyScroller,filePane;
     private androidx.recyclerview.widget.RecyclerView recycler;
     private WorkspaceFileAdapter fileAdapter;
+    private WorkspaceAudioBar audioBar;
+    private LinearLayout selectionToolbar;
+    private TextView floatingButton;
+    private FrameLayout.LayoutParams floatingParams;
     private TextView selectionIndicator;
     private TextView location;
     private EditText search;
@@ -69,7 +73,10 @@ public final class WorkspacePanel {
     private TextView label(String value,int size){return MobileUi.text(a,value,size,ink());}
     private TextView action(String value){TextView v=MobileUi.action(a,value);if(space.equals("files")){v.setTextColor(0xff2468cb);v.setBackground(MobileUi.bg(a,0xffedf3fd));}return v;}
     public void show(String value){
-        rememberSearch();handler.removeCallbacks(filter);space=value;offset=space.equals("files")?filesOffset:notesOffset;generation++;selected.clear();selectMode=false;host.removeAllViews();
+        rememberSearch();handler.removeCallbacks(filter);
+        if(audioBar!=null){audioBar.destroy();audioBar=null;}
+        floatingButton=null;floatingParams=null;selectionToolbar=null;
+        space=value;offset=space.equals("files")?filesOffset:notesOffset;generation++;selected.clear();selectMode=false;host.removeAllViews();
         FrameLayout frame=new FrameLayout(a);frame.setBackgroundColor(space.equals("files")?0xfffafbff:0xff202124);host.addView(frame,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout root=MobileUi.column(a);frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout toolbar=new LinearLayout(a);toolbar.setGravity(android.view.Gravity.CENTER_VERTICAL);toolbar.setBackgroundColor(space.equals("files")?0xfffafbff:0xff202124);root.addView(toolbar,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,56)));
@@ -82,6 +89,16 @@ public final class WorkspacePanel {
         search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int aft){}public void onTextChanged(CharSequence s,int st,int before,int count){handler.removeCallbacks(filter);handler.postDelayed(filter,180);}public void afterTextChanged(Editable e){}});
         FrameLayout contentHost=new FrameLayout(a);
         root.addView(contentHost,new LinearLayout.LayoutParams(-1,0,1));
+        if(space.equals("files")){
+            LinearLayout controls=MobileUi.column(a);
+            root.addView(controls,new LinearLayout.LayoutParams(-1,-2));
+            audioBar=new WorkspaceAudioBar(a,this::updateFloating);
+            controls.addView(audioBar.view(),new LinearLayout.LayoutParams(-1,-2));
+            selectionToolbar=MobileUi.column(a);
+            selectionToolbar.setTag("workspace_selection_toolbar");
+            selectionToolbar.setVisibility(View.GONE);
+            controls.addView(selectionToolbar,new LinearLayout.LayoutParams(-1,-2));
+        }
         ScrollView sc=new ScrollView(a);
         legacyScroller=sc;
         contentHost.addView(sc,new FrameLayout.LayoutParams(-1,-1));
@@ -111,10 +128,13 @@ public final class WorkspacePanel {
             }
             public void openFile(String path){WorkspacePanel.this.openFile(path,false);}
             public void menu(String path){fileMenu(path);}
-            public void selectedChanged(){
-                if(selectionIndicator!=null)
-                    selectionIndicator.setText("✓ "+selected.size()+" sélectionné(s) · actions");
+            public void startSelection(String path){
+                if(!selectMode){selectMode=true;selected.clear();}
+                selected.add(path);
+                fileAdapter.selectionMode(true);
+                updateSelectionToolbar();
             }
+            public void selectedChanged(){updateSelectionToolbar();}
         });
         manager.setSpanSizeLookup(new androidx.recyclerview.widget.GridLayoutManager.SpanSizeLookup(){
             @Override public int getSpanSize(int position){
@@ -127,7 +147,14 @@ public final class WorkspacePanel {
         fileFooter=MobileUi.column(a);
         fileFooter.setPadding(MobileUi.dp(a,10),0,MobileUi.dp(a,10),MobileUi.dp(a,75));
         fileLayout.addView(fileFooter,new LinearLayout.LayoutParams(-1,-2));
-        TextView add=MobileUi.action(a,space.equals("files")?"＋  Créer / Importer":"＋  Nouvelle note");add.setTextColor(0xffffffff);add.setBackground(MobileUi.bg(a,0xff087cf0));add.setElevation(MobileUi.dp(a,4));FrameLayout.LayoutParams floating=new FrameLayout.LayoutParams(-2,MobileUi.dp(a,50),android.view.Gravity.BOTTOM|android.view.Gravity.END);floating.setMargins(0,0,MobileUi.dp(a,14),MobileUi.dp(a,14));frame.addView(add,floating);add.setOnClickListener(v->{if(space.equals("files"))createMenu();else openNote("");});refresh();
+        TextView add=MobileUi.action(a,space.equals("files")?"＋  Créer / Importer":"＋  Nouvelle note");
+        add.setTextColor(0xffffffff);add.setBackground(MobileUi.bg(a,0xff087cf0));add.setElevation(MobileUi.dp(a,4));
+        FrameLayout.LayoutParams floating=new FrameLayout.LayoutParams(-2,MobileUi.dp(a,50),android.view.Gravity.BOTTOM|android.view.Gravity.END);
+        floating.setMargins(0,0,MobileUi.dp(a,14),MobileUi.dp(a,14));
+        floatingButton=add;floatingParams=floating;
+        frame.addView(add,floating);
+        add.setOnClickListener(v->{if(space.equals("files"))createMenu();else openNote("");});
+        updateFloating();refresh();
     }
     private void showFileRows(){
         legacyScroller.setVisibility(View.GONE);
@@ -153,7 +180,7 @@ public final class WorkspacePanel {
                     fileFooter.removeAllViews();
                     selectionIndicator=null;
                     location.setText(category.equals("all")?(p.isEmpty()?"Mes fichiers":p):categoryName(category));
-                    if(selectMode)selectionBar();
+                    if(selectMode)updateSelectionToolbar();
                     breadcrumbs();
                     JSONArray rows=files.getJSONArray("items");
                     fileAdapter.submit(rows,grid,selectMode,ticket);
@@ -176,13 +203,52 @@ public final class WorkspacePanel {
     private void empty(String text){list.addView(MobileUi.text(a,text,16,muted()));}
     private String categoryName(String c){switch(c){case "video":return "Vidéos";case "image":return "Images";case "audio":return "Audio";case "document":return "Documents";case "archive":return "Archives";case "recent":return "Récents";default:return "Autres fichiers";}}
     private void breadcrumbs(){
-        LinearLayout line=new LinearLayout(a);line.setGravity(android.view.Gravity.CENTER_VERTICAL);list.addView(line,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,48)));
-        TextView home=label("⌂  Accueil",14);home.setMinHeight(MobileUi.dp(a,48));line.addView(home);home.setOnClickListener(v->{folder="";category="all";offset=0;search.setText("");refresh();});
-        TextView path=label(folder.isEmpty()?(category.equals("all")?"":"› "+categoryName(category)):
-            "› "+categoryName(category)+" / "+folder.substring(folder.lastIndexOf('/')+1),13);
-        path.setSingleLine(true);line.addView(path,new LinearLayout.LayoutParams(0,-2,1));
-        path.setOnClickListener(v->upFolder());
-        TextView toggle=UiIcons.button(a,"",grid?"grid":"sort",0xff2b6fd6);toggle.setContentDescription("Basculer entre grille et liste");line.addView(toggle,new LinearLayout.LayoutParams(MobileUi.dp(a,48),-1));toggle.setOnClickListener(v->{grid=!grid;rememberDisplay();refresh();});
+        LinearLayout line=new LinearLayout(a);
+        line.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        list.addView(line,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,48)));
+        TextView home=label("⌂  Accueil",14);
+        home.setMinHeight(MobileUi.dp(a,48));
+        home.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        home.setPadding(MobileUi.dp(a,8),0,MobileUi.dp(a,6),0);
+        line.addView(home);
+        home.setOnClickListener(v->{folder="";category="all";offset=0;search.setText("");refresh();});
+        HorizontalScrollView scroll=new HorizontalScrollView(a);
+        scroll.setHorizontalScrollBarEnabled(false);
+        line.addView(scroll,new LinearLayout.LayoutParams(0,-1,1));
+        LinearLayout segments=new LinearLayout(a);
+        segments.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        scroll.addView(segments);
+        if(!"all".equals(category)){
+            TextView group=label(" › "+categoryName(category),13);
+            group.setMinHeight(MobileUi.dp(a,46));
+            group.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            segments.addView(group);
+            group.setOnClickListener(v->{folder="";offset=0;search.setText("");refresh();});
+        }
+        String path=folder;
+        if(!path.isEmpty()){
+            String base=WorkspaceCategoryView.isContainerCategory(category)?
+                WorkspaceCategoryView.storageRoot(category):"";
+            if(!base.isEmpty()&&(path.equals(base)||path.startsWith(base+"/")))
+                path=path.substring(base.length()).replaceFirst("^/","");
+            else base="";
+            String accumulating=base;
+            for(String segment:path.split("/")){
+                if(segment.isEmpty())continue;
+                accumulating=accumulating.isEmpty()?segment:accumulating+"/"+segment;
+                final String destination=accumulating;
+                TextView crumb=label(" › "+segment,13);
+                crumb.setMinHeight(MobileUi.dp(a,46));
+                crumb.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                segments.addView(crumb);
+                crumb.setOnClickListener(v->{folder=destination;offset=0;search.setText("");refresh();});
+            }
+            scroll.post(()->scroll.fullScroll(View.FOCUS_RIGHT));
+        }
+        TextView toggle=UiIcons.button(a,"",grid?"grid":"sort",0xff2b6fd6);
+        toggle.setContentDescription("Basculer entre grille et liste");
+        line.addView(toggle,new LinearLayout.LayoutParams(MobileUi.dp(a,48),-1));
+        toggle.setOnClickListener(v->{grid=!grid;rememberDisplay();refresh();});
     }
     private void dashboard(){
         // Accueil : les six catégories uniquement, sans dossiers ni liste brute.
@@ -212,18 +278,124 @@ public final class WorkspacePanel {
         });card.setOnLongClickListener(v->{fileMenu(path);return true;});
         if(!dir&&(mime.startsWith("image/")||mime.startsWith("video/"))){final int ticket=generation;ThumbnailLoader.load(a,path,0,mime.startsWith("video/"),new ThumbnailLoader.Result(){public boolean current(){return ticket==generation&&!a.isFinishing();}public void ready(android.graphics.Bitmap b){thumb.setImageBitmap(b);}});}
     }
-    private void selectionBar(){
-        TextView action=action("✓ "+selected.size()+" sélectionné(s) · actions");list.addView(action);
-        selectionIndicator=action;
-        action.setOnClickListener(v->{
-            if(selected.isEmpty()){toast("Sélectionne un fichier ou un dossier");return;}
-            if(batchRunning){toast("Opération en cours…");return;}
-            new AgentDialog.Builder(a).setTitle("Sélection").setItems(new String[]{"Copier les fichiers dans un dossier","Déplacer dans un dossier","Mettre à la corbeille","Terminer la sélection"},(d,n)->{
-                java.util.List<String> paths=new java.util.ArrayList<>(selected);
-                if(n==3){selectMode=false;selected.clear();refresh();}
-                else if(n==2)confirm("Mettre les éléments sélectionnés à la corbeille ?",()->selectionBatch(paths,n,""));
-                else prompt("Dossier de destination (vide = racine)","",target->selectionBatch(paths,n,target));
-            }).show();
+    private void updateFloating(){
+        if(floatingButton==null||floatingParams==null)return;
+        floatingButton.setVisibility(space.equals("files")&&selectMode?View.GONE:View.VISIBLE);
+        floatingParams.bottomMargin=MobileUi.dp(a,
+            space.equals("files")&&audioBar!=null&&audioBar.visible()?76:14);
+        floatingButton.setLayoutParams(floatingParams);
+    }
+    private TextView batchButton(String caption,Runnable onClick){
+        TextView button=action(caption);
+        button.setGravity(android.view.Gravity.CENTER);
+        button.setMinHeight(MobileUi.dp(a,46));
+        button.setPadding(MobileUi.dp(a,13),0,MobileUi.dp(a,13),0);
+        button.setOnClickListener(v->onClick.run());
+        return button;
+    }
+    private void endSelection(){
+        selected.clear();selectMode=false;
+        if(fileAdapter!=null)fileAdapter.selectionMode(false);
+        updateSelectionToolbar();
+    }
+    private void updateSelectionToolbar(){
+        if(selectionToolbar==null)return;
+        selectionToolbar.removeAllViews();
+        selectionToolbar.setVisibility(selectMode?View.VISIBLE:View.GONE);
+        updateFloating();
+        if(!selectMode)return;
+        selectionToolbar.setBackgroundColor(0xffe9f1ff);
+        LinearLayout heading=new LinearLayout(a);
+        heading.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        heading.setPadding(MobileUi.dp(a,12),0,MobileUi.dp(a,8),0);
+        selectionToolbar.addView(heading,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,38)));
+        TextView count=label(selected.size()+" sélectionné(s)",15);
+        count.setTag("workspace_selected_count");
+        heading.addView(count,new LinearLayout.LayoutParams(0,-2,1));
+        heading.addView(batchButton("✕  Fermer",this::endSelection));
+        HorizontalScrollView scroll=new HorizontalScrollView(a);
+        scroll.setHorizontalScrollBarEnabled(false);
+        selectionToolbar.addView(scroll,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,49)));
+        LinearLayout buttons=new LinearLayout(a);
+        buttons.setPadding(MobileUi.dp(a,7),0,MobileUi.dp(a,7),0);
+        scroll.addView(buttons);
+        buttons.addView(batchButton("Copier",()->batchAction(0)));
+        buttons.addView(batchButton("Déplacer",()->batchAction(1)));
+        TextView rename=batchButton("Renommer",()->{
+            if(selected.size()==1)renameItem(selected.iterator().next());
+        });
+        rename.setAlpha(selected.size()==1?1f:0.4f);
+        rename.setEnabled(selected.size()==1);
+        buttons.addView(rename);
+        buttons.addView(batchButton("Corbeille",()->batchAction(2)));
+    }
+    private void renameItem(String path){
+        prompt("Nouveau nom",path.substring(path.lastIndexOf('/')+1),name->
+            work(()->{
+                String parent=path.contains("/")?path.substring(0,path.lastIndexOf('/')):"";
+                new WorkspaceStore(a).move(path,WorkspacePaths.child(parent,name));
+                WorkspaceCommands.UI.post(()->{
+                    selected.remove(path);
+                    if(selected.isEmpty())selectMode=false;
+                    updateSelectionToolbar();
+                });
+                return "Élément renommé";
+            }));
+    }
+    private void batchAction(int operation){
+        if(batchRunning){toast("Opération en cours…");return;}
+        if(selected.isEmpty()){toast("Sélectionne un fichier ou un dossier");return;}
+        java.util.List<String> paths=new java.util.ArrayList<>(selected);
+        if(operation==2)
+            confirm("Mettre "+paths.size()+" élément(s) à la corbeille ?",
+                ()->selectionBatch(paths,2,""));
+        else {
+            String first=folder;
+            if(first.isEmpty()&&WorkspaceCategoryView.isContainerCategory(category))
+                first=WorkspaceCategoryView.storageRoot(category);
+            chooseDestinationAt(paths,operation,first);
+        }
+    }
+    private void chooseDestinationAt(java.util.List<String> paths,int operation,String at){
+        WorkspaceCommands.IO.execute(()->{
+            String dest=at;
+            try{
+                WorkspaceStore store=new WorkspaceStore(a);
+                if(!dest.isEmpty()&&!store.file(dest).isDirectory())dest="";
+                JSONObject page=store.list(dest,"",0);
+                java.util.List<String> destinations=new java.util.ArrayList<>();
+                java.util.List<String> choices=new java.util.ArrayList<>();
+                choices.add("✓ Ici : "+(dest.isEmpty()?"Mes fichiers":dest));
+                choices.add("↑ Dossier parent");
+                choices.add("Saisir un chemin…");
+                JSONArray rows=page.getJSONArray("items");
+                for(int i=0;i<rows.length();i++){
+                    JSONObject entry=rows.getJSONObject(i);
+                    if(entry.optBoolean("directory")){
+                        choices.add("📁 "+entry.optString("name"));
+                        destinations.add(entry.getString("path"));
+                    }
+                }
+                final String current=dest;
+                WorkspaceCommands.UI.post(()->{
+                    if(disposed||a.isFinishing()||a.isDestroyed())return;
+                    new AgentDialog.Builder(a)
+                        .setTitle(operation==0?"Copier vers…":"Déplacer vers…")
+                        .setItems(choices.toArray(new String[0]),(d,n)->{
+                            if(n==0)selectionBatch(paths,operation,current);
+                            else if(n==1){
+                                String parent=current.contains("/")?
+                                    current.substring(0,current.lastIndexOf('/')):"";
+                                chooseDestinationAt(paths,operation,parent);
+                            }else if(n==2)
+                                prompt("Chemin du dossier",current,
+                                    value->selectionBatch(paths,operation,value));
+                            else chooseDestinationAt(paths,operation,destinations.get(n-3));
+                        }).setNegativeButton("Annuler",null).show();
+                });
+            }catch(Exception e){WorkspaceCommands.UI.post(()->{
+                if(!disposed&&!a.isFinishing()&&!a.isDestroyed())toast(e.getMessage());
+            });}
         });
     }
     private void selectionBatch(java.util.List<String> paths,int operation,String destination){
@@ -235,7 +407,7 @@ public final class WorkspacePanel {
             WorkspaceCommands.UI.post(()->{
                 batchRunning=false;if(disposed||a.isFinishing()||a.isDestroyed())return;
                 JSONArray succeeded=report.optJSONArray("succeeded"),failed=report.optJSONArray("failed");
-                if(space.equals("files")){for(int i=0;i<succeeded.length();i++)selected.remove(succeeded.optString(i));selectMode=!selected.isEmpty();}
+                if(space.equals("files")){for(int i=0;i<succeeded.length();i++)selected.remove(succeeded.optString(i));selectMode=!selected.isEmpty();updateSelectionToolbar();}
                 toast(succeeded.length()+" / "+paths.size()+" élément(s) traité(s)"+
                     (failed.length()==0?"":" · "+failed.length()+" échec(s) : "+failed.optJSONObject(0).optString("error")));
                 refresh();
@@ -297,7 +469,7 @@ public final class WorkspacePanel {
     }
     private void fileMenu(String path){boolean directory=false;try{directory=new WorkspaceStore(a).file(path).isDirectory();}catch(Exception ignored){}final boolean dir=directory;new AgentDialog.Builder(a).setTitle(path.substring(path.lastIndexOf('/')+1)).setItems(dir?new String[]{"Renommer","Déplacer","Mettre à la corbeille"}:new String[]{"Ouvrir","Partager","Exporter vers le téléphone","Renommer","Déplacer","Modifier le texte","Mettre à la corbeille","Copier","Monter dans Studio","Informations du média"},(d,i)->{int choice=dir?new int[]{3,4,6}[i]:i;switch(choice){
         case 0:openFile(path,false);break;case 1:openFile(path,true);break;case 2:exportPicker(path);break;
-        case 3:prompt("Nouveau nom",path.substring(path.lastIndexOf('/')+1),name->work(()->{String parent=path.contains("/")?path.substring(0,path.lastIndexOf('/')):"";new WorkspaceStore(a).move(path,WorkspacePaths.child(parent,name));return "Élément renommé";}));break;
+        case 3:renameItem(path);break;
         case 4:prompt("Chemin de destination","",name->work(()->{new WorkspaceStore(a).move(path,name);return "Élément déplacé";}));break;
         case 5:editText(path);break;
         case 7:prompt("Destination de la copie","",destination->work(()->{WorkspaceCatalog.copy(a,path,destination);return "Fichier copié";}));break;
@@ -305,7 +477,7 @@ public final class WorkspacePanel {
         case 9:WorkspaceCommands.IO.execute(()->{try{String info=MediaInspection.info(a,path).toString(2);WorkspaceCommands.UI.post(()->new AgentDialog.Builder(a).setTitle("Informations").setMessage(info).setPositiveButton("OK",null).show());}catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}});break;
         case 6:confirm("Mettre cet élément à la corbeille ?",()->work(()->{new WorkspaceStore(a).trash(path);return "Élément dans la corbeille";}));break;
     }}).setNegativeButton("Fermer",null).show();}
-    private void openFile(String path,boolean share){try{WorkspaceStore s=new WorkspaceStore(a);if(!share&&(s.mime(path).startsWith("image/")||s.mime(path).startsWith("video/")||s.mime(path).startsWith("audio/"))){a.startActivity(new Intent(a,MediaPreviewActivity.class).putExtra("path",path));return;}Uri u=s.uri(path);Intent intent=new Intent(share?Intent.ACTION_SEND:Intent.ACTION_VIEW);if(share){intent.setType(s.mime(path));intent.putExtra(Intent.EXTRA_STREAM,u);}else intent.setDataAndType(u,s.mime(path));intent.setClipData(ClipData.newRawUri("Fichier",u));intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);a.startActivity(Intent.createChooser(intent,share?"Partager le fichier":"Ouvrir le fichier"));}catch(Exception e){toast("Aucune application compatible ou fichier inaccessible");}}
+    private void openFile(String path,boolean share){try{WorkspaceStore s=new WorkspaceStore(a);if(!share&&s.mime(path).startsWith("audio/")&&audioBar!=null){audioBar.open(path);return;}if(!share&&(s.mime(path).startsWith("image/")||s.mime(path).startsWith("video/")||s.mime(path).startsWith("audio/"))){a.startActivity(new Intent(a,MediaPreviewActivity.class).putExtra("path",path));return;}Uri u=s.uri(path);Intent intent=new Intent(share?Intent.ACTION_SEND:Intent.ACTION_VIEW);if(share){intent.setType(s.mime(path));intent.putExtra(Intent.EXTRA_STREAM,u);}else intent.setDataAndType(u,s.mime(path));intent.setClipData(ClipData.newRawUri("Fichier",u));intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);a.startActivity(Intent.createChooser(intent,share?"Partager le fichier":"Ouvrir le fichier"));}catch(Exception e){toast("Aucune application compatible ou fichier inaccessible");}}
     private String importCategory="all";
     private void importPicker(){
         if(needsCategory()){chooseCategory(this::importPicker);return;}
@@ -390,6 +562,7 @@ public final class WorkspacePanel {
     private void toast(String s){Toast.makeText(a,s==null?"Opération impossible":s,Toast.LENGTH_SHORT).show();}
     public void destroy(){
         disposed=true;generation++;handler.removeCallbacksAndMessages(null);
+        if(audioBar!=null){audioBar.destroy();audioBar=null;}
         if(recycler!=null)recycler.setAdapter(null);
     }
 }

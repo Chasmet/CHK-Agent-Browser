@@ -67,6 +67,7 @@ public final class SessionAndVirtualFilesTest {
                         public void openFolder(String path){}
                         public void openFile(String path){}
                         public void menu(String path){}
+                        public void startSelection(String path){changed.incrementAndGet();}
                         public void selectedChanged(){changed.incrementAndGet();}
                     });
                 recycler.setLayoutManager(manager);

@@ -27,31 +27,33 @@ final class WorkspaceFileAdapter extends RecyclerView.Adapter<WorkspaceFileAdapt
         void openFolder(String path);
         void openFile(String path);
         void menu(String path);
+        void startSelection(String path);
         void selectedChanged();
     }
     static final class Entry {
         final String path,name,mime;
         final boolean folder;
-        final long size;
+        final long size,updated;
         Entry(JSONObject json){
             path=json.optString("path");
             name=json.optString("name");
             mime=json.optString("mime_type");
             folder=json.optBoolean("directory");
             size=json.optLong("size");
+            updated=json.optLong("updated");
         }
         boolean same(Entry other){
             return path.equals(other.path) && name.equals(other.name) &&
-                mime.equals(other.mime) && folder==other.folder && size==other.size;
+                mime.equals(other.mime) && folder==other.folder && size==other.size && updated==other.updated;
         }
     }
     static final class Holder extends RecyclerView.ViewHolder {
         final LinearLayout card;
         final ImageView icon;
-        final TextView title,detail;
+        final TextView title,detail,more;
         String boundPath="";
-        Holder(LinearLayout card,ImageView icon,TextView title,TextView detail){
-            super(card);this.card=card;this.icon=icon;this.title=title;this.detail=detail;
+        Holder(LinearLayout card,ImageView icon,TextView title,TextView detail,TextView more){
+            super(card);this.card=card;this.icon=icon;this.title=title;this.detail=detail;this.more=more;
         }
     }
     private final Activity context;
@@ -118,13 +120,24 @@ final class WorkspaceFileAdapter extends RecyclerView.Adapter<WorkspaceFileAdapt
         card.addView(icon,new LinearLayout.LayoutParams(tile?-1:dp(46),dp(tile?77:46)));
         LinearLayout info=new LinearLayout(context);info.setOrientation(LinearLayout.VERTICAL);
         card.addView(info,new LinearLayout.LayoutParams(tile?-1:0,-2,tile?0:1));
+        LinearLayout headline=new LinearLayout(context);
+        headline.setOrientation(LinearLayout.HORIZONTAL);
+        headline.setGravity(Gravity.CENTER_VERTICAL);
+        info.addView(headline,new LinearLayout.LayoutParams(-1,dp(34)));
         TextView title=MobileUi.text(context,"",tile?12:15,0xff202124);
         title.setMaxLines(tile?2:1);
         title.setEllipsize(TextUtils.TruncateAt.END);
-        info.addView(title);
+        headline.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        TextView more=MobileUi.text(context,"⋮",22,0xff566274);
+        more.setGravity(Gravity.CENTER);
+        more.setContentDescription("Plus d'options pour le fichier");
+        more.setFocusable(true);
+        headline.addView(more,new LinearLayout.LayoutParams(dp(36),dp(34)));
         TextView detail=MobileUi.text(context,"",11,0xff687080);
-        detail.setSingleLine(true);info.addView(detail);
-        return new Holder(card,icon,title,detail);
+        detail.setSingleLine(true);
+        detail.setEllipsize(TextUtils.TruncateAt.END);
+        info.addView(detail);
+        return new Holder(card,icon,title,detail,more);
     }
     @Override public void onBindViewHolder(@NonNull Holder holder,int position){
         Entry entry=rows.get(position);
@@ -133,8 +146,10 @@ final class WorkspaceFileAdapter extends RecyclerView.Adapter<WorkspaceFileAdapt
         boolean checked=selection.contains(path);
         holder.card.setBackground(MobileUi.bg(context,checked?0xffd7eaff:0xffffffff));
         holder.title.setText((checked?"✓ ":"")+entry.name);
-        holder.detail.setText(entry.folder?"Dossier":
-            android.text.format.Formatter.formatShortFileSize(context,entry.size));
+        String when=entry.updated>0?android.text.format.DateFormat.format("dd MMM yyyy",entry.updated).toString():"";
+        holder.detail.setText((entry.folder?"Dossier":
+            android.text.format.Formatter.formatShortFileSize(context,entry.size))+
+            (when.isEmpty()?"":" · "+when));
         holder.card.setContentDescription((entry.folder?"Dossier ":"Fichier ")+entry.name);
         holder.icon.setImageDrawable(UiIcons.icon(context,entry.folder?"folder":
             entry.mime.startsWith("video/")?"video":
@@ -151,7 +166,10 @@ final class WorkspaceFileAdapter extends RecyclerView.Adapter<WorkspaceFileAdapt
             }else if(entry.folder)actions.openFolder(path);
             else actions.openFile(path);
         });
-        holder.card.setOnLongClickListener(v->{actions.menu(path);return true;});
+        holder.card.setOnLongClickListener(v->{actions.startSelection(path);return true;});
+        holder.more.setVisibility(selectMode?View.GONE:View.VISIBLE);
+        holder.more.setContentDescription("Options de "+entry.name);
+        holder.more.setOnClickListener(v->actions.menu(path));
         if(!entry.folder&&(entry.mime.startsWith("image/")||entry.mime.startsWith("video/"))){
             int ticket=generation;
             ThumbnailLoader.load(context,path,0,entry.mime.startsWith("video/"),
