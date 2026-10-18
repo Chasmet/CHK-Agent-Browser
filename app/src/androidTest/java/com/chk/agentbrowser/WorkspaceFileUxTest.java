@@ -137,9 +137,9 @@ public final class WorkspaceFileUxTest {
                 opened[0]=WorkspaceRenameDialog.rename(activity,
                     "SKANO_PREMIER_OMBRE_SUR_LA_VILLE_30s.mp4",false,
                     newName->value[0]=newName);
-                android.widget.EditText input=opened[0].findViewWithTag("workspace_rename_name");
-                android.widget.TextView extension=opened[0].findViewWithTag("workspace_rename_extension");
-                View save=opened[0].findViewWithTag("workspace_rename_save");
+                android.widget.EditText input=opened[0].getWindow().getDecorView().findViewWithTag("workspace_rename_name");
+                android.widget.TextView extension=opened[0].getWindow().getDecorView().findViewWithTag("workspace_rename_extension");
+                View save=opened[0].getWindow().getDecorView().findViewWithTag("workspace_rename_save");
                 assertNotNull(input);assertNotNull(extension);assertNotNull(save);
                 assertEquals("SKANO_PREMIER_OMBRE_SUR_LA_VILLE_30s",
                     input.getText().toString());
