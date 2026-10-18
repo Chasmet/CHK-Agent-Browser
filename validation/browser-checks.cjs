@@ -70,7 +70,7 @@ function uploadFixture(labels) {
     nodeType:1,tagName:'BUTTON',type:'button',innerText:text,ownerDocument:doc,
     id:'',getAttribute:()=>null,getClientRects:()=>[{}],hasAttribute:()=>false,
     getBoundingClientRect:()=>({left:10+i*150,top:40,width:140,height:44}),
-    scrollIntoView(){},closest:()=>null
+    scrollIntoView(){},contains:()=>false,closest:()=>null
   }));
   const scope={parentElement:null,querySelectorAll:()=>buttons};
   const input={
