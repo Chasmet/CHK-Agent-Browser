@@ -139,7 +139,7 @@ final class PublicCommentCollector {
                         if(!dedup.add(fingerprint))continue;
                         JSONObject record=new JSONObject().put("source",expected).put("commentaire",clean);
                         String line=record.toString()+"\n";
-                        if(chunk.length()+line.length()>40000)flush();
+                        if(chunk.length()+line.length()>16000)flush();
                         chunk.append(line);count++;scanned++;
                     }
                     handler.postDelayed(this::capture,250L);
