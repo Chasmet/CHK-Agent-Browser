@@ -319,6 +319,7 @@ public final class WorkspacePanel {
         LinearLayout buttons=new LinearLayout(a);
         buttons.setPadding(MobileUi.dp(a,7),0,MobileUi.dp(a,7),0);
         scroll.addView(buttons);
+        buttons.addView(batchButton("Partager",this::shareSelected));
         buttons.addView(batchButton("Copier",()->batchAction(0)));
         buttons.addView(batchButton("Déplacer",()->batchAction(1)));
         TextView rename=batchButton("Renommer",()->{
@@ -345,6 +346,41 @@ public final class WorkspacePanel {
                 });
                 return "Élément renommé";
             }));
+    }
+    /** Android Sharesheet with URI permissions for all selected files. */
+    private void shareSelected(){
+        if(selected.isEmpty()){toast("Sélectionne au moins un fichier");return;}
+        java.util.ArrayList<Uri> uris=new java.util.ArrayList<>();
+        java.util.ArrayList<String> types=new java.util.ArrayList<>();
+        int skipped=0;
+        try{
+            WorkspaceStore store=new WorkspaceStore(a);
+            for(String path:new java.util.ArrayList<>(selected)){
+                if(store.file(path).isDirectory()){skipped++;continue;}
+                uris.add(store.uri(path));
+                types.add(store.mime(path));
+            }
+        }catch(Exception e){toast("Partage impossible : "+e.getMessage());return;}
+        if(uris.isEmpty()){
+            toast("Sélectionne un fichier : les dossiers ne sont pas partageables directement");
+            return;
+        }
+        String mime=types.get(0);
+        for(String type:types)if(!mime.equals(type)){mime="*/*";break;}
+        boolean multiple=uris.size()>1;
+        Intent intent=new Intent(multiple?Intent.ACTION_SEND_MULTIPLE:Intent.ACTION_SEND);
+        intent.setType(mime);
+        if(multiple)intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris);
+        else intent.putExtra(Intent.EXTRA_STREAM,uris.get(0));
+        ClipData clip=ClipData.newRawUri("Fichier",uris.get(0));
+        for(int i=1;i<uris.size();i++)clip.addItem(new ClipData.Item(uris.get(i)));
+        intent.setClipData(clip);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try{
+            a.startActivity(Intent.createChooser(intent,
+                multiple?"Partager "+uris.size()+" fichiers":"Partager le fichier"));
+            if(skipped>0)toast(skipped+" dossier(s) ignoré(s) pour le partage");
+        }catch(Exception e){toast("Aucune application disponible pour partager");}
     }
     private void batchAction(int operation){
         if(batchRunning){toast("Opération en cours…");return;}
