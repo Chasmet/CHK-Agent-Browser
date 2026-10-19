@@ -1,3 +1,14 @@
+## CHK Agent Browser — collecte des commentaires X/TikTok (19 octobre 2026)
+
+- Nouvelle action MCP `collect_public_comments` autorisée dans `browser_task_submit`, compatible avec les onglets visibles et autonomes. Le moteur de tâches reconnaît également `scroll` pour les séquences lecture/défilement.
+- Collecte locale bornée de 1 à 8 URL HTTPS de publications X ou de vidéos TikTok, jusqu'à 15 défilements par publication (90 au total), plafond de 500 commentaires par lot.
+- Lecture des commentaires réellement présents dans le DOM de la WebView (pas d'API privée ni de contournement de connexion, de CAPTCHA ou de restrictions de plateforme). Les pages inaccessibles ou les redirections vers Google Play sont déclarées comme telles.
+- Déduplication SHA-256 sur le texte normalisé, suppression des mentions de comptes et des URL intégrées aux commentaires, sans conservation du pseudonyme des auteurs.
+- Écriture locale dans Fichiers CHK : `Presidentielle_2027/commentaires_<id>_001.jsonl` et `commentaires_<id>_rapport.json`. Sorties fractionnées en petits fichiers pour rester sous 64 Ko ; identifiants de lots uniques.
+- Essai d'affichage WebView de bureau uniquement lors de l'ouverture des vidéos TikTok par le collecteur ; restauration de l'agent utilisateur initial après collecte. Les commentaires TikTok peuvent rester bloqués côté plateforme.
+- Aucun calcul automatique d'intention de vote : commentaires, vues et likes ne sont pas assimilés à des bulletins. Tests Android ajoutés pour limites, URLs, anonymisation et autorisation de la tâche.
+- Le package Android, la signature persistante, les fichiers existants et le relais Render restent inchangés.
+
 ## Correctif urgent Fichiers — renommage et lisibilité (18 octobre 2026)
 
 - **Renommage sans risque pour le format :** le nom du fichier est modifié sans exposer son extension à l'édition. `.mp4`, `.mp3`, `.jpg` et les extensions composites d'archives sont automatiquement conservées.
