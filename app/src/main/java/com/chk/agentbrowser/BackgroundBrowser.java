@@ -245,6 +245,9 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                         catch(Exception e){cb.finish(false,"Lecture de page impossible.");}
                     });return;
                 }
+                case "collect_public_comments":{
+                    PublicCommentCollector.start(app,current,args,main,cb);return;
+                }
                 case "scroll":{
                     int offset=(int)(current.getHeight()*0.7f);if("up".equals(args.optString("direction")))offset=-offset;
                     current.scrollBy(0,offset);cb.finish(true,"Défilement effectué.");return;
