@@ -311,7 +311,13 @@ public final class WorkspacePanel {
         selectionToolbar.addView(heading,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,38)));
         TextView count=label(selected.size()+" sélectionné(s)",15);
         count.setTag("workspace_selected_count");
+        count.setSingleLine(true);
+        count.setEllipsize(android.text.TextUtils.TruncateAt.END);
         heading.addView(count,new LinearLayout.LayoutParams(0,-2,1));
+        TextView share=batchButton("↗ Partager",this::shareSelected);
+        share.setTag("workspace_share_button");
+        share.setContentDescription("Partager les fichiers sélectionnés");
+        heading.addView(share);
         heading.addView(batchButton("✕  Fermer",this::endSelection));
         HorizontalScrollView scroll=new HorizontalScrollView(a);
         scroll.setHorizontalScrollBarEnabled(false);
@@ -328,6 +334,32 @@ public final class WorkspacePanel {
         rename.setEnabled(selected.size()==1);
         buttons.addView(rename);
         buttons.addView(batchButton("Corbeille",()->batchAction(2)));
+    }
+    private void shareSelected(){
+        if(batchRunning){toast("Opération en cours…");return;}
+        if(selected.isEmpty()){toast("Sélectionne un fichier à partager");return;}
+        sharePaths(new java.util.ArrayList<>(selected));
+    }
+    private void sharePaths(java.util.List<String> paths){
+        WorkspaceCommands.IO.execute(()->{
+            Intent send;
+            try{send=WorkspaceShare.createIntent(a.getApplicationContext(),paths);}
+            catch(Exception e){
+                WorkspaceCommands.UI.post(()->{
+                    if(!disposed&&!a.isFinishing()&&!a.isDestroyed())toast(e.getMessage());
+                });
+                return;
+            }
+            WorkspaceCommands.UI.post(()->{
+                if(disposed||a.isFinishing()||a.isDestroyed())return;
+                try{
+                    Intent chooser=Intent.createChooser(send,
+                        paths.size()==1?"Partager le fichier":"Partager "+paths.size()+" fichiers");
+                    chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    a.startActivity(chooser);
+                }catch(Exception e){toast("Aucune application disponible pour partager");}
+            });
+        });
     }
     private void renameItem(String path){
         boolean directory=false;
@@ -481,7 +513,30 @@ public final class WorkspacePanel {
         case 9:WorkspaceCommands.IO.execute(()->{try{String info=MediaInspection.info(a,path).toString(2);WorkspaceCommands.UI.post(()->new AgentDialog.Builder(a).setTitle("Informations").setMessage(info).setPositiveButton("OK",null).show());}catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}});break;
         case 6:confirm("Mettre cet élément à la corbeille ?",()->work(()->{new WorkspaceStore(a).trash(path);return "Élément dans la corbeille";}));break;
     }}).setNegativeButton("Fermer",null).show();}
-    private void openFile(String path,boolean share){try{WorkspaceStore s=new WorkspaceStore(a);if(!share&&s.mime(path).startsWith("audio/")&&audioBar!=null){audioBar.open(path);return;}if(!share&&(s.mime(path).startsWith("image/")||s.mime(path).startsWith("video/")||s.mime(path).startsWith("audio/"))){a.startActivity(new Intent(a,MediaPreviewActivity.class).putExtra("path",path));return;}Uri u=s.uri(path);Intent intent=new Intent(share?Intent.ACTION_SEND:Intent.ACTION_VIEW);if(share){intent.setType(s.mime(path));intent.putExtra(Intent.EXTRA_STREAM,u);}else intent.setDataAndType(u,s.mime(path));intent.setClipData(ClipData.newRawUri("Fichier",u));intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);a.startActivity(Intent.createChooser(intent,share?"Partager le fichier":"Ouvrir le fichier"));}catch(Exception e){toast("Aucune application compatible ou fichier inaccessible");}}
+    private void openFile(String path,boolean share){
+        if(share){
+            sharePaths(java.util.Collections.singletonList(path));
+            return;
+        }
+        try{
+            WorkspaceStore store=new WorkspaceStore(a);
+            String mime=store.mime(path);
+            if(mime.startsWith("audio/")&&audioBar!=null){
+                audioBar.open(path);
+                return;
+            }
+            if(mime.startsWith("image/")||mime.startsWith("video/")||mime.startsWith("audio/")){
+                a.startActivity(new Intent(a,MediaPreviewActivity.class).putExtra("path",path));
+                return;
+            }
+            Uri uri=store.uri(path);
+            Intent view=new Intent(Intent.ACTION_VIEW);
+            view.setDataAndType(uri,mime);
+            view.setClipData(ClipData.newRawUri("Fichier",uri));
+            view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            a.startActivity(Intent.createChooser(view,"Ouvrir le fichier"));
+        }catch(Exception e){toast("Aucune application compatible ou fichier inaccessible");}
+    }
     private String importCategory="all";
     private void importPicker(){
         if(needsCategory()){chooseCategory(this::importPicker);return;}
