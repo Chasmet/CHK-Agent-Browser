@@ -17,7 +17,7 @@ import java.io.*;
 
 /** Native mobile file and note screens. All storage work is outside the UI thread. */
 public final class WorkspacePanel {
-    private static final int IMPORT=701,EXPORT=702;
+    private static final int IMPORT=701,EXPORT=702,EXPORT_FOLDER=703;
     private final Activity a;
     private final FrameLayout host;
     private LinearLayout list,legacyList,fileHeader,fileFooter;
@@ -32,6 +32,7 @@ public final class WorkspacePanel {
     private TextView location;
     private EditText search;
     private String folder="",space="files",exportPath="",importFolder="";
+    private java.util.List<String> pendingPhoneExport=new java.util.ArrayList<>();
     private volatile int generation;
     private int offset,filesOffset,notesOffset;
     private String category="all",sort="name";
@@ -313,12 +314,17 @@ public final class WorkspacePanel {
         count.setTag("workspace_selected_count");
         heading.addView(count,new LinearLayout.LayoutParams(0,-2,1));
         heading.addView(batchButton("✕  Fermer",this::endSelection));
+        LinearLayout actions=new LinearLayout(a);
+        actions.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        selectionToolbar.addView(actions,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,52)));
         HorizontalScrollView scroll=new HorizontalScrollView(a);
         scroll.setHorizontalScrollBarEnabled(false);
-        selectionToolbar.addView(scroll,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,49)));
+        actions.addView(scroll,new LinearLayout.LayoutParams(0,MobileUi.dp(a,52),1));
         LinearLayout buttons=new LinearLayout(a);
+        buttons.setGravity(android.view.Gravity.CENTER_VERTICAL);
         buttons.setPadding(MobileUi.dp(a,7),0,MobileUi.dp(a,7),0);
         scroll.addView(buttons);
+        buttons.addView(batchButton("Partager",this::shareSelected));
         buttons.addView(batchButton("Copier",()->batchAction(0)));
         buttons.addView(batchButton("Déplacer",()->batchAction(1)));
         TextView rename=batchButton("Renommer",()->{
@@ -328,6 +334,10 @@ public final class WorkspacePanel {
         rename.setEnabled(selected.size()==1);
         buttons.addView(rename);
         buttons.addView(batchButton("Corbeille",()->batchAction(2)));
+        TextView more=batchButton("⋮ Plus",this::selectionMore);
+        more.setTag("workspace_selection_more");
+        more.setContentDescription("Plus d'options : partager, enregistrer sur le téléphone, ouvrir avec et propriétés");
+        actions.addView(more,new LinearLayout.LayoutParams(MobileUi.dp(a,87),MobileUi.dp(a,50)));
     }
     private void renameItem(String path){
         boolean directory=false;
@@ -345,6 +355,125 @@ public final class WorkspacePanel {
                 });
                 return "Élément renommé";
             }));
+    }
+    /** Android Sharesheet with URI permissions for all selected files. */
+    private void shareSelected(){
+        if(selected.isEmpty()){toast("Sélectionne au moins un fichier");return;}
+        java.util.ArrayList<Uri> uris=new java.util.ArrayList<>();
+        java.util.ArrayList<String> types=new java.util.ArrayList<>();
+        int skipped=0;
+        try{
+            WorkspaceStore store=new WorkspaceStore(a);
+            for(String path:new java.util.ArrayList<>(selected)){
+                if(store.file(path).isDirectory()){skipped++;continue;}
+                uris.add(store.uri(path));
+                types.add(store.mime(path));
+            }
+        }catch(Exception e){toast("Partage impossible : "+e.getMessage());return;}
+        if(uris.isEmpty()){
+            toast("Sélectionne un fichier : les dossiers ne sont pas partageables directement");
+            return;
+        }
+        String mime=types.get(0);
+        for(String type:types)if(!mime.equals(type)){mime="*/*";break;}
+        boolean multiple=uris.size()>1;
+        Intent intent=new Intent(multiple?Intent.ACTION_SEND_MULTIPLE:Intent.ACTION_SEND);
+        intent.setType(mime);
+        if(multiple)intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris);
+        else intent.putExtra(Intent.EXTRA_STREAM,uris.get(0));
+        ClipData clip=ClipData.newRawUri("Fichier",uris.get(0));
+        for(int i=1;i<uris.size();i++)clip.addItem(new ClipData.Item(uris.get(i)));
+        intent.setClipData(clip);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try{
+            a.startActivity(Intent.createChooser(intent,
+                multiple?"Partager "+uris.size()+" fichiers":"Partager le fichier"));
+            if(skipped>0)toast(skipped+" dossier(s) ignoré(s) pour le partage");
+        }catch(Exception e){toast("Aucune application disponible pour partager");}
+    }
+    /** Options remain reachable even when the horizontal action strip is scrolled. */
+    private void selectionMore(){
+        if(selected.isEmpty()){toast("Sélectionne un fichier");return;}
+        final String[] items={"Partager…","Enregistrer sur le téléphone","Ouvrir avec…",
+            "Propriétés / informations","Copier","Déplacer","Renommer","Mettre à la corbeille"};
+        new AgentDialog.Builder(a).setTitle(selected.size()+" élément(s) sélectionné(s)")
+            .setItems(items,(d,index)->{
+                switch(index){
+                    case 0:shareSelected();break;
+                    case 1:saveSelectedToPhone();break;
+                    case 2:
+                        if(selected.size()==1)openWithExternal(selected.iterator().next());
+                        else toast("Choisis un seul fichier pour l'ouvrir");
+                        break;
+                    case 3:
+                        if(selected.size()==1)showSelectedInfo(selected.iterator().next());
+                        else showBatchInfo();
+                        break;
+                    case 4:batchAction(0);break;
+                    case 5:batchAction(1);break;
+                    case 6:
+                        if(selected.size()==1)renameItem(selected.iterator().next());
+                        else toast("Le renommage demande un seul élément");
+                        break;
+                    case 7:batchAction(2);break;
+                }
+            }).setNegativeButton("Fermer",null).show();
+    }
+    private void showSelectedInfo(String path){
+        WorkspaceCommands.IO.execute(()->{
+            try{
+                File file=new WorkspaceStore(a).file(path);
+                if(!file.exists())throw new IOException("Fichier introuvable");
+                String description="Nom : "+file.getName()+
+                    "\\nType : "+(file.isDirectory()?"Dossier":new WorkspaceStore(a).mime(path))+
+                    "\\nTaille : "+android.text.format.Formatter.formatShortFileSize(a,file.length())+
+                    "\\nModifié : "+android.text.format.DateFormat.format("dd MMM yyyy HH:mm",file.lastModified())+
+                    "\\nChemin : "+path;
+                WorkspaceCommands.UI.post(()->{
+                    if(!disposed&&!a.isFinishing()&&!a.isDestroyed())
+                        new AgentDialog.Builder(a).setTitle("Propriétés").setMessage(description)
+                            .setPositiveButton("OK",null).show();
+                });
+            }catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}
+        });
+    }
+    private void showBatchInfo(){
+        WorkspaceCommands.IO.execute(()->{
+            int files=0,folders=0;long bytes=0;
+            try{
+                WorkspaceStore store=new WorkspaceStore(a);
+                for(String path:new java.util.ArrayList<>(selected)){
+                    File file=store.file(path);
+                    if(file.isDirectory())folders++;
+                    else{files++;bytes+=file.length();}
+                }
+                final String description=files+" fichier(s), "+folders+" dossier(s)"+
+                    "\\nTaille des fichiers : "+android.text.format.Formatter.formatShortFileSize(a,bytes);
+                WorkspaceCommands.UI.post(()->{
+                    if(!disposed&&!a.isFinishing()&&!a.isDestroyed())
+                        new AgentDialog.Builder(a).setTitle("Sélection").setMessage(description)
+                            .setPositiveButton("OK",null).show();
+                });
+            }catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}
+        });
+    }
+    /** Save single files with Android Save As, or multiple items to an Android folder. */
+    private void saveSelectedToPhone(){
+        if(selected.isEmpty()){toast("Sélectionne un fichier");return;}
+        savePathsToPhone(new java.util.ArrayList<>(selected));
+    }
+    private void savePathsToPhone(java.util.List<String> snapshot){
+        if(snapshot.isEmpty()){toast("Sélectionne un fichier");return;}
+        try{
+            if(snapshot.size()==1&&new WorkspaceStore(a).file(snapshot.get(0)).isFile()){
+                exportPicker(snapshot.get(0));
+                return;
+            }
+            Intent request=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            request.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            pendingPhoneExport=snapshot;
+            a.startActivityForResult(request,EXPORT_FOLDER);
+        }catch(Exception e){toast("Choix du dossier Android impossible");}
     }
     private void batchAction(int operation){
         if(batchRunning){toast("Opération en cours…");return;}
@@ -471,17 +600,33 @@ public final class WorkspacePanel {
             else{selectMode=true;selected.clear();refresh();}
         }).show();
     }
-    private void fileMenu(String path){boolean directory=false;try{directory=new WorkspaceStore(a).file(path).isDirectory();}catch(Exception ignored){}final boolean dir=directory;new AgentDialog.Builder(a).setTitle(path.substring(path.lastIndexOf('/')+1)).setItems(dir?new String[]{"Renommer","Déplacer","Mettre à la corbeille"}:new String[]{"Ouvrir","Partager","Exporter vers le téléphone","Renommer","Déplacer","Modifier le texte","Mettre à la corbeille","Copier","Monter dans Studio","Informations du média"},(d,i)->{int choice=dir?new int[]{3,4,6}[i]:i;switch(choice){
-        case 0:openFile(path,false);break;case 1:openFile(path,true);break;case 2:exportPicker(path);break;
+    private void fileMenu(String path){boolean directory=false;try{directory=new WorkspaceStore(a).file(path).isDirectory();}catch(Exception ignored){}final boolean dir=directory;new AgentDialog.Builder(a).setTitle(path.substring(path.lastIndexOf('/')+1)).setItems(dir?new String[]{"Renommer","Déplacer","Mettre à la corbeille","Enregistrer sur le téléphone","Propriétés"}:new String[]{"Ouvrir","Partager","Enregistrer sur le téléphone","Renommer","Déplacer","Modifier le texte","Mettre à la corbeille","Copier","Monter dans Studio","Informations du média","Ouvrir avec…"},(d,i)->{int choice=dir?new int[]{3,4,6,11,9}[i]:i;switch(choice){
+        case 0:openFile(path,false);break;case 1:openFile(path,true);break;case 2:savePathsToPhone(java.util.Collections.singletonList(path));break;
         case 3:renameItem(path);break;
         case 4:prompt("Chemin de destination","",name->work(()->{new WorkspaceStore(a).move(path,name);return "Élément déplacé";}));break;
         case 5:editText(path);break;
         case 7:prompt("Destination de la copie","",destination->work(()->{WorkspaceCatalog.copy(a,path,destination);return "Fichier copié";}));break;
         case 8:a.startActivity(new Intent(a,VideoEditorActivity.class).putExtra("add_path",path));break;
-        case 9:WorkspaceCommands.IO.execute(()->{try{String info=MediaInspection.info(a,path).toString(2);WorkspaceCommands.UI.post(()->new AgentDialog.Builder(a).setTitle("Informations").setMessage(info).setPositiveButton("OK",null).show());}catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}});break;
+        case 9:showSelectedInfo(path);break;
+        case 10:openWithExternal(path);break;
+        case 11:savePathsToPhone(java.util.Collections.singletonList(path));break;
         case 6:confirm("Mettre cet élément à la corbeille ?",()->work(()->{new WorkspaceStore(a).trash(path);return "Élément dans la corbeille";}));break;
     }}).setNegativeButton("Fermer",null).show();}
     private void openFile(String path,boolean share){try{WorkspaceStore s=new WorkspaceStore(a);if(!share&&s.mime(path).startsWith("audio/")&&audioBar!=null){audioBar.open(path);return;}if(!share&&(s.mime(path).startsWith("image/")||s.mime(path).startsWith("video/")||s.mime(path).startsWith("audio/"))){a.startActivity(new Intent(a,MediaPreviewActivity.class).putExtra("path",path));return;}Uri u=s.uri(path);Intent intent=new Intent(share?Intent.ACTION_SEND:Intent.ACTION_VIEW);if(share){intent.setType(s.mime(path));intent.putExtra(Intent.EXTRA_STREAM,u);}else intent.setDataAndType(u,s.mime(path));intent.setClipData(ClipData.newRawUri("Fichier",u));intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);a.startActivity(Intent.createChooser(intent,share?"Partager le fichier":"Ouvrir le fichier"));}catch(Exception e){toast("Aucune application compatible ou fichier inaccessible");}}
+    private void openWithExternal(String path){
+        try{
+            WorkspaceStore store=new WorkspaceStore(a);
+            if(store.file(path).isDirectory()){
+                toast("Choisis un fichier pour l'ouvrir avec une application");return;
+            }
+            Uri uri=store.uri(path);
+            Intent intent=new Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri,store.mime(path));
+            intent.setClipData(ClipData.newRawUri("Fichier",uri));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            a.startActivity(Intent.createChooser(intent,"Ouvrir avec"));
+        }catch(Exception e){toast("Aucune application compatible");}
+    }
     private String importCategory="all";
     private void importPicker(){
         if(needsCategory()){chooseCategory(this::importPicker);return;}
@@ -494,7 +639,20 @@ public final class WorkspacePanel {
         try{a.startActivityForResult(i,IMPORT);}catch(Exception e){toast("Sélecteur Android indisponible");}
     }
     private void exportPicker(String path){exportPath=path;try{WorkspaceStore s=new WorkspaceStore(a);Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(s.mime(path)).putExtra(Intent.EXTRA_TITLE,path.substring(path.lastIndexOf('/')+1));a.startActivityForResult(i,EXPORT);}catch(Exception e){toast(e.getMessage());}}
-    public boolean result(int request,int result,Intent data){if(request!=IMPORT&&request!=EXPORT)return false;if(result!=Activity.RESULT_OK||data==null)return true;
+    public boolean result(int request,int result,Intent data){
+        if(request!=IMPORT&&request!=EXPORT&&request!=EXPORT_FOLDER)return false;
+        if(result!=Activity.RESULT_OK||data==null){
+            if(request==EXPORT_FOLDER)pendingPhoneExport.clear();
+            return true;
+        }
+        if(request==EXPORT_FOLDER){
+            Uri destination=data.getData();
+            final java.util.List<String> paths=new java.util.ArrayList<>(pendingPhoneExport);
+            pendingPhoneExport.clear();
+            if(destination==null||paths.isEmpty()){toast("Aucun dossier choisi");return true;}
+            work(()->WorkspacePhoneExport.save(a.getApplicationContext(),paths,destination));
+            return true;
+        }
         if(request==IMPORT){java.util.List<Uri> uris=new java.util.ArrayList<>();if(data.getClipData()!=null){for(int i=0;i<Math.min(50,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());}else if(data.getData()!=null)uris.add(data.getData());String requestedFolder=importFolder,requestedCategory=importCategory;
             work(()->{WorkspaceStore s=new WorkspaceStore(a);String destination=WorkspaceCategoryView.destination(s,requestedCategory,requestedFolder);int count=0;java.util.List<String> failures=new java.util.ArrayList<>();
                 for(Uri u:uris){try{String name="Fichier-"+System.nanoTime();try(Cursor c=a.getContentResolver().query(u,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())name=c.getString(0);}
