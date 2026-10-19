@@ -421,6 +421,7 @@ public class MainActivity extends Activity {
             case "type":
                 extra="Saisir dans "+args.optString("selector","")+
                     "\nTexte : "+args.optString("text","");break;
+            case "collect_public_comments":extra="Collecter les commentaires publics X/TikTok, anonymiser, dedoublonner et enregistrer un rapport";break;
             case "scroll":extra="Faire défiler : "+args.optString("direction","");break;
             case "preview":case "screenshot":extra="Capturer un aperçu vérifiable de la page";break;
             case "select_option":extra="Choisir une option dans : "+args.optString("selector","");break;
@@ -565,6 +566,9 @@ public class MainActivity extends Activity {
                     }
                     current.loadUrl(url);
                     callback.finish(true,"Navigation demandée vers "+url);return;
+                }
+                case "collect_public_comments":{
+                    PublicCommentCollector.start(this,current,args,transferHandler,callback);return;
                 }
                 case "scroll":{
                     int offset=(int)(current.getHeight()*0.7f);
