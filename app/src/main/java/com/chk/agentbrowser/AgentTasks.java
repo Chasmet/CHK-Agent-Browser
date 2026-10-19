@@ -10,7 +10,7 @@ import java.util.*;
 final class AgentTasks {
     private static final Set<String> running=new HashSet<>();
     private static final java.util.concurrent.ConcurrentHashMap<String,Boolean> active=new java.util.concurrent.ConcurrentHashMap<>(); // Accessed only on WorkspaceCommands.IO.
-    private static final Set<String> ACTIONS=new HashSet<>(Arrays.asList("get_form","wait_for_element","click_verified","type","select_option","check","upload_file","keyboard","desktop","files_list","files_catalog","files_mkdir","files_copy","files_move","files_trash","files_read_text","files_write_text","notes_list","notes_read","notes_save","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page","open_url","new_tab","open_tab","resume_visible_page","publication_prepare","publication_status","publication_list","publication_cancel","publication_submit","switch_tab","close_tab","translate_page"));
+    private static final Set<String> ACTIONS=new HashSet<>(Arrays.asList("get_form","wait_for_element","click_verified","type","select_option","check","upload_file","keyboard","desktop","files_list","files_catalog","files_mkdir","files_copy","files_move","files_trash","files_read_text","files_write_text","notes_list","notes_read","notes_save","media_info","workspace_status","tabs","list_tabs","get_page_status","read_page","scroll","collect_public_comments","open_url","new_tab","open_tab","resume_visible_page","publication_prepare","publication_status","publication_list","publication_cancel","publication_submit","switch_tab","close_tab","translate_page"));
     private AgentTasks(){}
     static void requestCancel(String id){active.put(id,false);}
     static void validate(JSONArray steps)throws Exception{
@@ -31,6 +31,7 @@ final class AgentTasks {
     }
     private static void validateAction(String action,JSONObject p)throws Exception{
         if(!ACTIONS.contains(action)||p==null)throw new Exception("Action de tâche non autorisée : "+action);
+        if(action.equals("collect_public_comments"))PublicCommentCollector.validate(p);
         if(action.equals("publication_submit")){
             String selector=p.optString("selector","");
             String expected=p.optString("expected_host","");
