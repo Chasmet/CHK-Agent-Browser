@@ -402,7 +402,7 @@ public final class WorkspacePanel {
                     case 0:shareSelected();break;
                     case 1:saveSelectedToPhone();break;
                     case 2:
-                        if(selected.size()==1)openFile(selected.iterator().next(),false);
+                        if(selected.size()==1)openWithExternal(selected.iterator().next());
                         else toast("Choisis un seul fichier pour l'ouvrir");
                         break;
                     case 3:
@@ -460,7 +460,10 @@ public final class WorkspacePanel {
     /** Save single files with Android Save As, or multiple items to an Android folder. */
     private void saveSelectedToPhone(){
         if(selected.isEmpty()){toast("Sélectionne un fichier");return;}
-        java.util.List<String> snapshot=new java.util.ArrayList<>(selected);
+        savePathsToPhone(new java.util.ArrayList<>(selected));
+    }
+    private void savePathsToPhone(java.util.List<String> snapshot){
+        if(snapshot.isEmpty()){toast("Sélectionne un fichier");return;}
         try{
             if(snapshot.size()==1&&new WorkspaceStore(a).file(snapshot.get(0)).isFile()){
                 exportPicker(snapshot.get(0));
@@ -597,17 +600,33 @@ public final class WorkspacePanel {
             else{selectMode=true;selected.clear();refresh();}
         }).show();
     }
-    private void fileMenu(String path){boolean directory=false;try{directory=new WorkspaceStore(a).file(path).isDirectory();}catch(Exception ignored){}final boolean dir=directory;new AgentDialog.Builder(a).setTitle(path.substring(path.lastIndexOf('/')+1)).setItems(dir?new String[]{"Renommer","Déplacer","Mettre à la corbeille"}:new String[]{"Ouvrir","Partager","Exporter vers le téléphone","Renommer","Déplacer","Modifier le texte","Mettre à la corbeille","Copier","Monter dans Studio","Informations du média"},(d,i)->{int choice=dir?new int[]{3,4,6}[i]:i;switch(choice){
-        case 0:openFile(path,false);break;case 1:openFile(path,true);break;case 2:exportPicker(path);break;
+    private void fileMenu(String path){boolean directory=false;try{directory=new WorkspaceStore(a).file(path).isDirectory();}catch(Exception ignored){}final boolean dir=directory;new AgentDialog.Builder(a).setTitle(path.substring(path.lastIndexOf('/')+1)).setItems(dir?new String[]{"Renommer","Déplacer","Mettre à la corbeille","Enregistrer sur le téléphone","Propriétés"}:new String[]{"Ouvrir","Partager","Enregistrer sur le téléphone","Renommer","Déplacer","Modifier le texte","Mettre à la corbeille","Copier","Monter dans Studio","Informations du média","Ouvrir avec…"},(d,i)->{int choice=dir?new int[]{3,4,6,11,9}[i]:i;switch(choice){
+        case 0:openFile(path,false);break;case 1:openFile(path,true);break;case 2:savePathsToPhone(java.util.Collections.singletonList(path));break;
         case 3:renameItem(path);break;
         case 4:prompt("Chemin de destination","",name->work(()->{new WorkspaceStore(a).move(path,name);return "Élément déplacé";}));break;
         case 5:editText(path);break;
         case 7:prompt("Destination de la copie","",destination->work(()->{WorkspaceCatalog.copy(a,path,destination);return "Fichier copié";}));break;
         case 8:a.startActivity(new Intent(a,VideoEditorActivity.class).putExtra("add_path",path));break;
-        case 9:WorkspaceCommands.IO.execute(()->{try{String info=MediaInspection.info(a,path).toString(2);WorkspaceCommands.UI.post(()->new AgentDialog.Builder(a).setTitle("Informations").setMessage(info).setPositiveButton("OK",null).show());}catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}});break;
+        case 9:showSelectedInfo(path);break;
+        case 10:openWithExternal(path);break;
+        case 11:savePathsToPhone(java.util.Collections.singletonList(path));break;
         case 6:confirm("Mettre cet élément à la corbeille ?",()->work(()->{new WorkspaceStore(a).trash(path);return "Élément dans la corbeille";}));break;
     }}).setNegativeButton("Fermer",null).show();}
     private void openFile(String path,boolean share){try{WorkspaceStore s=new WorkspaceStore(a);if(!share&&s.mime(path).startsWith("audio/")&&audioBar!=null){audioBar.open(path);return;}if(!share&&(s.mime(path).startsWith("image/")||s.mime(path).startsWith("video/")||s.mime(path).startsWith("audio/"))){a.startActivity(new Intent(a,MediaPreviewActivity.class).putExtra("path",path));return;}Uri u=s.uri(path);Intent intent=new Intent(share?Intent.ACTION_SEND:Intent.ACTION_VIEW);if(share){intent.setType(s.mime(path));intent.putExtra(Intent.EXTRA_STREAM,u);}else intent.setDataAndType(u,s.mime(path));intent.setClipData(ClipData.newRawUri("Fichier",u));intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);a.startActivity(Intent.createChooser(intent,share?"Partager le fichier":"Ouvrir le fichier"));}catch(Exception e){toast("Aucune application compatible ou fichier inaccessible");}}
+    private void openWithExternal(String path){
+        try{
+            WorkspaceStore store=new WorkspaceStore(a);
+            if(store.file(path).isDirectory()){
+                toast("Choisis un fichier pour l'ouvrir avec une application");return;
+            }
+            Uri uri=store.uri(path);
+            Intent intent=new Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri,store.mime(path));
+            intent.setClipData(ClipData.newRawUri("Fichier",uri));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            a.startActivity(Intent.createChooser(intent,"Ouvrir avec"));
+        }catch(Exception e){toast("Aucune application compatible");}
+    }
     private String importCategory="all";
     private void importPicker(){
         if(needsCategory()){chooseCategory(this::importPicker);return;}
