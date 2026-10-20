@@ -64,6 +64,7 @@ public final class AgentClient {
         String pageUrl();
         String pageTitle();
         default String sessionSource() { return "background"; }
+        default String sessionId() { return sessionSource()+":"+System.identityHashCode(this); }
     }
     public interface RegistrationCallback {void completed(boolean ok, String message); }
     public interface IncomingListener {
@@ -226,7 +227,7 @@ public final class AgentClient {
                     JSONObject info = new JSONObject();
                     info.put("url", limit(page, 500)); info.put("title", limit(title, 150));
                     info.put("autonomous",isAutonomous());
-                    info.put("workspace_version",3);
+                    info.put("workspace_version",4);
                     info.put("keyboard_version",1);
                     info.put("desktop_version",1);
                     info.put("publication_version",1);
@@ -271,8 +272,13 @@ public final class AgentClient {
         });
     }
     void executeTaskStep(JSONObject command,ResultCallback cb){
+        executeTaskStep(command,cb,null);
+    }
+    CommandHandler bindTaskSession(){return activeHandler();}
+    void executeTaskStep(JSONObject command,ResultCallback cb,CommandHandler bound){
         if(!cb.isActive())return;
-        CommandHandler receiver=DesktopCommands.nativeTarget(command)?DesktopCommands.handler(app):KeyboardCommands.nativeTarget(command)?NativeKeyboard.handler(app):activeHandler();
+        if(WorkspaceCommands.handles(command.optString("action"))){WorkspaceCommands.run(app,command.optString("action"),command.optJSONObject("args"),cb);return;}
+        CommandHandler receiver=DesktopCommands.nativeTarget(command)?DesktopCommands.handler(app):KeyboardCommands.nativeTarget(command)?NativeKeyboard.handler(app):(bound!=null?bound:activeHandler());
         if(receiver==null){cb.finish(false,"Aucun écran CHK ou moteur web disponible.");return;}
         receiver.onCommand(command,cb);
     }

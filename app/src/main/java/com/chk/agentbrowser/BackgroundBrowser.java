@@ -181,6 +181,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         }else task.run();
     }
 
+    @Override public String sessionId(){return "background:"+System.identityHashCode(current);}
     @Override public void onCommand(JSONObject command,AgentClient.ResultCallback callback){
         if(!callback.isActive())return;
         if(closed){callback.finish(false,"Moteur en arrière-plan arrêté.");return;}

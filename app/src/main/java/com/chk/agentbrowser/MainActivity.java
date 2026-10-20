@@ -380,6 +380,7 @@ public class MainActivity extends Activity {
                 @Override public String pageUrl(){return current==null||current.getUrl()==null?"":current.getUrl();}
                 @Override public String pageTitle(){return current==null||current.getTitle()==null?"":current.getTitle();}
                 @Override public String sessionSource(){return "visible";}
+                @Override public String sessionId(){return "visible:"+System.identityHashCode(current);}
                 @Override public void onCommand(JSONObject command,AgentClient.ResultCallback callback){
                     confirmAgentCommand(command,callback);
                 }
@@ -396,7 +397,7 @@ public class MainActivity extends Activity {
         super.onPause();
     }
     private void confirmAgentCommand(JSONObject command,AgentClient.ResultCallback callback){
-        if(isFinishing()||current==null){
+        if(isFinishing()||isDestroyed()||current==null){
             callback.finish(false,"Navigateur indisponible.");return;
         }
         String action=command.optString("action","");

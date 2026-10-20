@@ -13,7 +13,7 @@ public final class WorkspaceCommands {
     public static final ExecutorService IO=Executors.newSingleThreadExecutor();
     public static final Handler UI=new Handler(Looper.getMainLooper());
     private WorkspaceCommands(){}
-    public static boolean handles(String action){return action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status")||action.startsWith("video_editor_")||action.startsWith("media_")||action.startsWith("document_")||PublicationJobs.metadataAction(action);}
+    public static boolean handles(String action){return action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status")||action.startsWith("video_editor_")||action.startsWith("media_")||action.startsWith("document_")||action.startsWith("cut_")||action.equals("workspace_capabilities")||PublicationJobs.metadataAction(action);}
     public static void run(Context context,String action,JSONObject args,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
         Context app=context.getApplicationContext();
@@ -56,7 +56,16 @@ public final class WorkspaceCommands {
                 case "publication_list":
                 case "publication_cancel":
                     result=PublicationJobs.command(app,action,args);break;
-                case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("video_editor",true).put("media_inspection",true).put("workspace_version",3).put("document_reader_version",1).put("pdf_text_extraction",true).put("scanned_pdf_ocr",true).put("docx_text_extraction",true).put("image_ocr",true).put("speech_to_text",true).put("audio_languages","fr,en").put("audio_local_only",true).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;
+                case "workspace_capabilities":result=new JSONObject().put("protocol_version",4).put("task_actions",AgentTasks.actions()).put("session_binding",true).put("max_task_steps",50).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT).put("cut_resume",true).put("studio_project_library",true);break;
+                case "files_references":result=WorkspaceReferences.references(app,path);break;
+                case "files_archive":result=WorkspaceArchive.create(app,args.getJSONArray("paths"),args.getString("destination"));break;
+                case "cut_submit":result=CutStudioAutomation.submit(app,args.toString());break;
+                case "cut_status":result=CutStudioAutomation.status(app);break;
+                case "cut_cancel":result=CutStudioAutomation.cancel(app,args.toString());break;
+                case "cut_resume":result=CutStudioAutomation.resume(app,args);break;
+                case "cut_schedule":result=CutStudioStore.importFromAgent(app,args.toString());break;
+                case "cut_planning":result=new JSONObject().put("entries",CutStudioStore.all(app));break;
+                case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("video_editor",true).put("media_inspection",true).put("workspace_version",4).put("document_reader_version",1).put("pdf_text_extraction",true).put("scanned_pdf_ocr",true).put("docx_text_extraction",true).put("image_ocr",true).put("speech_to_text",true).put("audio_languages","fr,en").put("audio_local_only",true).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;
                 case "document_read":result=DocumentReader.readFile(app,path,args.optInt("page",1),args.optInt("page_count",8),args.optInt("offset",0));break;
                 case "document_page":result=DocumentReader.pdfPreview(app,s.file(path),args.optInt("page",0));break;
                 case "media_model_status":result=MediaTranscriber.modelStatus(app);break;

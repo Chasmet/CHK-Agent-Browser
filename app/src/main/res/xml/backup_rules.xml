@@ -1,6 +1,10 @@
 <full-backup-content>
     <include domain="sharedpref" path="." />
     <include domain="file" path="workspace/" />
+    <include domain="file" path="studio_projects/" />
+    <include domain="file" path="studio_projects_trash/" />
+    <include domain="file" path="agent_desktop/" />
+    <include domain="file" path="video_export_job.json" />
     <include domain="file" path="video_editor_project.json" />
     <include domain="file" path="video_last_export.json" />
     <include domain="file" path="workspace_trash/" />

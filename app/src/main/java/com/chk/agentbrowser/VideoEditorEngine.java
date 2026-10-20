@@ -50,7 +50,7 @@ public final class VideoEditorEngine {
         "musique/chknoirshadow/clip-grok-videos/ALPHA_OMEGA_CLIP_OFFICIEL_9x16_V2.mp4";
     private static final String DEFAULT_OUTPUT =
         "musique/chknoirshadow/clip-grok-videos/ALPHA_OMEGA_CLIP_FINAL_GROK.mp4";
-    private static final ExecutorService DISK=Executors.newSingleThreadExecutor();
+    private static final ExecutorService DISK=WorkspaceCommands.IO;
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private static final VideoEditorEngine INSTANCE=new VideoEditorEngine();
     private volatile String state="idle", error="",lastOutput="";
@@ -213,12 +213,17 @@ public final class VideoEditorEngine {
             String displayWidth=rotated?height:width,displayHeight=rotated?width:height;
             long durationMs=duration==null?-1:Long.parseLong(duration);
             boolean picture="yes".equalsIgnoreCase(hasVideo),sound="yes".equalsIgnoreCase(hasAudio);
+            boolean expectedAudio=audioCount>0;
+            if(!project.optBoolean("mute_original",audioCount>0)&&videos!=null)for(int i=0;i<videos.length();i++){
+                JSONObject clip=videos.getJSONObject(i);if(clip.optBoolean("mute",false))continue;MediaMetadataRetriever source=new MediaMetadataRetriever();try{source.setDataSource(store.file(clip.getString("path")).getAbsolutePath());expectedAudio|="yes".equalsIgnoreCase(source.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO));}finally{source.release();}
+            }
             boolean correctDuration=expectedMs>0&&durationMs>=0&&Math.abs(durationMs-expectedMs)<=500;
             float ratio=ratio(project.optString("aspect_ratio","source"));
             boolean correctAspect=ratio==0 || (displayWidth!=null&&displayHeight!=null&&Math.abs(Float.parseFloat(displayWidth)/Float.parseFloat(displayHeight)-ratio)<0.015f);
             JSONObject frames=inspectRenderedClips(context,file,project);
             boolean noBlackCuts=frames.getJSONArray("black_video_segments").length()==0;
-            boolean valid=picture&&(!(audioCount>0)||sound)&&correctDuration&&sourcesPresent&&correctAspect&&noBlackCuts;
+            boolean completeFrames=frames.optInt("unverified_video_segments")==0;
+            boolean valid=picture&&(!expectedAudio||sound)&&completeFrames&&correctDuration&&sourcesPresent&&correctAspect&&noBlackCuts;
             result.put("duration_ms",durationMs).put("has_video",picture)
                 .put("has_audio",sound).put("width_px",displayWidth).put("height_px",displayHeight)
                 .put("encoded_width_px",width).put("encoded_height_px",height).put("rotation_degrees",rotation)
@@ -227,7 +232,7 @@ public final class VideoEditorEngine {
                 .put("verified_video_segments",frames.getInt("verified_video_segments"))
                 .put("unverified_video_segments",frames.getInt("unverified_video_segments"))
                 .put("black_video_segments",frames.getJSONArray("black_video_segments"))
-                .put("valid",valid);
+                .put("verification",valid?"validated":completeFrames?"failed":"partial").put("valid",valid);
             if(!valid)result.put("reason","Contrôler la durée, les pistes et les sources du projet");
             return result;
         }catch(Exception ex){
@@ -242,7 +247,7 @@ public final class VideoEditorEngine {
         JSONArray clips=project.optJSONArray("clips");
         JSONArray black=new JSONArray(),samples=new JSONArray();
         int checked=0,unverifiable=0;
-        if(clips==null||clips.length()<2)return new JSONObject()
+        if(clips==null||clips.length()==0)return new JSONObject()
             .put("verified_video_segments",0).put("unverified_video_segments",0)
             .put("black_video_segments",black).put("frame_samples",samples);
         MediaMetadataRetriever output=new MediaMetadataRetriever();
@@ -292,7 +297,7 @@ public final class VideoEditorEngine {
         }finally{output.release();}
         return new JSONObject().put("verified_video_segments",checked)
             .put("unverified_video_segments",unverifiable)
-            .put("black_video_segments",black);
+            .put("black_video_segments",black).put("frame_samples",samples);
     }
     private static float sampleBrightness(android.graphics.Bitmap picture){
         int w=picture.getWidth(),h=picture.getHeight();
@@ -404,6 +409,7 @@ public final class VideoEditorEngine {
                 if(Double.isNaN(x)||Double.isInfinite(x)||x<min||x>max)
                     throw new IllegalArgumentException("Étalonnage invalide : "+key);
             }
+            StudioAudio.validate(c);
             videoDuration+=Math.round(duration/speed);
         }
         if(sounds!=null){
@@ -414,10 +420,12 @@ public final class VideoEditorEngine {
                 long start=a.optLong("start_ms",0),duration=a.optLong("duration_ms",10000);
                 if(start<0||duration<500||duration>1200000)throw new IllegalArgumentException("Découpe audio invalide");
                 checkMediaDuration(f,start+duration);
-                audioDuration+=duration;
+                StudioAudio.validate(a);
+                audioDuration=Math.max(audioDuration,StudioAudio.at(sounds,i)+duration);
             }
             if(sounds.length()>0&&audioDuration>videoDuration+1000)throw new IllegalArgumentException("Audio plus long que la vidéo : raccourcis la piste");
         }
+        StudioSubtitles.validate(p,videoDuration);
         if(videoDuration>20*60*1000)throw new IllegalArgumentException("Montage limité à 20 minutes");
         String output=p.optString("output","");
         if(!output.toLowerCase(Locale.ROOT).endsWith(".mp4")||output.length()>400)throw new IllegalArgumentException("Destination MP4 obligatoire");
@@ -557,29 +565,35 @@ public final class VideoEditorEngine {
             EditedMediaItem.Builder video=new EditedMediaItem.Builder(media(store.file(c.getString("path")),c.optLong("start_ms",0),len))
                 .setDurationUs(sourceDurationUs(store,c,sourceDurations))
                 .setRemoveAudio(!original||c.optBoolean("mute",false))
-                .setEffects(new Effects(Collections.emptyList(),fx));
+                .setEffects(new Effects(Collections.singletonList(new StudioAudio.GainProcessor(c,null,0)),fx));
             if(speed!=1)video.setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return speed;}public long getNextSpeedChangeTimeUs(long timeUs){return androidx.media3.common.C.TIME_UNSET;}});
             videos.add(video.build());
         }
-        if(external)for(int i=0;i<audios.length();i++){
-            JSONObject a=audios.getJSONObject(i);
-            sounds.add(new EditedMediaItem.Builder(media(store.file(a.getString("path")),a.optLong("start_ms",0),a.optLong("duration_ms",10000))).setDurationUs(sourceDurationUs(store,a,sourceDurations)).setRemoveVideo(true).build());
-        }
         EditedMediaItemSequence sequence=original?EditedMediaItemSequence.withAudioAndVideoFrom(videos):EditedMediaItemSequence.withVideoFrom(videos);
-        Composition.Builder builder=sounds.isEmpty()?new Composition.Builder(sequence):new Composition.Builder(sequence,EditedMediaItemSequence.withAudioFrom(sounds));
+        List<EditedMediaItemSequence> sequences=new ArrayList<>();sequences.add(sequence);
+        if(external)for(int i=0;i<audios.length();i++){
+            JSONObject a=audios.getJSONObject(i);long at=StudioAudio.at(audios,i);
+            EditedMediaItem audio=new EditedMediaItem.Builder(media(store.file(a.getString("path")),a.optLong("start_ms",0),a.optLong("duration_ms",10000))).setDurationUs(sourceDurationUs(store,a,sourceDurations)).setRemoveVideo(true).setEffects(new Effects(Collections.singletonList(new StudioAudio.GainProcessor(a,audios,at)),Collections.emptyList())).build();
+            EditedMediaItemSequence.Builder track=new EditedMediaItemSequence.Builder(Collections.singleton(androidx.media3.common.C.TRACK_TYPE_AUDIO));
+            if(at>0)track.addGap(at*1000);track.addItem(audio);sequences.add(track.build());
+        }
+        Composition.Builder builder=new Composition.Builder(sequences);
         float aspect=ratio(project.optString("aspect_ratio","source"));
         if(aspect==0){
             JSONObject first=clips.getJSONObject(0);JSONObject metadata=MediaInspection.info(context,first.getString("path"));
             int width=metadata.optInt("width",0),height=metadata.optInt("height",0);
             if(width>0&&height>0){aspect=(float)width/height;int rotation=metadata.optInt("rotation",0)+(int)first.optDouble("rotation",0);if(Math.abs(rotation)%180==90)aspect=1f/aspect;}
         }
+        List<androidx.media3.common.Effect> globalEffects=new ArrayList<>();
         if(aspect>0){
             int quality=project.optInt("resolution",720);
             int width=aspect>=1?Math.max(2,Math.round(quality*aspect/2)*2):quality;
             int height=aspect>=1?quality:Math.max(2,Math.round(quality/aspect/2)*2);
             int layout="fit".equals(project.optString("aspect_mode","fit"))?Presentation.LAYOUT_SCALE_TO_FIT:Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP;
-            builder.setEffects(new Effects(Collections.emptyList(),Collections.singletonList(Presentation.createForWidthAndHeight(width,height,layout))));
+            globalEffects.add(Presentation.createForWidthAndHeight(width,height,layout));
         }
+        if(project.has("subtitles"))globalEffects.add(new androidx.media3.effect.OverlayEffect(Collections.singletonList(StudioSubtitles.overlay(project))));
+        builder.setEffects(new Effects(Collections.emptyList(),globalEffects));
         return builder.build();
     }
     private long sourceDurationUs(WorkspaceStore store,JSONObject clip,java.util.Map<String,Long> cache)throws Exception{

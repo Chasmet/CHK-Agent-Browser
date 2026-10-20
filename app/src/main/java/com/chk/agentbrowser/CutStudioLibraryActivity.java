@@ -493,15 +493,14 @@ public final class CutStudioLibraryActivity extends Activity {
         });
     }
     private void renameVideo(File file){
-        promptName("Renommer la vidéo",file.getName(),name->{
+        WorkspaceRenameDialog.rename(this,file.getName(),false,name->{
             if(!name.toLowerCase(Locale.ROOT).endsWith(".mp4"))name=name+".mp4";
             if(!validName(name)){toast("Nom de vidéo invalide");return;}
             File target=new File(file.getParentFile(),name);
             if(target.exists()){toast("Ce nom existe déjà");return;}
             String old=path(file), next="CutVideo/"+folderName+"/"+name;
-            if(!file.renameTo(target)){toast("Renommage impossible");return;}
-            try{state.renameVideo(old,next);CutStudioStore.rewritePaths(this,old,next);render();}
-            catch(Exception e){target.renameTo(file);toast("Métadonnées : "+e.getMessage());}
+            try{new WorkspaceStore(this).move(old,next);render();}
+            catch(Exception e){toast("Renommage : "+e.getMessage());}
         });
     }
     private interface NameCallback{void renamed(String value);}

@@ -68,7 +68,7 @@ public final class CutStudioAutomation {
         boolean lastSelected = "@last_selected".equals(path);
         if (!lastSelected && (path.isEmpty() || !path.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|mov|mkv|webm|m4v)$")))
             throw new IllegalArgumentException("source_path : chemin Fichiers CHK ou @last_selected.");
-        int seconds = args.optInt("seconds", 0);
+        int seconds = args.optInt("seconds", args.has("segments")?60:0);
         if (seconds < 1 || seconds > 600)
             throw new IllegalArgumentException("seconds doit etre compris entre 1 et 600.");
 
@@ -113,7 +113,7 @@ public final class CutStudioAutomation {
             throw new IllegalArgumentException("Plage start_ms/end_ms invalide.");
         end = Math.min(end, duration);
         long countLong = (end - start + seconds * 1000L - 1L) / (seconds * 1000L);
-        if (countLong < 1 || countLong > 100)
+        if (!args.has("segments") && (countLong < 1 || countLong > 100))
             throw new IllegalArgumentException("Limite de 100 morceaux par demande.");
 
         synchronized (INSTANCE) {
@@ -142,8 +142,9 @@ public final class CutStudioAutomation {
             String output = CutStudioStore.FOLDER + "/" + folder;
             store.mkdir(output);
             List<long[]> segments = new ArrayList<>();
-            for (long t = start; t < end; t += seconds * 1000L)
-                segments.add(new long[]{t, Math.min(end, t + seconds * 1000L)});
+            JSONArray custom=args.optJSONArray("segments");
+            if(custom!=null){if(custom.length()<1||custom.length()>100)throw new IOException("1 à 100 passages requis");for(int i=0;i<custom.length();i++){JSONObject item=custom.getJSONObject(i);long a=item.getLong("start_ms"),b=item.getLong("end_ms");if(a<0||b<=a||b>duration)throw new IOException("Passage hors de la vidéo");segments.add(new long[]{a,b});}}
+            else for(long t=start;t<end;t+=seconds*1000L)segments.add(new long[]{t,Math.min(end,t+seconds*1000L)});
             Job job = new Job(app, store, id, path, output, sourceUri, sourceName, segments);
             INSTANCE.current = job;
             INSTANCE.completed = 0;
@@ -152,6 +153,30 @@ public final class CutStudioAutomation {
             return INSTANCE.snapshot("running");
         }
     }
+
+    static boolean isRunning(){synchronized(INSTANCE){return INSTANCE.current!=null;}}
+    public static JSONObject status(Context c)throws Exception{
+        synchronized(INSTANCE){if(INSTANCE.current!=null)return INSTANCE.snapshot("running");
+            JSONObject state=readStatus(new WorkspaceStore(c));if("running".equals(state.optString("state")))state.put("state","interrupted");return state;}
+    }
+    public static JSONObject resume(Context c,JSONObject request)throws Exception{
+        synchronized(INSTANCE){
+            if(INSTANCE.current!=null)return INSTANCE.snapshot("running");
+            WorkspaceStore store=new WorkspaceStore(c);JSONObject previous=readStatus(store);
+            if(!request.getString("request_id").equals(previous.optString("request_id")))throw new IOException("Identifiant Cut différent");
+            if("completed".equals(previous.optString("state")))return previous;
+            if("cancelled".equals(previous.optString("state")))throw new IOException("Lot annulé ; crée une nouvelle demande");
+            JSONArray intervals=previous.optJSONArray("segments");if(intervals==null)throw new IOException("Cet ancien lot ne contient pas les repères de reprise");
+            String path=previous.getString("source_path");Uri uri=Uri.parse(previous.getString("source_uri"));
+            if(!path.equals("@last_selected")){File source=store.file(path);if(!source.isFile()||source.length()!=previous.optLong("source_size")||source.lastModified()!=previous.optLong("source_updated"))throw new IOException("La vidéo source a changé");uri=Uri.fromFile(source);}
+            List<long[]> segments=new ArrayList<>();for(int i=0;i<intervals.length();i++){JSONArray pair=intervals.getJSONArray(i);segments.add(new long[]{pair.getLong(0),pair.getLong(1)});}
+            Job job=new Job(c.getApplicationContext(),store,previous.getString("request_id"),path,previous.getString("output_folder"),uri,previous.getString("source_name"),segments);
+            int done=previous.optInt("completed",0);
+            for(int i=0;i<done;i++){File output=new File(job.output,outputName(job,i));if(!output.isFile()||output.length()<1000)throw new IOException("Morceau déjà terminé manquant : "+(i+1));}
+            INSTANCE.current=job;INSTANCE.completed=done;INSTANCE.saveStatus(job,"running","");MAIN.post(()->INSTANCE.exportNext(job));return INSTANCE.snapshot("running");
+        }
+    }
+    private static String outputName(Job job,int index){String base=job.sourceName.replaceFirst("\\.[^.]+$", "").replaceAll("[^A-Za-z0-9_-]", "_");if(base.isEmpty())base="cut";if(base.length()>35)base=base.substring(0,35);return String.format(Locale.US,"%s_%02d.mp4",base,index+1);}
 
     public static JSONObject cancel(Context context, String payload) throws Exception {
         JSONObject args = new JSONObject(payload);
@@ -210,6 +235,9 @@ public final class CutStudioAutomation {
                     .put("updated_at_millis", System.currentTimeMillis())
                     .put("source_deleted", false)
                     .put("platform_publication_confirmed", false);
+            JSONArray intervals=new JSONArray();for(long[] pair:job.segments)intervals.put(new JSONArray().put(pair[0]).put(pair[1]));
+            record.put("segments",intervals).put("source_uri",job.sourceUri.toString()).put("source_name",job.sourceName);
+            if(!job.sourcePath.equals("@last_selected")){File source=job.store.file(job.sourcePath);record.put("source_size",source.length()).put("source_updated",source.lastModified());}
             if (!error.isEmpty()) record.put("error", error);
             job.store.writeText(STATUS_PATH, record.toString(), true);
         } catch (Exception e) {
@@ -228,11 +256,7 @@ public final class CutStudioAutomation {
                 return;
             }
             long[] interval = job.segments.get(completed);
-            String base = job.sourceName.replaceFirst("\\.[^.]+$", "")
-                    .replaceAll("[^A-Za-z0-9_-]", "_");
-            if (base.isEmpty()) base = "cut";
-            if (base.length() > 35) base = base.substring(0, 35);
-            String name = String.format(Locale.US, "%s_%02d.mp4", base, completed + 1);
+            String name=outputName(job,completed);
             File destination = new File(job.output, name);
             File temporary = new File(job.output, "temp_" + UUID.randomUUID() + ".mp4");
             temp = temporary;

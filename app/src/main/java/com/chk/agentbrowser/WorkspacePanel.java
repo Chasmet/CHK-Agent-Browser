@@ -359,6 +359,10 @@ public final class WorkspacePanel {
     /** Android Sharesheet with URI permissions for all selected files. */
     private void shareSelected(){
         if(selected.isEmpty()){toast("Sélectionne au moins un fichier");return;}
+        try{WorkspaceStore check=new WorkspaceStore(a);for(String path:selected)if(check.file(path).isDirectory()){
+            java.util.ArrayList<String> snapshot=new java.util.ArrayList<>(selected);
+            work(()->{String output="Partage-"+System.currentTimeMillis()+".zip";WorkspaceArchive.create(a,new JSONArray(snapshot),output);WorkspaceCommands.UI.post(()->openFile(output,true));return "Archive prête à partager";});return;
+        }}catch(Exception e){toast(e.getMessage());return;}
         java.util.ArrayList<Uri> uris=new java.util.ArrayList<>();
         java.util.ArrayList<String> types=new java.util.ArrayList<>();
         int skipped=0;
@@ -425,10 +429,10 @@ public final class WorkspacePanel {
                 File file=new WorkspaceStore(a).file(path);
                 if(!file.exists())throw new IOException("Fichier introuvable");
                 String description="Nom : "+file.getName()+
-                    "\\nType : "+(file.isDirectory()?"Dossier":new WorkspaceStore(a).mime(path))+
-                    "\\nTaille : "+android.text.format.Formatter.formatShortFileSize(a,file.length())+
-                    "\\nModifié : "+android.text.format.DateFormat.format("dd MMM yyyy HH:mm",file.lastModified())+
-                    "\\nChemin : "+path;
+                    "\nType : "+(file.isDirectory()?"Dossier":new WorkspaceStore(a).mime(path))+
+                    "\nTaille : "+android.text.format.Formatter.formatShortFileSize(a,file.length())+
+                    "\nModifié : "+android.text.format.DateFormat.format("dd MMM yyyy HH:mm",file.lastModified())+
+                    "\nChemin : "+path;
                 WorkspaceCommands.UI.post(()->{
                     if(!disposed&&!a.isFinishing()&&!a.isDestroyed())
                         new AgentDialog.Builder(a).setTitle("Propriétés").setMessage(description)
@@ -448,7 +452,7 @@ public final class WorkspacePanel {
                     else{files++;bytes+=file.length();}
                 }
                 final String description=files+" fichier(s), "+folders+" dossier(s)"+
-                    "\\nTaille des fichiers : "+android.text.format.Formatter.formatShortFileSize(a,bytes);
+                    "\nTaille des fichiers : "+android.text.format.Formatter.formatShortFileSize(a,bytes);
                 WorkspaceCommands.UI.post(()->{
                     if(!disposed&&!a.isFinishing()&&!a.isDestroyed())
                         new AgentDialog.Builder(a).setTitle("Sélection").setMessage(description)

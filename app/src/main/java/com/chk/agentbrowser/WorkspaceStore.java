@@ -15,7 +15,7 @@ import java.util.*;
 
 /** Durable private workspace. Writes are atomic; delete means recoverable trash. */
 public final class WorkspaceStore {
-    public static final long MAX_IMPORT=512L*1024*1024;
+    public static final long MAX_IMPORT=4L*1024*1024*1024;
     private final Context app;
     private final File root,trash;
     private final SQLiteDatabase db;
@@ -76,10 +76,13 @@ public final class WorkspaceStore {
         return new JSONObject().put("path",path).put("mime_type",mime(path)).put("size",f.length()).put("base64",android.util.Base64.encodeToString(chunk,android.util.Base64.NO_WRAP)).put("next_offset",offset+chunk.length<f.length()?offset+chunk.length:-1);
     }
     public void move(String from,String to)throws IOException{
-        File a=file(from),b=file(to);if(!a.exists()||b.exists()||!b.getParentFile().isDirectory()||b.getPath().startsWith(a.getPath()+File.separator)||!a.renameTo(b))throw new IOException("Déplacement impossible : destination existante ou invalide");
+        File a=file(from),b=file(to);if(!a.exists()||b.exists()||!b.getParentFile().isDirectory()||b.getPath().startsWith(a.getPath()+File.separator) )throw new IOException("Déplacement impossible : destination existante ou invalide");
+        try{WorkspaceReferences.move(app,a,b,from,to);}catch(Exception e){throw new IOException(e.getMessage(),e);}
     }
     public String trash(String path)throws Exception{
-        File f=file(path);if(!f.exists())throw new IOException("Élément introuvable");String id=UUID.randomUUID().toString();
+        File f=file(path);if(!f.exists())throw new IOException("Élément introuvable");
+        JSONObject used=WorkspaceReferences.references(app,path);if(used.getInt("count")>0)throw new IOException("Média utilisé par "+used.getInt("count")+" projet(s) ou publication(s). Retire ou remplace la source avant de la mettre à la corbeille.");
+        String id=UUID.randomUUID().toString();
         ContentValues v=new ContentValues();v.put("id",id);v.put("path",path);v.put("updated",System.currentTimeMillis());
         db.insertOrThrow("trash",null,v);if(!f.renameTo(new File(trash,id))){db.delete("trash","id=?",new String[]{id});throw new IOException("Mise en corbeille impossible");}return id;
     }
@@ -96,7 +99,7 @@ public final class WorkspaceStore {
         File temp=new File(target.getParentFile(),".import-"+UUID.randomUUID());long total=0;
         try(InputStream in=app.getContentResolver().openInputStream(source);FileOutputStream out=new FileOutputStream(temp)){
             if(in==null)throw new IOException("Fichier inaccessible");byte[] buf=new byte[32768];int n;
-            while((n=in.read(buf))!=-1){total+=n;if(total>MAX_IMPORT)throw new IOException("Fichier supérieur à 512 Mo");out.write(buf,0,n);}out.getFD().sync();
+            while((n=in.read(buf))!=-1){total+=n;if((total&0x7fffff)<32768&&temp.getParentFile().getUsableSpace()<n+16L*1024*1024)throw new IOException("Espace libre insuffisant");if(total>MAX_IMPORT)throw new IOException("Fichier supérieur à 4 Gio");out.write(buf,0,n);}out.getFD().sync();
         }catch(Exception e){temp.delete();throw e;}
         if(target.exists()||!temp.renameTo(target)){temp.delete();throw new IOException("Enregistrement impossible");}return path;
     }
