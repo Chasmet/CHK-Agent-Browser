@@ -6,6 +6,7 @@ import androidx.media3.common.audio.AudioProcessor;
 import java.nio.ByteBuffer;
 
 /** Shared timeline/volume policy used by preview and exported PCM audio. */
+@androidx.annotation.OptIn(markerClass={androidx.media3.common.util.UnstableApi.class,androidx.media3.common.util.ExperimentalApi.class})
 final class StudioAudio {
     static long at(JSONArray tracks,int index){long next=0;for(int i=0;i<=index;i++){JSONObject item=tracks.optJSONObject(i);if(item==null)continue;long at=item.optLong("at_ms",next);if(i==index)return at;next=at+item.optLong("duration_ms");}return next;}
     static float gain(JSONObject item,long local){long duration=item.optLong("duration_ms");if(local<0||local>=duration)return 0;double gain=item.optDouble("volume",1);long in=item.optLong("fade_in_ms"),out=item.optLong("fade_out_ms");if(in>0)gain*=Math.min(1,local/(double)in);if(out>0)gain*=Math.min(1,(duration-local)/(double)out);return (float)Math.max(0,Math.min(2,gain));}

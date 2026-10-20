@@ -43,8 +43,11 @@ public final class UpdateManager {
         new Thread(()->{File file=completedApk();ui.post(()->callback.completed(file));},"chk-verify-apk").start();
     }
     public static final class Release {
-        public final String version, url, filename;
-        Release(String v, String u, String f) { version=v; url=u; filename=f; }
+        public final String version, url, filename, notes, digest;
+        public final long size;
+        Release(String v, String u, String f) { this(v,u,f,"",0,""); }
+        Release(String v,String u,String f,String notes,long size,String digest){version=v;url=u;filename=f;this.notes=notes;this.size=size;this.digest=digest;}
+        public String description(){return (size>0?String.format(java.util.Locale.FRANCE,"Téléchargement : %.1f Mo\n\n",size/1048576.0):"")+(notes.isEmpty()?"Nouvelle version officielle disponible.":notes.substring(0,Math.min(6000,notes.length())));}
     }
     public UpdateManager(Context c) {
         context = c;
@@ -86,7 +89,7 @@ public final class UpdateManager {
                         if(name.equals("CHK-Agent-Browser-"+remote+".apk") &&
                            link.startsWith("https://github.com/Chasmet/CHK-Agent-Browser/releases/download/")) {
                             recordSuccessfulCheck();
-                            respond(callback,"Version "+remote+" disponible à installer",new Release(remote,link,name));
+                            respond(callback,"Version "+remote+" disponible à installer",new Release(remote,link,name,data.optString("body",""),asset.optLong("size",0),asset.optString("digest","")));
                             return;
                         }
                     }
@@ -147,7 +150,7 @@ public final class UpdateManager {
         request.setDestinationInExternalFilesDir(context,Environment.DIRECTORY_DOWNLOADS,release.filename);
         long id=((DownloadManager)context.getSystemService(Context.DOWNLOAD_SERVICE)).enqueue(request);
         prefs.edit().putLong("download_id",id).putString("filename",release.filename)
-            .putString("version",release.version).apply();
+            .putString("version",release.version).putLong("expected_size",release.size).putString("sha256",release.digest).apply();
         return id;
         }
     }
@@ -181,10 +184,19 @@ public final class UpdateManager {
             File f=new File(root,name).getCanonicalFile();
             if(!root.getCanonicalFile().equals(f.getParentFile()) || !f.isFile() || f.length()<10000)
                 return null;
+            long expected=prefs.getLong("expected_size",0);
+            if(expected>0&&f.length()!=expected)return null;
+            String digest=prefs.getString("sha256","");
+            if(digest.startsWith("sha256:")&&!digest.substring(7).equalsIgnoreCase(sha256(f)))return null;
             // Reject even GitHub-hosted APKs if the package or signing certificate changes.
             return isSignedCompatibleUpdate(f)?f:null;
         }catch(Exception ignored){return null;}
         finally{if(cur!=null)cur.close();}
+    }
+    static String sha256(File file)throws Exception{
+        java.security.MessageDigest hash=java.security.MessageDigest.getInstance("SHA-256");
+        try(InputStream in=new java.io.FileInputStream(file)){byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1)hash.update(buffer,0,n);}
+        StringBuilder result=new StringBuilder();for(byte b:hash.digest())result.append(String.format(java.util.Locale.ROOT,"%02x",b&255));return result.toString();
     }
     @SuppressWarnings("deprecation")
     public boolean isSignedCompatibleUpdate(File f) {

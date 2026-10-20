@@ -7,6 +7,7 @@ import org.json.*;
 import java.util.*;
 
 /** Prepare only currently audible tracks; inactive tracks never hold a decoder. */
+@androidx.annotation.OptIn(markerClass={androidx.media3.common.util.UnstableApi.class,androidx.media3.common.util.ExperimentalApi.class})
 final class StudioAudioPreview {
     private final Context context;private JSONArray tracks=new JSONArray();private final Map<Integer,ExoPlayer> players=new HashMap<>();
     StudioAudioPreview(Context c){context=c;}

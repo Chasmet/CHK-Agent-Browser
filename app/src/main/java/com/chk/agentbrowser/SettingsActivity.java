@@ -61,6 +61,8 @@ public final class SettingsActivity extends Activity {
         publications.setAllCaps(false);
         publications.setOnClickListener(v->showPublicationJobs());
         group.addView(publications);
+        Button tasks=new Button(this);tasks.setText("Tâches MCP · progression, pause et reprise");tasks.setAllCaps(false);
+        tasks.setOnClickListener(v->AgentTaskPanel.show(this));group.addView(tasks);
 
         Switch autoUpdate=findViewById(R.id.auto_update);autoUpdate.setChecked(getSharedPreferences("update_monitor",MODE_PRIVATE).getBoolean("enabled",true));autoUpdate.setOnCheckedChangeListener((b,on)->getSharedPreferences("update_monitor",MODE_PRIVATE).edit().putBoolean("enabled",on).apply());
         autonomousMode=findViewById(R.id.autonomous_mode);
@@ -236,7 +238,7 @@ public final class SettingsActivity extends Activity {
             if(release!=null) {
                 new AgentDialog.Builder(this)
                     .setTitle("CHK Agent Browser "+release.version)
-                    .setMessage("Télécharger la mise à jour sur ce téléphone ? L'installation garde les données avec la signature Android d'origine.")
+                    .setMessage(release.description()+"\n\nL’installation conserve tes données et vérifie la signature Android d’origine.")
                     .setNegativeButton("Plus tard",null)
                     .setPositiveButton("Télécharger",(dialog,which)->{
                         try {

@@ -22,6 +22,15 @@ public final class VideoEditorIntegrationTest {
     @After public void tearDown()throws Exception{store.file(source).delete();}
     private JSONObject invoke(String action,JSONObject args)throws Exception{CountDownLatch done=new CountDownLatch(1);AtomicReference<String> result=new AtomicReference<>();AtomicBoolean success=new AtomicBoolean();VideoEditorEngine.get().command(context,action,args,(ok,value)->{success.set(ok);result.set(value);done.countDown();});assertTrue("Command timed out",done.await(30,TimeUnit.SECONDS));assertTrue(result.get(),success.get());return new JSONObject(result.get());}
     private JSONObject project(String output)throws Exception{return new JSONObject().put("name","Encoder test").put("output",output).put("aspect_ratio","1:1").put("aspect_mode","fit").put("resolution",480).put("clips",new JSONArray().put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",1000).put("filter","noir")).put(new JSONObject().put("path",source).put("start_ms",1000).put("duration_ms",1000).put("speed",2).put("text","CHK"))).put("audio",new JSONArray());}
+    @Test public void testOverlappingAudioAndSubtitlesProduceVerifiedMp4()throws Exception{
+        String output="mix-subtitles-"+UUID.randomUUID()+".mp4";
+        JSONObject p=project(output).put("mute_original",true).put("subtitles",StudioSubtitles.parse("1\n00:00:00,100 --> 00:00:01,300\nCHK MIX\n"));
+        p.put("audio",new JSONArray().put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",1000).put("at_ms",0).put("volume",.5).put("fade_in_ms",100).put("duck_under_voice",true))
+            .put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",1000).put("at_ms",300).put("volume",.7).put("role","voice")));
+        try{invoke("video_editor_project_save",new JSONObject().put("project",p));invoke("video_editor_export",new JSONObject());awaitExport();
+            JSONObject verified=invoke("video_editor_verify_output",new JSONObject());assertTrue(verified.toString(),verified.getBoolean("valid"));assertTrue(verified.getBoolean("has_audio"));
+        }finally{invoke("video_editor_cancel",new JSONObject());store.file(output).delete();}
+    }
     @Test public void testCancelThenRestartCannotStartAnObsoleteExport()throws Exception{
         String output="restart-"+UUID.randomUUID()+".mp4";
         invoke("video_editor_project_save",new JSONObject().put("project",project(output)));

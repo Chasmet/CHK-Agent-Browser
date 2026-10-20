@@ -483,13 +483,11 @@ public final class CutStudioLibraryActivity extends Activity {
             File target=new File(root,name);
             if(!validName(name)||target.exists()){toast("Nom invalide ou déjà utilisé");return;}
             String old=folder.getName();
-            if(!folder.renameTo(target)){toast("Renommage impossible");return;}
             try{
-                state.renameFolder(old,name);
-                CutStudioStore.rewritePaths(this,"CutVideo/"+old+"/","CutVideo/"+name+"/");
+                workspace.move("CutVideo/"+old,"CutVideo/"+name);
                 if(old.equals(folderName))folderName=name;
                 render();
-            }catch(Exception e){target.renameTo(folder);toast("Métadonnées : "+e.getMessage());}
+            }catch(Exception e){toast("Renommage : "+e.getMessage());}
         });
     }
     private void renameVideo(File file){
@@ -545,62 +543,23 @@ public final class CutStudioLibraryActivity extends Activity {
     private void confirmTrash(List<File> files,boolean folder){
         if(files.isEmpty()){toast("Aucun élément sélectionné");return;}
         new AlertDialog.Builder(this).setTitle("Envoyer dans la corbeille ?")
-            .setMessage(files.size()+" élément(s). Ils seront conservés dans Fichiers CHK/CutVideo/.trash. Les programmations associées seront annulées.")
+            .setMessage(files.size()+" élément(s) récupérables dans la corbeille commune. Les médias utilisés par un projet ou une programmation doivent d’abord en être retirés.")
             .setNegativeButton("Annuler",null).setPositiveButton("Mettre à la corbeille",(d,n)->{
-                try{
-                    File trash=workspace.file("CutVideo/.trash");
-                    if(!trash.exists())workspace.mkdir("CutVideo/.trash");
-                    for(File file:files){
-                        String old=file.isDirectory()?"CutVideo/"+file.getName()+"/":
-                            "CutVideo/"+file.getParentFile().getName()+"/"+file.getName();
-                        String tag=file.isDirectory()?"D__"+file.getName():
-                            "F__"+file.getParentFile().getName()+"__"+file.getName();
-                        File dest=new File(trash,System.currentTimeMillis()+"_"+tag);
-                        if(!file.renameTo(dest))throw new Exception("Échec : "+file.getName());
-                        CutStudioStore.removeForPath(this,old);
-                        if(file.isFile())state.clearVideo(old);
-                    }
-                    selecting=false;selection.clear();
-                    if(folder){folderName="";groupId="";groupName="";}
-                    render();
-                }catch(Exception e){toast("Corbeille : "+e.getMessage());}
+                WorkspaceCommands.IO.execute(()->{try{
+                    for(File file:files){String relative=file.isDirectory()?"CutVideo/"+file.getName():"CutVideo/"+file.getParentFile().getName()+"/"+file.getName();workspace.trash(relative);}
+                    runOnUiThread(()->{selecting=false;selection.clear();if(folder){folderName="";groupId="";groupName="";}render();});
+                }catch(Exception e){runOnUiThread(()->{toast("Corbeille : "+e.getMessage());render();});}});
             }).show();
     }
     private void showTrash(){
-        try{
-            File trash=workspace.file("CutVideo/.trash");
-            File[] files=trash.isDirectory()?trash.listFiles():null;
-            if(files==null||files.length==0){toast("La corbeille est vide");return;}
-            Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));
-            String[] names=new String[files.length];
-            for(int i=0;i<files.length;i++)names[i]=files[i].getName();
-            new AlertDialog.Builder(this).setTitle("Corbeille Cut Vidéo")
-                .setItems(names,(d,n)->restore(files[n]))
-                .setNegativeButton("Fermer",null).show();
-        }catch(Exception e){toast("Corbeille : "+e.getMessage());}
-    }
-    private void restore(File file){
-        String name=file.getName().replaceFirst("^[0-9]+_", "");
-        String[] parts=name.split("__",3);
-        if(parts.length<2){toast("Ancien élément : utilise Fichiers CHK pour le restaurer");return;}
-        File destination;
-        if("D".equals(parts[0])&&parts.length==2&&validName(parts[1]))
-            destination=new File(root,parts[1]);
-        else if("F".equals(parts[0])&&parts.length==3&&validName(parts[1])&&validName(parts[2])){
-            File folder=new File(root,parts[1]);
-            if(!folder.isDirectory()){toast("Restaure d'abord le dossier "+parts[1]);return;}
-            destination=new File(folder,parts[2]);
-        }else{toast("Nom de sauvegarde invalide");return;}
-        if(destination.exists()){
-            toast("Un dossier ou fichier de ce nom existe déjà");return;
-        }
-        new AlertDialog.Builder(this).setTitle("Restaurer ?")
-            .setMessage("Restaurer "+name+" ? Les rappels de publication supprimés ne seront pas recréés.")
-            .setNegativeButton("Annuler",null)
-            .setPositiveButton("Restaurer",(d,n)->{
-                if(file.renameTo(destination))render();
-                else toast("Impossible de restaurer");
-            }).show();
+        WorkspaceCommands.IO.execute(()->{try{
+            org.json.JSONArray rows=workspace.trashList();List<JSONObject> cut=new ArrayList<>();List<String> names=new ArrayList<>();
+            for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);if(row.getString("path").startsWith("CutVideo/")){cut.add(row);names.add(row.getString("path"));}}
+            runOnUiThread(()->{if(isFinishing()||isDestroyed())return;if(cut.isEmpty()){toast("La corbeille est vide");return;}
+                new AlertDialog.Builder(this).setTitle("Corbeille Cut Vidéo · restaurer")
+                    .setItems(names.toArray(new String[0]),(d,n)->WorkspaceCommands.IO.execute(()->{try{workspace.restore(cut.get(n).getString("id"));runOnUiThread(this::render);}catch(Exception e){runOnUiThread(()->toast(e.getMessage()));}}))
+                    .setNegativeButton("Fermer",null).show();});
+        }catch(Exception e){runOnUiThread(()->toast("Corbeille : "+e.getMessage()));}});
     }
     private void alert(String title,String message){
         new AlertDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK",(d,n)->finish()).show();

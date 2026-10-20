@@ -77,15 +77,19 @@ public final class VideoEditorEngine {
             });
             return;
         }
-        if("video_editor_export".equals(action)){
+        if("video_editor_export".equals(action)||"video_editor_resume".equals(action)){
             MAIN.post(()->{
                 if("running".equals(state)||"preparing".equals(state)){cb.completed(false,"Un export est déjà actif");return;}
                 final long ticket; synchronized(exportLock){ticket=++exportGeneration;state="preparing";error="";percent=0;}
                 DISK.execute(()->{try{
-                    JSONObject project=load(application);validate(application,project);
+                    JSONObject previous="video_editor_resume".equals(action)?AgentFiles.read(new File(application.getFilesDir(),"video_export_job.json")):null;
+                    if(previous!=null&&!"preparing".equals(previous.optString("state")))throw new IllegalStateException("Aucun export interrompu à reprendre");
+                    JSONObject project=previous==null?load(application):previous.getJSONObject("project");validate(application,project);
+                    boolean replace=previous==null?args.optBoolean("replace",false):previous.optBoolean("replace",false);
+                    persistNamed(application,"video_export_job.json",new JSONObject().put("state","preparing").put("project",project).put("replace",replace));
                     if(project.getJSONArray("clips").length()==0)throw new IllegalArgumentException("Ajoute une vidéo avant d’exporter");
                     Composition composition=composition(application,project);
-                    MAIN.post(()->{if(ticket!=exportGeneration||!"preparing".equals(state)){cb.completed(false,"Export annulé");return;}startExport(application,project,composition,args.optBoolean("replace",false),ticket,cb);});
+                    MAIN.post(()->{if(ticket!=exportGeneration||!"preparing".equals(state)){cb.completed(false,"Export annulé");return;}startExport(application,project,composition,replace,ticket,cb);});
                 }catch(Exception ex){synchronized(exportLock){if(ticket==exportGeneration){state="failed";error=ex.getMessage();}}cb.completed(false,ex.getMessage());}});
             });return;
         }
@@ -96,6 +100,7 @@ public final class VideoEditorEngine {
                         exportGeneration++;
                         if(transformer!=null)transformer.cancel();transformer=null;state="cancelled";
                         if(activeOutput!=null)activeOutput.delete();
+                        DISK.execute(()->{try{persistNamed(application,"video_export_job.json",new JSONObject().put("state","cancelled"));}catch(Exception ignored){}});
                     }
                 }
                 cb.completed(true,status().toString());
@@ -149,6 +154,11 @@ public final class VideoEditorEngine {
                 cb.completed(true,data.toString());
             }catch(Exception ex){cb.completed(false,ex.getMessage());}
         });
+    }
+    void recoverExport(Context context){
+        try{File file=new File(context.getFilesDir(),"video_export_job.json");if(!file.isFile())return;JSONObject job=AgentFiles.read(file);
+            if("preparing".equals(job.optString("state"))&&"idle".equals(state)){state="interrupted";lastOutput=job.getJSONObject("project").optString("output");error="Export interrompu. Reprendre relance le rendu depuis le projet sauvegardé.";}
+        }catch(Exception e){AgentLog.add(context,"studio",e.getMessage());}
     }
     private void blockProjectSwitch(){
         if("running".equals(state)||"preparing".equals(state))
@@ -630,6 +640,7 @@ public final class VideoEditorEngine {
                                 try{persistNamed(context,"video_last_export.json",project);}
                                 catch(Exception ex){error="MP4 créé ; historique du rendu non sauvegardé";}
                                 state="completed";percent=100;
+                                persistNamed(context,"video_export_job.json",new JSONObject().put("state","completed").put("project",project).put("replace",replace));
                             }
                         }catch(Exception ex){
                             synchronized(exportLock){if(ticket==exportGeneration){state="failed";error=ex.getMessage();}}

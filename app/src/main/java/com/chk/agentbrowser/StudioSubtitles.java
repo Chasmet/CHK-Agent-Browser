@@ -8,6 +8,7 @@ import androidx.media3.common.OverlaySettings;
 import java.util.*;
 import java.util.regex.*;
 
+@androidx.annotation.OptIn(markerClass={androidx.media3.common.util.UnstableApi.class,androidx.media3.common.util.ExperimentalApi.class})
 final class StudioSubtitles {
     private static long millis(String s)throws Exception{String[] p=s.trim().replace('.',',').split("[:,]");if(p.length!=4)throw new Exception("Horodatage SRT invalide");return Long.parseLong(p[0])*3600000+Long.parseLong(p[1])*60000+Long.parseLong(p[2])*1000+Long.parseLong(p[3]);}
     static JSONArray parse(String text)throws Exception{

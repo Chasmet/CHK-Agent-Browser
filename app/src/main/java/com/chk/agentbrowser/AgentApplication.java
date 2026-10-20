@@ -8,7 +8,7 @@ import android.os.Bundle;
 public final class AgentApplication extends Application {
     @Override public void onCreate(){
         super.onCreate();
-        WorkspaceCommands.IO.execute(()->{try{WorkspaceReferences.recover(this);}catch(Exception e){AgentLog.add(this,"fichiers",e.getMessage());}});
+        WorkspaceCommands.IO.execute(()->{try{WorkspaceReferences.recover(this);VideoEditorEngine.get().recoverExport(this);}catch(Exception e){AgentLog.add(this,"fichiers",e.getMessage());}});
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks(){
             public void onActivityResumed(Activity a){NativeKeyboard.resumed(a);AgentClient.get(a).nativeScreenChanged();}
             public void onActivityPaused(Activity a){NativeKeyboard.paused(a);}
