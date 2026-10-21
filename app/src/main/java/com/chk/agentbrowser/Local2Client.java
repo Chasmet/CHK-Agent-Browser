@@ -40,7 +40,7 @@ public final class Local2Client {
     /** URL is the private HTTPS MCP URL configured on the Windows host. */
     public void configure(String url, boolean on) {
         String value = url == null ? "" : url.trim();
-        if (on) {
+        if (!value.isEmpty()) {
             try {
                 URL parsed = new URL(value);
                 String hostname = parsed.getHost().toLowerCase(java.util.Locale.ROOT);
@@ -55,6 +55,7 @@ public final class Local2Client {
         }
         preferences.edit().putString("url", value).putBoolean("enabled", on).apply();
         if (!on) stop();
+        else if (value.isEmpty()) status = "Activé · URL PC à configurer (pas Supabase)";
     }
     public void start() {
         if (!enabled() || url().isEmpty() || running) return;
