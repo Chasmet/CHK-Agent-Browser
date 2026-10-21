@@ -58,15 +58,23 @@ class AndroidMailbox:
                     "success": False, "message": "Délai Android dépassé ; vérifier avant de relancer."
                 }
 
-    def poll(self) -> dict | None:
+    def poll(self, wait_seconds: float = 0) -> dict | None:
+        """Wait for a new Android command without invoking Supabase per check."""
+        if not isinstance(wait_seconds, (int, float)) or not 0 <= wait_seconds <= 18:
+            raise ValueError("Durée d'attente invalide.")
+        deadline = time.monotonic() + wait_seconds
         with self.lock:
-            self._expire()
-            self.last_seen = time.monotonic()
-            for item in self.items.values():
-                if item["state"] == "queued":
-                    item["state"] = "leased"
-                    return {k: item[k] for k in ("id", "action", "args")}
-            return None
+            while True:
+                self._expire()
+                self.last_seen = time.monotonic()
+                for item in self.items.values():
+                    if item["state"] == "queued":
+                        item["state"] = "leased"
+                        return {k: item[k] for k in ("id", "action", "args")}
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                self.lock.wait(min(remaining, 1.0))
 
     def resolve(self, ident: str, success: bool, message: str) -> bool:
         with self.lock:
