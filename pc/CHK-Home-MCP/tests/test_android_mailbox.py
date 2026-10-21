@@ -1,5 +1,8 @@
 """Standalone safety tests for the Android Local 2 mailbox."""
 import unittest
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from android_mailbox import AndroidMailbox
 
 class AndroidMailboxTests(unittest.TestCase):
