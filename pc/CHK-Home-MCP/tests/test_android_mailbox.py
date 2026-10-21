@@ -51,6 +51,16 @@ class AndroidMailboxTests(unittest.TestCase):
         self.assertFalse(waiting.is_alive())
         self.assertEqual(answers[0]["id"], ident)
 
+    def test_android_action_workspace_and_pointer(self):
+        queue = AndroidMailbox()
+        for command in ("files_list", "files_write_text", "notes_list",
+                        "video_editor_status", "desktop", "pointer", "keyboard"):
+            ident = queue.enqueue("android_action", {"action": command, "args": {}})
+            self.assertEqual(queue.poll()["id"], ident)
+            self.assertTrue(queue.resolve(ident, True, "ok"))
+        with self.assertRaises(ValueError):
+            queue.enqueue("android_action", {"action": "run_shell", "args": {}})
+
     def test_capacity(self):
         queue = AndroidMailbox(limit=1)
         queue.enqueue("browser_tabs", {})

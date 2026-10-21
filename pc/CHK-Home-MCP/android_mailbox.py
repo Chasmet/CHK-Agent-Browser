@@ -13,6 +13,7 @@ ALLOWED_ACTIONS = frozenset({
     "browser_status", "browser_tabs", "browser_read_page",
     "browser_open_url", "browser_click", "browser_type",
     "browser_scroll", "browser_get_form", "browser_batch",
+    "android_action",
 })
 
 class AndroidMailbox:
@@ -25,6 +26,15 @@ class AndroidMailbox:
     def enqueue(self, action: str, args: dict) -> str:
         if action not in ALLOWED_ACTIONS or not isinstance(args, dict):
             raise ValueError("Commande Android non autorisée.")
+        if action == "android_action":
+            name = args.get("action", "")
+            payload = args.get("args", {})
+            if not isinstance(name, str) or not name or len(name) > 100 or not isinstance(payload, dict):
+                raise ValueError("Action Android invalide.")
+            if not (name.startswith(("files_", "notes_", "video_editor_", "media_", "document_", "publication_"))
+                    or name in ("workspace_status", "desktop", "keyboard", "pointer", "vision", "type", "click", "scroll",
+                                "open_url", "read_page", "tabs", "get_form", "browser_task_submit", "browser_task_status")):
+                raise ValueError("Action Android non autorisée.")
         if action == "browser_batch":
             steps = args.get("steps")
             if not isinstance(steps, list) or not 1 <= len(steps) <= 12:

@@ -261,7 +261,7 @@ def tool_catalog() -> list[dict]:
     items = [
         ("server_info", "État du MCP Windows, sans Render.", {}),
         ("android_status", "État du canal Android via le PC.", {}),
-        ("android_command", "Envoie une action autorisée au navigateur Android et attend une réponse.", {"action": text("Nom de la commande navigateur."), "args": {"type":"object"}}),
+        ("android_command", "Pilote CHK Agent Browser SUR ANDROID via le relais Windows. Pour les fichiers, notes, vidéo, clavier, souris/pointeur et outils IA, envoyer action=android_action et args={action: nom_action_android, args: parametres_android}. Pour la navigation, browser_open_url, browser_read_page, browser_click, browser_type, browser_scroll, browser_tabs ou browser_batch. Vérifier android_status puis android_result si état pending.", {"action": text("browser_* ou android_action."), "args": {"type":"object"}}),
         ("android_result", "Lit le résultat d’une commande Android précédente.", {"id": text("Identifiant de commande.")}),
         ("files_list", "Liste un dossier autorisé dans CHK-Workspace.", {"path": text("Chemin relatif, vide pour la racine.")}),
         ("files_read_text", "Lit un fichier texte UTF-8 de 24 Ko maximum.", {"path": text("Chemin relatif.")}),

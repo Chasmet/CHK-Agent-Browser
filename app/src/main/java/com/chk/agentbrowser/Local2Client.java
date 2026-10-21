@@ -22,6 +22,7 @@ public final class Local2Client {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private boolean running;
+    private final java.util.concurrent.atomic.AtomicBoolean commandInFlight = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile String status = "Non connecté";
     private final Runnable loop = this::poll;
 
@@ -94,12 +95,17 @@ public final class Local2Client {
     }
     private void poll() {
         if (!running || !enabled()) return;
+        if (commandInFlight.get()) {
+            main.postDelayed(loop, 1200L);
+            return;
+        }
         worker.execute(() -> {
             long delay = 2000L;
             try {
                 JSONObject command = request("android/next", new JSONObject()).optJSONObject("command");
                 status = "Connecté au PC · sans Render/Supabase";
                 if (command != null) {
+                    commandInFlight.set(true);
                     final String ident = command.getString("id");
                     final String action = command.getString("action");
                     final JSONObject args = command.optJSONObject("args") == null ?
@@ -112,6 +118,8 @@ public final class Local2Client {
                                 request("android/complete", params);
                             } catch (Exception failure) {
                                 status = "Résultat non transmis : " + failure.getClass().getSimpleName();
+                            } finally {
+                                commandInFlight.set(false);
                             }
                         })));
                 }

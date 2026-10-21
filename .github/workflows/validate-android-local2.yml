@@ -5,6 +5,7 @@ on:
       - feature/android-local2-bridge-20261021
       - fix/dual-mcp-settings-final-20261021
       - feature/local2-batched-android-20261021
+      - feature/local2-full-android-actions-20261021
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,3 +41,4 @@ jobs:
           name: CHK-Android-Local2-DEBUG-NOT-UPDATE
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
