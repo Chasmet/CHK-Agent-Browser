@@ -37,24 +37,42 @@ public final class Local2Client {
     public boolean enabled() { return preferences.getBoolean("enabled", false); }
     public String url() { return preferences.getString("url", ""); }
     public String status() { return status; }
+    /** Import the existing ChatGPT gateway address locally; never poll Supabase. */
+    public static String resolveMcpAddress(String entered) {
+        String value = entered == null ? "" : entered.trim();
+        if (value.isEmpty()) return "";
+        try {
+            URL parsed = new URL(value);
+            String hostname = parsed.getHost().toLowerCase(java.util.Locale.ROOT);
+            if (!"https".equals(parsed.getProtocol()) ||
+                parsed.getAuthority().contains("@") || parsed.getQuery() != null ||
+                parsed.getRef() != null)
+                throw new IllegalArgumentException("Adresse MCP HTTPS invalide.");
+            String path = parsed.getPath();
+            if ("gflnvlolwqnvzxyqsrir.supabase.co".equals(hostname)
+                && parsed.getPort() == -1
+                && path.matches("/functions/v1/chk-home-mcp-gateway/mcp/[a-f0-9]{64}/?")) {
+                // The gateway's Windows upstream is a fixed, public hostname.
+                // The capability stays only in app-private preferences.
+                String capability = path.replaceFirst("^.*/mcp/", "").replace("/", "");
+                return "https://pc-salon.taild9e4de.ts.net:8443/mcp/" + capability;
+            }
+            if (hostname.endsWith(".ts.net") &&
+                path.matches("/mcp/[a-f0-9]{64}/?") &&
+                (parsed.getPort() == 8443 || parsed.getPort() == -1))
+                return value;
+            throw new IllegalArgumentException("Utilise le lien MCP ChatGPT Supabase ou le lien privé du PC.");
+        } catch (java.net.MalformedURLException invalid) {
+            throw new IllegalArgumentException("Adresse HTTPS MCP invalide.");
+        }
+    }
     /** URL is the private HTTPS MCP URL configured on the Windows host. */
     public void configure(String url, boolean on) {
         String value = url == null ? "" : url.trim();
-        if (on) {
-            try {
-                URL parsed = new URL(value);
-                String hostname = parsed.getHost().toLowerCase(java.util.Locale.ROOT);
-                if (!"https".equals(parsed.getProtocol()) ||
-                    !hostname.endsWith(".ts.net") ||
-                    !parsed.getPath().matches("/mcp/[a-f0-9]{64}/?") ||
-                    !(parsed.getPort() == 8443 || parsed.getPort() == -1))
-                    throw new IllegalArgumentException("Utilise l’URL HTTPS du PC Tailscale, pas la passerelle Supabase.");
-            } catch (java.net.MalformedURLException invalid) {
-                throw new IllegalArgumentException("Adresse HTTPS MCP du PC invalide.");
-            }
-        }
+        value = resolveMcpAddress(value);
         preferences.edit().putString("url", value).putBoolean("enabled", on).apply();
         if (!on) stop();
+        else if (value.isEmpty()) status = "Activé · URL PC à configurer (pas Supabase)";
     }
     public void start() {
         if (!enabled() || url().isEmpty() || running) return;

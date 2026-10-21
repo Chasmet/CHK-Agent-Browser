@@ -71,14 +71,18 @@ public final class SettingsActivity extends Activity {
         local2.setChecked(Local2Client.get(this).enabled());
         group.addView(local2, localInsert++);
         Button local2Config = new Button(this);
-        local2Config.setText("Configurer URL HTTPS privée Local 2");
+        local2Config.setText("Importer le lien MCP ChatGPT / Supabase");
         local2Config.setAllCaps(false);
         group.addView(local2Config, localInsert++);
+        Button local2Paste = new Button(this);
+        local2Paste.setText("Importer le lien MCP copié");
+        local2Paste.setAllCaps(false);
+        group.addView(local2Paste, localInsert++);
         TextView local2Status = new TextView(this);
         local2Status.setText(Local2Client.get(this).status());
         group.addView(local2Status, localInsert++);
         TextView local2Help = new TextView(this);
-        local2Help.setText("Configure une fois l’adresse HTTPS du MCP PC, puis active Local 2. Ce canal ne passe pas par Render ni Supabase.");
+        local2Help.setText("Copie ton lien MCP Supabase, puis utilise Importer : l’application le convertit automatiquement en adresse directe du PC. Aucun polling Supabase. Activation et connexion sont indépendantes.");
         local2Help.setPadding(16,8,16,12);
         group.addView(local2Help, localInsert++);
         Button local2Off = new Button(this);
@@ -91,6 +95,23 @@ public final class SettingsActivity extends Activity {
             local2Status.setText("Local 2 désactivé · Render inchangé");
         });
         group.addView(local2Off, localInsert++);
+        local2Paste.setOnClickListener(v -> {
+            try {
+                android.content.ClipboardManager clipboard =
+                    (android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                android.content.ClipData clip = clipboard == null ? null : clipboard.getPrimaryClip();
+                if (clip == null || clip.getItemCount() == 0)
+                    throw new IllegalArgumentException("Copie d’abord ton lien MCP ChatGPT.");
+                CharSequence source = clip.getItemAt(0).coerceToText(this);
+                Local2Client.get(this).configure(source == null ? "" : source.toString(), true);
+                local2.setChecked(true);
+                AgentService.ensureRunning(this);
+                local2Status.setText("Local 2 activé · tentative de connexion directe au PC");
+                Toast.makeText(this, "Lien importé localement · Render inchangé", Toast.LENGTH_LONG).show();
+            } catch (IllegalArgumentException e) {
+                Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
         local2Config.setOnClickListener(v -> {
             android.widget.EditText field = new android.widget.EditText(this);
             field.setSingleLine(true);
@@ -114,7 +135,7 @@ public final class SettingsActivity extends Activity {
                 if(!on && !agent.isEnabled())stopService(new Intent(this,AgentService.class));
             }catch(IllegalArgumentException e) {
                 local2.setChecked(false);
-                Toast.makeText(this,"Configure d’abord l’URL Local 2.",Toast.LENGTH_LONG).show();
+                Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
             }
             local2Status.setText(Local2Client.get(this).status());
         });

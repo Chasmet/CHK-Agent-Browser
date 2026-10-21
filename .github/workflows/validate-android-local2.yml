@@ -6,6 +6,7 @@ on:
       - fix/dual-mcp-settings-final-20261021
       - feature/local2-batched-android-20261021
       - feature/local2-full-android-actions-20261021
+      - fix/local2-toggle-activation-20261021
   workflow_dispatch:
 permissions:
   contents: read
