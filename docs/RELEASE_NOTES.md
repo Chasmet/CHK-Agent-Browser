@@ -1,3 +1,12 @@
+## CHK Agent Browser — MCP Local 2 Android (21 octobre 2026)
+
+- Deux transports indépendants dans Réglages : relais Render existant et nouveau MCP Local 2 via le PC Windows.
+- Le nouveau canal Android communique avec CHK Home MCP sur HTTPS, sans requêtes applicatives vers Render ni Supabase pour ce canal.
+- Le navigateur CHK conserve ses fonctionnalités et ses données ; les commandes navigateur Local 2 sont filtrées.
+- Le serveur Windows propose 13 outils, dont le nouveau pont Android, en conservant ses dix outils fichiers/vidéo.
+- La connexion et l'exécution des commandes via Local 2 nécessitent la nouvelle version du serveur Windows installée sur le PC ; sans celle-ci, le relais Local 2 reste indisponible.
+- L'application Android conserve son identifiant de package et le mécanisme de mise à jour signé existant.
+
 ## CHK Agent Browser — collecte des commentaires X/TikTok (19 octobre 2026)
 
 - Nouvelle action MCP `collect_public_comments` autorisée dans `browser_task_submit`, compatible avec les onglets visibles et autonomes. Le moteur de tâches reconnaît également `scroll` pour les séquences lecture/défilement.
