@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/android-local2-bridge-20261021
+      - fix/dual-mcp-settings-final-20261021
       - feature/local2-batched-android-20261021
   workflow_dispatch:
 permissions:
