@@ -1,6 +1,6 @@
 # CHK Home MCP — serveur PC Windows, sans Render
 
-Service MCP Windows natif, distribué sous forme de ZIP avec executable x64 construit par GitHub Actions. Aucun appel Render ni cle API OpenAI.
+Service MCP Windows natif, distribué sous forme de ZIP avec **deux vrais exécutables x64** (serveur et installateur graphique) construits par GitHub Actions. Aucun appel Render ni cle API OpenAI.
 
 ## Adresse prevue et isolation
 
@@ -14,9 +14,9 @@ Le service écoute sur 127.0.0.1:8766 ; Tailscale Funnel expose uniquement le po
 
 1. Ouvrir les Actions GitHub de CHK Agent Browser, workflow CHK Home MCP Windows, branche feature/pc-home-mcp-20261021.
 2. Telecharger et extraire completement l'artefact CHK-Home-MCP-Windows.
-3. Sur le PC Windows pc-salon, double-cliquer sur INSTALLER-CHK-MCP.cmd.
-4. L'installateur copie l'EXE dans LOCALAPPDATA, crée son demarrage automatique utilisateur, teste les 10 outils MCP locaux, puis tente Tailscale Funnel sur 8443.
-5. Si Tailscale confirme sa configuration, l'URL privee est copiee dans le presse-papiers Windows. Dans ChatGPT : Plugins > Ajouter > URL du serveur > Ctrl+V. Authentification Sans authentification (le jeton est dans l'URL).
+3. Sur le PC Windows pc-salon, double-cliquer sur **CHK-Home-Installation.exe** (interface graphique, aucune commande CMD).
+4. Cliquer sur le bouton **INSTALLER ET ACTIVER**, puis confirmer. Le logiciel copie le serveur dans LOCALAPPDATA, active son demarrage automatique utilisateur, teste les 10 outils MCP locaux, puis configure Tailscale Funnel sur le port 8443 si autorise.
+5. Cliquer sur **COPIER MON LIEN MCP**. Le jeton reste masque a l'ecran. Dans ChatGPT : Plugins > Ajouter > URL du serveur > Ctrl+V. Authentification Sans authentification (le jeton est dans l'URL).
 6. Verifier que ChatGPT peut reellement appeler server_info. Ne pas affirmer que l'adresse est operationnelle avant cet essai.
 
 Si Funnel est interdit, deja utilise sur 8443, ou si ChatGPT refuse le port 8443, l'installation publique s'arrete sans perturber le serveur IIS existant. Il faudra une solution HTTPS alternative sans exposer ton site prive.
@@ -36,3 +36,11 @@ Serveur HTTP lie exclusivement au loopback ; HTTPS termine par Tailscale Funnel.
 Demarrage automatique sous la session utilisateur Windows et non sous SYSTEM : une session PC doit etre ouverte apres le redemarrage. Le PC doit rester allume et connecte ; Render n'est jamais utilise pour ces appels MCP.
 
 Le developpement/test Windows sur GitHub Actions ne prouve ni l'activation de Funnel ni la connexion ChatGPT au PC reel. Aucune ancienne route IIS ou modification Render ne figure dans ce projet.
+
+## Contenu ZIP version interface graphique
+
+- **CHK-Home-Installation.exe** — ouverture en double clic ; boutons INSTALLER ET ACTIVER, VERIFIER, COPIER MON LIEN MCP ; aucune fenetre CMD.
+- **CHK-Home-MCP.exe** — serveur MCP Windows local 127.0.0.1:8766 ; ne pas le lancer manuellement.
+- **README.md** — consignes et securite.
+
+Ne telecharge pas les anciennes versions de l'installateur CMD : cette version les remplace.
