@@ -93,8 +93,9 @@ public final class AgentClient {
         ui.removeCallbacks(expiry);
         pending = null;
         presenting = false;
-        settings.edit().remove("result_outbox").remove("executing_id")
-            .putBoolean("direct_mode", true).putBoolean("enabled", true).commit();
+        // Preserve old relay receipts for a possible explicit future migration.
+        settings.edit().putBoolean("direct_mode", true)
+            .putBoolean("enabled", true).commit();
         lastError = "";
         AgentLog.add(app,"mcp","mode serveur local Tailscale activé ; aucun relais Render");
     }
@@ -183,7 +184,11 @@ public final class AgentClient {
         return key;
     }
     public void enable(RegistrationCallback callback) {
-        settings.edit().putBoolean("direct_mode", false).apply();
+        if (isDirectMode()) {
+            ui.post(() -> callback.completed(false,
+                "Mode MCP direct actif : ne pas appeler Render."));
+            return;
+        }
         io.execute(() -> {
             try {
                 JSONObject request = new JSONObject(); request.put("device_token", token());
