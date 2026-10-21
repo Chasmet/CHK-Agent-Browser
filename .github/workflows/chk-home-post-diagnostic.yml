@@ -1,0 +1,53 @@
+name: CHK Home MCP - External POST diagnostic
+on:
+  push:
+    branches: [feature/pc-home-mcp-20261021]
+    paths:
+      - .github/workflows/chk-home-post-diagnostic.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  external-post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify direct Cloudflare GET and unauthenticated POST from GitHub
+        env:
+          PUBLIC_BASE: https://cage-sapphire-mailing-aquatic.trycloudflare.com
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error, socket
+          base = os.environ["PUBLIC_BASE"]
+          payload = json.dumps({
+              "jsonrpc": "2.0", "id": 12, "method": "initialize",
+              "params": {"protocolVersion": "2025-06-18",
+                         "clientInfo": {"name": "CHK diagnostic", "version": "1"},
+                         "capabilities": {}}
+          }).encode()
+          print("External POST diagnostic (NO PRIVATE TOKEN USED)")
+          cases = [
+              ("GET /health", base+"/health", "GET", None),
+              ("POST /mcp/invalid", base+"/mcp/"+"0"*64, "POST", payload),
+              ("POST /mcp", base+"/mcp", "POST", payload),
+              ("GET /mcp", base+"/mcp", "GET", None),
+          ]
+          for label, url, method, body in cases:
+              request = urllib.request.Request(url, data=body, method=method,
+                  headers={"Content-Type": "application/json",
+                           "Accept": "application/json, text/event-stream"})
+              try:
+                  with urllib.request.urlopen(request, timeout=12) as response:
+                      content = response.read(1024).decode("utf-8", errors="replace")
+                      code=response.status
+                      ctype=response.headers.get("Content-Type","")
+              except urllib.error.HTTPError as err:
+                  code=err.code
+                  ctype=err.headers.get("Content-Type","")
+                  content=err.read(1024).decode("utf-8", errors="replace")
+              except Exception as err:
+                  code="CONNECTION_ERROR"
+                  ctype=""
+                  content=type(err).__name__+":"+str(err)[:120]
+              print(json.dumps({"test":label,"status":code,"content_type":ctype,"body_excerpt":content[:190]}))
+          PY
