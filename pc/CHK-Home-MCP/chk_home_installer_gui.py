@@ -96,8 +96,12 @@ def verify_mcp_tools(secret: str) -> None:
     except (OSError, ValueError) as err:
         raise RuntimeError("Les outils MCP ne répondent pas en local.") from err
     tools = body.get("result", {}).get("tools", [])
-    if len(tools) != 10:
-        raise RuntimeError("Réponse MCP incorrecte : les dix outils ne sont pas présents.")
+    names = {item.get("name") for item in tools if isinstance(item, dict)}
+    required = {"server_info", "android_status", "android_command", "android_result",
+                "files_list", "files_read_text", "files_write_text", "files_mkdir",
+                "files_move", "files_trash", "files_restore", "video_probe", "video_cut"}
+    if not required.issubset(names):
+        raise RuntimeError("MCP Windows ancien ou incomplet : commandes Android absentes.")
 
 
 def same_binary(src: Path, dst: Path) -> bool:
@@ -197,7 +201,7 @@ def ensure_local_mcp(progress) -> str:
 
     cfg = private_config()
     verify_mcp_tools(cfg["secret"])
-    progress("10 outils MCP testés avec succès. Aucun appel Render.")
+    progress("13 outils MCP testés, dont les commandes Android. Render préservé.")
     return cfg["secret"]
 
 
