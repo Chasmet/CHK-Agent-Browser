@@ -408,7 +408,7 @@ class Handler(BaseHTTPRequestHandler):
             self.response(400, error(-32700, "Invalid JSON"))
             return
         if path == "/mcp/" + capability and request.get("method") == "android/next":
-            self.response(200, {"command": ANDROID_QUEUE.poll()})
+            self.response(200, {"command": ANDROID_QUEUE.poll(wait_seconds=15)})
             return
         if path == "/mcp/" + capability and request.get("method") == "android/complete":
             params = request.get("params", {})
