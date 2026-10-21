@@ -31,6 +31,9 @@ class WindowsMcpTest(unittest.TestCase):
             self.assertIn("result", reply)
         self.assertEqual(len(mcp.tool_catalog()), 20)
         self.assertEqual(mcp.safe_tool_action("server_info", {}, self.cfg)["render"], False)
+        status = mcp.safe_tool_action("android_status", {}, self.cfg)
+        self.assertEqual(status["workspace_protocol_required_for_new_tools"], 4)
+        self.assertEqual(status["capabilities_probe"]["args"]["action"], "files_capabilities")
 
     def test_workspace_save_read_trash_restore(self):
         mcp.safe_tool_action("files_mkdir", {"path": "clips"}, self.cfg)

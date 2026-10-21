@@ -139,6 +139,11 @@ public final class WorkspaceAutonomyIntegrationTest {
         assertTrue(actions.contains("files_transfer_commit"));assertTrue(actions.contains("document_create"));assertTrue(actions.contains("video_editor_wait"));
         JSONObject status=call("workspace_status",new JSONObject()).json();assertTrue(status.getBoolean("resumable_transfers"));assertFalse(status.getJSONObject("local2").getBoolean("render_enabled"));
     }
+    @Test public void studioDiskRepliesCanSafelyRefreshTheAndroidInterface()throws Exception{
+        CountDownLatch done=new CountDownLatch(1);java.util.concurrent.atomic.AtomicBoolean onMain=new java.util.concurrent.atomic.AtomicBoolean(),success=new java.util.concurrent.atomic.AtomicBoolean();
+        WorkspaceCommands.run(app,"video_editor_project_read",new JSONObject(),(ok,text)->{success.set(ok);onMain.set(android.os.Looper.myLooper()==android.os.Looper.getMainLooper());done.countDown();});
+        assertTrue(done.await(30,TimeUnit.SECONDS));assertTrue(success.get());assertTrue("Studio callback must return on UI before workspace refresh",onMain.get());
+    }
     @Test public void syntheticPostUpdateHealthChecksRunWithoutPersonalFiles()throws Exception{
         JSONObject health=call("files_self_test",new JSONObject()).json();assertTrue(health.toString(),health.getBoolean("ok"));assertTrue(health.getBoolean("archive_sha256"));assertTrue(health.getBoolean("pptx"));assertEquals("requires_media",health.getString("video_export"));
     }

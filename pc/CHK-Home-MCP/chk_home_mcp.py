@@ -120,6 +120,8 @@ def safe_tool_action(name: str, arguments: dict, cfg: dict) -> object:
 
     if name == "android_status":
         return {**ANDROID_QUEUE.status(),
+                "workspace_protocol_required_for_new_tools": 4,
+                "capabilities_probe": {"action": "android_action", "args": {"action": "files_capabilities", "args": {}}},
                 "server_id": hashlib.sha256(cfg["secret"].encode("ascii")).hexdigest()[:16]}
     if name == "android_command":
         action = arguments.get("action", "")
