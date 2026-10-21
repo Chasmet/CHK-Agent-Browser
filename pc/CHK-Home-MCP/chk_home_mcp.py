@@ -24,6 +24,7 @@ import tempfile
 import threading
 import time
 import uuid
+from android_mailbox import AndroidMailbox, ALLOWED_ACTIONS
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -36,6 +37,7 @@ MAX_TEXT = 64 * 1024
 MAX_RESPONSE_TEXT = 24_000
 MAX_PEERS = threading.BoundedSemaphore(12)
 MAX_LIST = 200
+ANDROID_QUEUE = AndroidMailbox()
 
 def user_storage() -> Path:
     return Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share") / "CHKHomeMCP"
@@ -101,6 +103,19 @@ def safe_tool_action(name: str, arguments: dict, cfg: dict) -> object:
         return {"name": "CHK Home MCP", "version": APP_VERSION,
                 "execution": "Windows PC", "hosting": "local", "render": False,
                 "workspace": str(root), "tools": len(tool_catalog())}
+
+    if name == "android_status":
+        return ANDROID_QUEUE.status()
+    if name == "android_command":
+        action = arguments.get("action", "")
+        payload = arguments.get("args", {})
+        if action not in ALLOWED_ACTIONS:
+            raise ValueError("Action Android interdite.")
+        ident = ANDROID_QUEUE.enqueue(action, payload)
+        return ANDROID_QUEUE.await_result(ident, timeout=20)
+    if name == "android_result":
+        ident = arguments.get("id", "")
+        return ANDROID_QUEUE.await_result(ident, timeout=0)
 
     if name == "files_list":
         folder = workspace_path(root, path_name, allow_root=True)
@@ -245,6 +260,9 @@ def tool_catalog() -> list[dict]:
     def number(description): return {"type": "number", "description": description}
     items = [
         ("server_info", "État du MCP Windows, sans Render.", {}),
+        ("android_status", "État du canal Android via le PC.", {}),
+        ("android_command", "Envoie une action autorisée au navigateur Android et attend une réponse.", {"action": text("Nom de la commande navigateur."), "args": {"type":"object"}}),
+        ("android_result", "Lit le résultat d’une commande Android précédente.", {"id": text("Identifiant de commande.")}),
         ("files_list", "Liste un dossier autorisé dans CHK-Workspace.", {"path": text("Chemin relatif, vide pour la racine.")}),
         ("files_read_text", "Lit un fichier texte UTF-8 de 24 Ko maximum.", {"path": text("Chemin relatif.")}),
         ("files_write_text", "Écrit un document texte, sans remplacement par défaut.",
@@ -261,6 +279,8 @@ def tool_catalog() -> list[dict]:
             "duration_seconds": number("Durée en secondes.")}),
     ]
     required = {
+        "android_command": ("action",),
+        "android_result": ("id",),
         "files_read_text": ("path",),
         "files_write_text": ("path", "content"),
         "files_mkdir": ("path",),
@@ -387,6 +407,16 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
             self.response(400, error(-32700, "Invalid JSON"))
             return
+        if path == "/mcp/" + capability and request.get("method") == "android/next":
+            self.response(200, {"command": ANDROID_QUEUE.poll()})
+            return
+        if path == "/mcp/" + capability and request.get("method") == "android/complete":
+            params = request.get("params", {})
+            if not isinstance(params, dict):
+                self.response(400, {"error": "params invalid"}); return
+            done = ANDROID_QUEUE.resolve(params.get("id", ""), params.get("success"), params.get("message"))
+            self.response(200, {"ok": done})
+            return
         reply = dispatch(request, self.server.cfg)
         if reply is None: self.response(202, None)
         else: self.response(200, reply)
@@ -411,7 +441,7 @@ def main() -> None:
         return
     if options.once_test:
         result = dispatch({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, cfg)
-        assert len(result["result"]["tools"]) == 10
+        assert len(result["result"]["tools"]) == 13
         assert safe_tool_action("server_info", {}, cfg)["render"] is False
         print("OK — 10 MCP tools; no Render client or polling.")
         return
