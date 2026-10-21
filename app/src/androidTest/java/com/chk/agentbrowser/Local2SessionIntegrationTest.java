@@ -49,7 +49,7 @@ public final class Local2SessionIntegrationTest {
         // No transport polling/network is needed to test command dispatch.
         local.edit().putBoolean("enabled",true).putString("url","").commit();
         updates.edit().putBoolean("enabled",false).commit();
-        ui.edit().putString("tabs","[\"https://example.com/local2-fixture\"]").putInt("active_tab",0).commit();
+        ui.edit().putString("tabs","[\"https://example.com/\"]").putInt("active_tab",0).commit();
     }
     @After public void restore()throws Exception{
         if(settings!=null)instrument.runOnMainSync(settings::finish);

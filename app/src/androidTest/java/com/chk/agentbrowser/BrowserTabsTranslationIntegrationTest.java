@@ -29,12 +29,20 @@ public final class BrowserTabsTranslationIntegrationTest {
         CountDownLatch done=new CountDownLatch(1);
         AtomicReference<String> result=new AtomicReference<>();
         AtomicBoolean ok=new AtomicBoolean();
+        if(action.equals("switch_tab")){
+            java.lang.reflect.Field field=MainActivity.class.getDeclaredField("tabs");field.setAccessible(true);
+            android.webkit.WebView target=(android.webkit.WebView)((java.util.List<?>)field.get(activity)).get(args.getInt("index"));
+            // Commit the controlled document before switching; otherwise an
+            // old real HTTP error can correctly reject the tab before setup.
+            WebFixture.load(instrument,target,"https://example.com/tab-fixture/"+args.getInt("index"),
+                "<html><body>Tab fixture</body></html>","true");
+        }
         instrument.runOnMainSync(()->{
             try {m.invoke(activity,action,args,(AgentClient.ResultCallback)(success,message)->{
                 ok.set(success);result.set(message);done.countDown();
             });}catch(Exception e){result.set(e.toString());done.countDown();}
         });
-        if(action.equals("new_tab")||action.equals("switch_tab")){
+        if(action.equals("new_tab")){
             // Navigation now waits for a committed document: provide a real
             // intercepted HTTPS page instead of depending on public internet.
             android.webkit.WebView web=(android.webkit.WebView)getCurrent(activity);
