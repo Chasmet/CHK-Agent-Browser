@@ -13,11 +13,15 @@ final class AgentFiles {
     private AgentFiles(){}
     static File journal(Context c,String type,String id)throws Exception{
         if(!id.matches("[A-Za-z0-9_-]{1,80}"))throw new Exception("Identifiant requis : lettres, chiffres, tiret ou souligné (80 maximum).");
-        File dir=new File(c.getFilesDir(),"agent_desktop/"+type);if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("Journal indisponible.");return new File(dir,id+".json");
+        File dir=new File(c.getFilesDir(),"agent_desktop/"+type);if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("Journal indisponible.");
+        File file=new File(dir,id+".json");
+        // Android 6–9 AtomicFile can leave only .bak after a crash. Recover it before
+        // callers test exists(), otherwise they could create a fresh workflow over its checkpoint.
+        if(new File(file.getPath()+".bak").isFile())try(InputStream recovered=new AtomicFile(file).openRead()){}
+        return file;
     }
     static JSONObject read(File f)throws Exception{
-        if(!f.isFile()||f.length()>2000000)throw new IOException("Journal introuvable ou trop volumineux.");
-        try(InputStream in=new AtomicFile(f).openRead();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);return new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));}
+        try(InputStream in=new AtomicFile(f).openRead();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){if(out.size()+n>2000000)throw new IOException("Journal trop volumineux.");out.write(b,0,n);}return new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));}
     }
     static void save(File f,JSONObject state)throws Exception{
         AtomicFile a=new AtomicFile(f);FileOutputStream out=null;try{out=a.startWrite();out.write(state.toString().getBytes(StandardCharsets.UTF_8));a.finishWrite(out);}catch(Exception e){if(out!=null)a.failWrite(out);throw e;}

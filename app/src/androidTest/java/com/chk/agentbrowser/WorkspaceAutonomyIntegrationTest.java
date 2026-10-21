@@ -72,6 +72,11 @@ public final class WorkspaceAutonomyIntegrationTest {
         byte[] bytes={1,2,3};begin(bytes,sha(bytes));transfer("write",chunk(bytes,0,3));File journal=AgentFiles.journal(app,"transfers",id);new File(journal.getParentFile(),id+".part").delete();
         assertFalse(call("files_transfer_status",new JSONObject().put("id",id)).ok);assertEquals("cancelled",transfer("abort",new JSONObject()).getString("state"));
     }
+    @Test public void legacyAtomicCheckpointIsRecoveredBeforeCheckingItsExistence()throws Exception{
+        File journal=AgentFiles.journal(app,"transfers",id),backup=new File(journal.getPath()+".bak");
+        try(FileOutputStream out=new FileOutputStream(backup)){out.write("{\"received\":49152,\"state\":\"receiving\"}".getBytes(StandardCharsets.UTF_8));out.getFD().sync();}
+        assertFalse(journal.exists());File recovered=AgentFiles.journal(app,"transfers",id);assertTrue(recovered.exists());assertEquals(49152,AgentFiles.read(recovered).getLong("received"));assertFalse(backup.exists());
+    }
     @Test public void textEditsGuardTheReadVersionAndKeepARecoverableBackup()throws Exception{
         String path=folder+"/edit.txt";JSONObject first=call("files_write_text",new JSONObject().put("path",path).put("text","version 1")).json();
         assertFalse(call("files_edit_text",new JSONObject().put("path",path).put("text","bad").put("expected_sha256",sha(new byte[0]))).ok);assertEquals("version 1",store.readText(path,0).getString("text"));
