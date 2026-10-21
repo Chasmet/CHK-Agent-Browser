@@ -6,6 +6,7 @@ GitHub Actions packages this GUI and the MCP backend as two real Windows EXEs.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import queue
@@ -26,7 +27,7 @@ APP = "CHK Home MCP"
 BACKEND_NAME = "CHK-Home-MCP.exe"
 WINDOWS_PORT = 8766
 PUBLIC_PORT = 8443
-VERSION = "1.2"
+VERSION = "1.3"
 TAILSCALE_CONSOLE = "https://console.tailscale.com/admin/acls"
 APP_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CHKHomeMCP"
 
@@ -94,6 +95,73 @@ def verify_mcp_tools(secret: str) -> None:
         raise RuntimeError("Réponse MCP incorrecte : les dix outils ne sont pas présents.")
 
 
+def same_binary(src: Path, dst: Path) -> bool:
+    if not dst.is_file() or src.stat().st_size != dst.stat().st_size:
+        return False
+    def checksum(path):
+        h = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                h.update(chunk)
+        return h.digest()
+    return checksum(src) == checksum(dst)
+
+
+def upgrade_managed_backend(src: Path, target: Path, progress) -> bool:
+    # A running Windows EXE cannot be overwritten. Only stop the known named
+    # CHK process if its binary has changed, never any IIS or Tailscale service.
+    if same_binary(src, target):
+        return False
+    if fetch_health() is not None:
+        progress("Nouvelle version MCP détectée : arrêt du seul serveur CHK local…")
+        result = run_quiet(["taskkill.exe", "/F", "/IM", BACKEND_NAME], timeout=12)
+        if result.returncode != 0:
+            raise RuntimeError("Impossible d'arrêter l'ancien CHK Home MCP. Ferme son processus puis réessaie.")
+        for _ in range(25):
+            if fetch_health() is None:
+                break
+            time.sleep(0.3)
+        if fetch_health() is not None:
+            raise RuntimeError("Ancien serveur MCP toujours actif : mise à jour interrompue.")
+    shutil.copy2(src, target)
+    progress("Serveur MCP Windows mis à jour, configuration et clé conservées.")
+    return True
+
+
+def verify_funnel_mcp(dns: str, capability: str, progress) -> None:
+    # Verify a full authenticated MCP POST through the configured HTTPS route.
+    # This is stronger than the browser GET /mcp/ test. Do not log this URL.
+    uri = "https://" + dns + ":8443/mcp/" + capability
+    payload = json.dumps({
+        "jsonrpc": "2.0", "id": 11, "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "CHK GUI secure diagnostic", "version": VERSION}
+        }
+    }).encode("utf-8")
+    request = urllib.request.Request(uri, data=payload, method="POST", headers={
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream"
+    })
+    progress("Test réel du protocole MCP par HTTPS Funnel (POST)…")
+    try:
+        with urllib.request.urlopen(request, timeout=13) as res:
+            reply = json.load(res)
+    except urllib.error.HTTPError as failure:
+        raise RuntimeError(
+            "Funnel répond mais refuse le protocole MCP POST (HTTP " +
+            str(failure.code) + "). Pas encore utilisable dans ChatGPT.") from None
+    except (OSError, ValueError, urllib.error.URLError):
+        raise RuntimeError(
+            "La requête MCP POST ne passe pas sur HTTPS 8443. "
+            "Le simple affichage GET dans Chrome ne suffit pas.") from None
+    if not isinstance(reply, dict) or reply.get("result", {}).get("serverInfo", {}).get("name") != APP:
+        raise RuntimeError(
+            "La route HTTPS répond mais n'a pas renvoyé l'initialisation MCP attendue.")
+    progress("Initialisation MCP HTTPS vérifiée. Test depuis ChatGPT encore nécessaire.")
+
+
 def ensure_local_mcp(progress) -> str:
     source = Path(__file__).resolve().parent / BACKEND_NAME
     # When frozen by PyInstaller, sys.executable is GUI in the extracted ZIP.
@@ -106,22 +174,20 @@ def ensure_local_mcp(progress) -> str:
     APP_DIR.mkdir(parents=True, exist_ok=True)
     target = APP_DIR / BACKEND_NAME
     progress("Vérification du service Windows local…")
+    changed = upgrade_managed_backend(source, target, progress)
     if fetch_health() is None:
-        if not target.is_file() or source.resolve() != target.resolve():
-            shutil.copy2(source, target)
         progress("Démarrage du serveur MCP, sans fenêtre de commande…")
         flags = hidden_kwargs()
         subprocess.Popen([str(target)], cwd=str(APP_DIR), stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          close_fds=True, **flags)
-        import time
         for _ in range(25):
             if fetch_health() is not None:
                 break
             time.sleep(0.4)
         if fetch_health() is None:
             raise RuntimeError("Le serveur ne démarre pas sur le port 8766. Vérifie les protections Windows.")
-    else:
+    elif not changed:
         progress("Serveur CHK Home déjà actif : conservation de sa configuration.")
 
     cfg = private_config()
@@ -333,6 +399,7 @@ class Gui:
         self.msg("Tailscale connecté sur : " + dns)
         self.msg("4/4 — Activation et contrôle de Funnel sur 8443…")
         ensure_funnel(tailscale, self.msg)
+        verify_funnel_mcp(dns, secret, self.msg)
         # Credential is intentionally NEVER displayed, printed or logged.
         private_url = f"https://{dns}:8443/mcp/{secret}"
         self.messages.put(("ready", private_url))
@@ -360,7 +427,9 @@ class Gui:
         if "8443" in status and "8766" in status:
             self.msg("Funnel 8443 : route MCP détectée.")
             if cfg.is_file() and fetch_health():
-                self.messages.put(("ready", f"https://{dns}:8443/mcp/{private_config()['secret']}"))
+                secret = private_config()["secret"]
+                verify_funnel_mcp(dns, secret, self.msg)
+                self.messages.put(("ready", f"https://{dns}:8443/mcp/{secret}"))
         else:
             self.msg("Funnel 8443 : non configuré pour ce serveur.")
         self.msg("Aucun état du connecteur Render n'a été modifié.")
