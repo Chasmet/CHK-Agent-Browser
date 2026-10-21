@@ -20,6 +20,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Installer client MCP officiel pour test d'interoperabilite
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "mcp>=1.10,<2"
       - name: Tester les outils MCP et les controles d'acces
         shell: pwsh
         run: |
