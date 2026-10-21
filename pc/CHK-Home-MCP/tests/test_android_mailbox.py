@@ -38,6 +38,19 @@ class AndroidMailboxTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 queue.enqueue("browser_batch", {"steps": steps})
 
+    def test_long_poll_receives_new_command(self):
+        import threading
+        import time
+        queue = AndroidMailbox()
+        answers = []
+        waiting = threading.Thread(target=lambda: answers.append(queue.poll(wait_seconds=1)))
+        waiting.start()
+        time.sleep(0.05)
+        ident = queue.enqueue("browser_tabs", {})
+        waiting.join(2)
+        self.assertFalse(waiting.is_alive())
+        self.assertEqual(answers[0]["id"], ident)
+
     def test_capacity(self):
         queue = AndroidMailbox(limit=1)
         queue.enqueue("browser_tabs", {})
