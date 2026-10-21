@@ -282,7 +282,35 @@ public final class AgentClient {
             CommandHandler receiver = activeHandler();
             if(receiver == null) { reply.finish(false, "Navigateur CHK indisponible."); return; }
             try {
-                JSONObject cmd = new JSONObject().put("id","local2").put("action",action).put("args",args);
+                if ("browser_status".equals(action)) {
+                    reply.finish(true, "Android actif ; page : " + receiver.pageUrl()); return;
+                }
+                String translated;
+                switch (action) {
+                    case "browser_tabs": translated = "tabs"; break;
+                    case "browser_read_page": translated = "read_page"; break;
+                    case "browser_open_url": translated = "open_url"; break;
+                    case "browser_click": translated = "click"; break;
+                    case "browser_type": translated = "type"; break;
+                    case "browser_scroll": translated = "scroll"; break;
+                    case "browser_get_form": translated = "get_form"; break;
+                    default: reply.finish(false, "Action navigateur inconnue."); return;
+                }
+                if ("browser_open_url".equals(action) &&
+                    (!args.optString("url", "").startsWith("https://") ||
+                     args.optString("url", "").length() > 2000)) {
+                    reply.finish(false, "URL HTTPS invalide."); return;
+                }
+                if (("browser_click".equals(action) || "browser_type".equals(action)) &&
+                    (args.optString("selector", "").isEmpty() ||
+                     args.optString("selector", "").length() > 350)) {
+                    reply.finish(false, "Sélecteur invalide."); return;
+                }
+                if ("browser_type".equals(action) &&
+                    args.optString("text", "").length() > 8000) {
+                    reply.finish(false, "Texte trop long."); return;
+                }
+                JSONObject cmd = new JSONObject().put("id","local2").put("action",translated).put("args",args);
                 receiver.onCommand(cmd, (ok, message) -> reply.finish(ok, message));
             } catch(Exception e) { reply.finish(false, "Commande refusée : "+e.getClass().getSimpleName()); }
         });
