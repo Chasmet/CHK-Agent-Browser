@@ -10,44 +10,46 @@ permissions:
 jobs:
   external-post:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
-      - name: Verify direct Cloudflare GET and unauthenticated POST from GitHub
+      - name: Test MCP proxy transport against invalid credentials, never use real secret
         env:
           PUBLIC_BASE: https://cage-sapphire-mailing-aquatic.trycloudflare.com
         run: |
           python3 - <<'PY'
-          import json, os, urllib.request, urllib.error, socket
-          base = os.environ["PUBLIC_BASE"]
-          payload = json.dumps({
-              "jsonrpc": "2.0", "id": 12, "method": "initialize",
-              "params": {"protocolVersion": "2025-06-18",
-                         "clientInfo": {"name": "CHK diagnostic", "version": "1"},
-                         "capabilities": {}}
-          }).encode()
-          print("External POST diagnostic (NO PRIVATE TOKEN USED)")
-          cases = [
-              ("GET /health", base+"/health", "GET", None),
-              ("POST /mcp/invalid", base+"/mcp/"+"0"*64, "POST", payload),
-              ("POST /mcp", base+"/mcp", "POST", payload),
-              ("GET /mcp", base+"/mcp", "GET", None),
+          import json, os, time, urllib.request, urllib.error
+          base=os.environ["PUBLIC_BASE"]
+          payload=json.dumps({"jsonrpc":"2.0","id":19,"method":"initialize",
+            "params":{"protocolVersion":"2025-06-18","capabilities":{},
+                      "clientInfo":{"name":"GitHub diagnostic","version":"1"}}}).encode()
+          cases=[
+            ("GET health", "/health", "GET",None,{}),
+            ("POST invalid path 64", "/mcp/"+"0"*64,"POST",payload,{}),
+            ("POST /mcp missing token", "/mcp","POST",payload,{}),
+            ("POST /mcp empty bearer", "/mcp","POST",payload,{"Authorization":"Bearer "+"0"*64}),
+            ("POST /mcp/ no token", "/mcp/","POST",payload,{}),
+            ("POST other", "/banana","POST",payload,{}),
+            ("POST invalid secret short", "/mcp/invalid","POST",payload,{}),
+            ("GET /mcp", "/mcp","GET",None,{}),
+            ("POST invalid path repeat", "/mcp/"+"f"*64,"POST",payload,{}),
+            ("POST /health", "/health","POST",payload,{}),
+            ("POST /mcp, no Content-Type", "/mcp","POST",payload,{"X-No-Content-Type":"true"})
           ]
-          for label, url, method, body in cases:
-              request = urllib.request.Request(url, data=body, method=method,
-                  headers={"Content-Type": "application/json",
-                           "Accept": "application/json, text/event-stream"})
-              try:
-                  with urllib.request.urlopen(request, timeout=12) as response:
-                      content = response.read(1024).decode("utf-8", errors="replace")
-                      code=response.status
-                      ctype=response.headers.get("Content-Type","")
-              except urllib.error.HTTPError as err:
-                  code=err.code
-                  ctype=err.headers.get("Content-Type","")
-                  content=err.read(1024).decode("utf-8", errors="replace")
-              except Exception as err:
-                  code="CONNECTION_ERROR"
-                  ctype=""
-                  content=type(err).__name__+":"+str(err)[:120]
-              print(json.dumps({"test":label,"status":code,"content_type":ctype,"body_excerpt":content[:190]}))
+          for name,path,method,data,headers in cases:
+            request=urllib.request.Request(base+path,method=method,data=data,
+               headers={"Accept":"application/json, text/event-stream",
+                        "Content-Type":"application/json",
+                        **{k:v for k,v in headers.items() if not k.startswith("X-No-")}})
+            now=time.monotonic()
+            try:
+              with urllib.request.urlopen(request,timeout=13) as res:
+                status=res.status;body=res.read(400).decode("utf-8","replace")
+                cloudflare=res.headers.get("CF-RAY", "")
+            except urllib.error.HTTPError as e:
+              status=e.code;body=e.read(400).decode("utf-8","replace")
+              cloudflare=e.headers.get("CF-RAY","")
+            except Exception as e:
+              status=type(e).__name__;body=str(e)[:140];cloudflare=""
+            print(json.dumps({"test":name,"status":status,"duration_ms":round((time.monotonic()-now)*1000),
+                              "cf_ray":cloudflare,"body":body[:180]}),flush=True)
           PY
