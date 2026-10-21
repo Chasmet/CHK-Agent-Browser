@@ -47,7 +47,7 @@ public final class WorkspaceAutonomyIntegrationTest {
     private static String sha(byte[] bytes)throws Exception{return WorkspaceTransfer.hash(new ByteArrayInputStream(bytes));}
     private JSONObject chunk(byte[] bytes,int offset,int length)throws Exception{return new JSONObject().put("offset",offset).put("base64",Base64.encodeToString(Arrays.copyOfRange(bytes,offset,offset+length),Base64.NO_WRAP));}
     @Test public void resumableBinaryImportAndExportWithRepeatedBlocks()throws Exception{
-        byte[] bytes=new byte[110000];new Random(42).nextBytes(bytes);begin(bytes,sha(bytes));
+        byte[] bytes=new byte[13*1024*1024+17];new Random(42).nextBytes(bytes);begin(bytes,sha(bytes));
         assertEquals(49152,transfer("write",chunk(bytes,0,49152)).getLong("received"));
         assertEquals(49152,transfer("write",chunk(bytes,0,49152)).getLong("received"));
         File journal=AgentFiles.journal(app,"transfers",id),part=new File(journal.getParentFile(),id+".part");
@@ -71,6 +71,13 @@ public final class WorkspaceAutonomyIntegrationTest {
     @Test public void missingConfirmedDataCanStillBeAborted()throws Exception{
         byte[] bytes={1,2,3};begin(bytes,sha(bytes));transfer("write",chunk(bytes,0,3));File journal=AgentFiles.journal(app,"transfers",id);new File(journal.getParentFile(),id+".part").delete();
         assertFalse(call("files_transfer_status",new JSONObject().put("id",id)).ok);assertEquals("cancelled",transfer("abort",new JSONObject()).getString("state"));
+    }
+    @Test public void textEditsGuardTheReadVersionAndKeepARecoverableBackup()throws Exception{
+        String path=folder+"/edit.txt";JSONObject first=call("files_write_text",new JSONObject().put("path",path).put("text","version 1")).json();
+        assertFalse(call("files_edit_text",new JSONObject().put("path",path).put("text","bad").put("expected_sha256",sha(new byte[0]))).ok);assertEquals("version 1",store.readText(path,0).getString("text"));
+        JSONObject edited=call("files_edit_text",new JSONObject().put("path",path).put("text","version 2").put("expected_sha256",first.getString("sha256"))).json();assertEquals("version 2",store.readText(path,0).getString("text"));
+        assertFalse(call("files_edit_text",new JSONObject().put("path",path).put("text","stale").put("expected_sha256",first.getString("sha256"))).ok);
+        store.file(path).delete();store.restore(edited.getString("backup_trash_id"));assertEquals("version 1",store.readText(path,0).getString("text"));
     }
     @Test public void transferNeverOverwritesOrReusesAnotherManifest()throws Exception{
         byte[] bytes={1};store.writeText(folder+"/binary.bin","original",false);
@@ -107,12 +114,19 @@ public final class WorkspaceAutonomyIntegrationTest {
         }
         assertTrue(DocumentReader.readFile(app,folder+"/document.docx",1,1,0).getString("text").contains("Bonjour é & <Android>"));
         assertTrue(DocumentReader.readFile(app,folder+"/document.pdf",1,1,0).getString("text").contains("Bonjour"));
+        String cells=call("document_read",new JSONObject().put("path",folder+"/document.xlsx")).json().getString("text");assertTrue(cells,cells.contains("A2=é & <Android>"));assertTrue(cells,cells.contains("B2=42"));assertTrue(cells,cells.contains("A3==1+1"));
+        JSONObject slides=call("files_read_text",new JSONObject().put("path",folder+"/document.pptx")).json();assertEquals(2,slides.getInt("total_pages"));assertTrue(slides.getString("text").contains("Deuxième paragraphe"));
         // Gradle uninstalls the debug app after instrumentation, removing its external directory.
         // Preserve only these synthetic documents in the emulator shell's temporary test directory.
-        android.os.ParcelFileDescriptor descriptor=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(
-            "mkdir -p /data/local/tmp/chk-autonomy-fixtures && cp '"+fixtures.getAbsolutePath()+"'/* /data/local/tmp/chk-autonomy-fixtures/ && echo CHK_FIXTURES_OK");
+        shell("mkdir -p /data/local/tmp/chk-autonomy-fixtures");
+        shell("cp -R "+fixtures.getAbsolutePath()+"/. /data/local/tmp/chk-autonomy-fixtures/");
+        String copied=shell("ls /data/local/tmp/chk-autonomy-fixtures");
+        for(String format:new String[]{"pdf","docx","xlsx","pptx","json","csv","txt"})assertTrue(copied,copied.contains("document."+format));
+    }
+    private String shell(String command)throws Exception{
+        android.os.ParcelFileDescriptor descriptor=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command);
         try(InputStream in=new android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor);ByteArrayOutputStream out=new ByteArrayOutputStream()){
-            byte[] b=new byte[1024];int n;while((n=in.read(b))!=-1)out.write(b,0,n);assertTrue(out.toString("UTF-8"),out.toString("UTF-8").contains("CHK_FIXTURES_OK"));
+            byte[] b=new byte[1024];int n;while((n=in.read(b))!=-1)out.write(b,0,n);return out.toString("UTF-8");
         }
     }
     @Test public void capabilitySchemasAndVersionAreAvailableWithoutRender()throws Exception{

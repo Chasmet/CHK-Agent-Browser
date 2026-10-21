@@ -1,3 +1,7 @@
+## Mettre à jour un Local 2 déjà installé
+
+Extraire le nouveau pack Windows, ouvrir `CHK-Home-Installation.exe` puis cliquer **METTRE À JOUR LE RELAIS EXISTANT**. Cette action remplace uniquement le binaire du relais et vérifie les outils. Elle conserve configuration, dossier autorisé, jeton et URL MCP, sans reconfigurer Tailscale. Actualiser ensuite le catalogue du connecteur dans ChatGPT pour afficher les 20 outils. Les nouvelles actions Android restent accessibles via `android_command` avec le serveur 1.3.0 si seul l’APK est mis à jour.
+
 # CHK Home MCP — serveur PC Windows, sans Render
 
 Service MCP Windows natif, distribué sous forme de ZIP avec **deux vrais exécutables x64** (serveur et installateur graphique) construits par GitHub Actions. Aucun appel Render ni cle API OpenAI.

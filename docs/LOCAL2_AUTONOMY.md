@@ -38,7 +38,7 @@ Le transport binaire bas niveau est disponible via `android_transfer` ou les act
 
 PDF et DOCX acceptent titre et texte ; XLSX/CSV un tableau `rows` ; PPTX un tableau `slides` d’objets `{title,text}` ; JSON un objet/tableau `data`. Le document est créé dans un fichier temporaire, contrôlé puis publié sans écraser un fichier existant. Conserver une nouvelle version pour les révisions.
 
-Limites : contenu d’entrée de 64 Ko, texte et valeurs simples, une feuille XLSX, jusqu’à 50 diapositives ou 100 pages PDF. Pas de calcul de formules, ni de conservation des mises en page d’un Office arbitraire existant. La lecture native PDF/DOCX/images demeure disponible ; un lecteur Office externe peut ouvrir les XLSX/PPTX exportés.
+Limites : contenu d’entrée de 64 Ko, texte et valeurs simples, une feuille XLSX, jusqu’à 50 diapositives ou 100 pages PDF. Pas de calcul de formules, ni de conservation des mises en page d’un Office arbitraire existant. La lecture native couvre PDF/DOCX/images, valeurs des cellules XLSX et texte des diapositives PPTX. Les formules sont présentées avec leur valeur enregistrée, sans recalcul ; la mise en forme graphique n’est pas reproduite dans l’extraction.
 
 ### Tâches et montage
 

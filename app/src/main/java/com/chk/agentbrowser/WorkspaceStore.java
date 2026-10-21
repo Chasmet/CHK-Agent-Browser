@@ -70,6 +70,16 @@ public final class WorkspaceStore {
         String text=new String(b.toByteArray(),StandardCharsets.UTF_8);int start=Math.min(text.length(),Math.max(0,offset)),end=Math.min(text.length(),start+12000);
         return new JSONObject().put("path",path).put("text",text.substring(start,end)).put("next_offset",end<text.length()?end:-1);
     }
+    public JSONObject editText(String path,String text,String expected)throws Exception{
+        if(!expected.matches("[a-f0-9]{64}")||text.getBytes(StandardCharsets.UTF_8).length>65536)throw new IOException("SHA-256 attendu requis et texte limité à 64 Ko.");
+        File source=file(path);if(!source.isFile()||!WorkspaceTransfer.stat(this,path,true).getString("sha256").equals(expected))throw new IOException("Fichier modifié depuis la lecture : recharger avant de modifier.");
+        String backup=trash(path);
+        try{return writeText(path,text,false).put("backup_trash_id",backup);}
+        catch(Exception e){
+            if(!source.exists())try{restore(backup);}catch(Exception recovery){throw new IOException("Écriture interrompue ; sauvegarde récupérable en corbeille : "+backup,e);}
+            throw new IOException("Écriture interrompue ; vérifier le fichier. Identifiant de sauvegarde : "+backup,e);
+        }
+    }
     public JSONObject readBytes(String path,long offset)throws Exception{
         File f=file(path);if(!f.isFile())throw new IOException("Fichier introuvable");
         if(offset<0||offset>f.length())throw new IOException("Position invalide");byte[] buf=new byte[8192];int n;

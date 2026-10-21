@@ -86,7 +86,7 @@ class AndroidAutonomyTest(unittest.TestCase):
         return android_transfers.command(dict(operation=operation, id="test", **args), self.cfg, self.phone, mcp.workspace_path)
 
     def wait(self):
-        deadline = time.monotonic()+5
+        deadline = time.monotonic()+30
         while time.monotonic() < deadline:
             state = self.command("status")
             if state["state"] != "running":
@@ -95,7 +95,7 @@ class AndroidAutonomyTest(unittest.TestCase):
         self.fail("Transfer did not settle")
 
     def test_large_file_moves_both_directions_with_verified_hash(self):
-        data = bytes(range(251))*1500
+        data = bytes(range(251))*55000
         (self.root/"source.bin").write_bytes(data)
         self.command("start", direction="to_android", source="source.bin", destination="media.bin")
         state = self.wait()
@@ -103,7 +103,7 @@ class AndroidAutonomyTest(unittest.TestCase):
         self.assertTrue(state["verified"])
         self.assertEqual(self.phone.files["media.bin"], data)
         android_transfers.command(dict(operation="start", id="return", direction="to_pc", source="media.bin", destination="returned.bin"), self.cfg, self.phone, mcp.workspace_path)
-        for _ in range(500):
+        for _ in range(6000):
             state = android_transfers.command(dict(operation="status", id="return"), self.cfg, self.phone, mcp.workspace_path)
             if state["state"] != "running":
                 break

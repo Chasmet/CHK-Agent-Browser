@@ -2,8 +2,8 @@
 
 - Catalogue Android version 4 avec schémas paginés : `android_action` → `files_capabilities`. Compatible avec le serveur Windows 1.3.0 déjà installé.
 - Imports binaires jusqu’à 512 Mo, blocs de 48 Ko, point de reprise durable, rejeu de bloc identique sans doublon, contrôle SHA-256 final et publication atomique. Exports par blocs de 8 Ko avec contrôle de version.
-- SHA-256 et présence des fichiers, copie de dossiers, sauvegardes ZIP et extraction protégée dans un nouveau dossier. Les destinations existantes sont refusées ; quota de 5 000 entrées et 512 Mo décompressés.
-- Création locale de PDF, DOCX, XLSX, PPTX, JSON, CSV et TXT sans service cloud. Documents Office simples, éditables, sans macros ni moteur de calcul ; l’édition fidèle d’un document Office arbitraire n’est pas incluse.
+- Édition texte avec contrôle du SHA-256 lu et sauvegarde récupérable en corbeille. SHA-256 et présence des fichiers, copie de dossiers, sauvegardes ZIP et extraction protégée dans un nouveau dossier. Les destinations existantes sont refusées ; quota de 5 000 entrées et 512 Mo décompressés.
+- Création locale de PDF, DOCX, XLSX, PPTX, JSON, CSV et TXT sans service cloud. Extraction native des valeurs XLSX et textes PPTX. Documents Office simples, éditables, sans macros ni moteur de calcul ; l’édition fidèle d’un document Office arbitraire n’est pas incluse.
 - Dossiers Android externes : création de sous-dossiers dans les accès persistants autorisés. Les exports sont relus et leur SHA-256 comparé avant confirmation.
 - Les aperçus JPEG sont adaptés à la taille du transport. Un résultat volumineux est conservé intégralement dans `Fichiers/AgentResults`, avec chemin et SHA-256, au lieu d’un JSON tronqué.
 - Tâches persistantes étendues aux documents, archives, vérifications et montage. Attente d’un export existant puis vérification du MP4, sans relancer l’export en cas de délai.

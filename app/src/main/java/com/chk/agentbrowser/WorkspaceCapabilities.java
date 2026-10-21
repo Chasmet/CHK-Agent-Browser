@@ -17,6 +17,7 @@ final class WorkspaceCapabilities {
         add(all,"files_catalog","Recherche et tri dans le catalogue Android.","folder:string?","category:string?","query:string?","sort:string?","offset:integer?");
         add(all,"files_mkdir","Crée un dossier sans écrasement ; le parent doit exister.","path:string");
         add(all,"files_write_text","Écriture UTF-8 atomique, 64 Ko ; overwrite explicite.","path:string","text:string","overwrite:boolean?");
+        add(all,"files_edit_text","Modifie le texte seulement si SHA-256 attendu correspond ; conserve l’ancienne version en corbeille.","path:string","text:string","expected_sha256:string");
         add(all,"files_read_text","Lecture paginée texte ou extraction des documents pris en charge.","path:string","offset:integer?","page:integer?","page_count:integer?");
         add(all,"files_read_bytes","Lecture Base64 par blocs de 8 Ko (compatibilité).","path:string","offset:integer?");
         add(all,"files_copy","Copie fichier ou dossier privé sans écraser, vérifie SHA-256 des fichiers ; 5 000 entrées / 512 Mo maximum.","path:string","destination:string");
@@ -36,7 +37,7 @@ final class WorkspaceCapabilities {
         add(all,"files_task","Tâches persistantes de 1..50 étapes : submit/status/resume/cancel. Ne répète pas automatiquement une action incertaine.","id:string","operation:string","steps:array?","offset:integer?","retry_failed:boolean?");
         add(all,"files_capabilities","Ce catalogue de schémas, 8 actions par page.","offset:integer?","query:string?");
         add(all,"document_create","Crée sans écraser : pdf/docx avec title et text ; xlsx/csv avec rows ; pptx avec slides [{title,text}] ; json avec data ; txt avec text. Office : texte et valeurs simples, pas de macros, formules ou édition arbitraire d’un document existant.","path:string","format:string","title:string?","text:string?","rows:array?","slides:array?","data:object?");
-        add(all,"document_read","Extraction PDF/DOCX/images (OCR local si nécessaire).","path:string","page:integer?","page_count:integer?","offset:integer?");
+        add(all,"document_read","Extraction PDF/DOCX/images, valeurs XLSX et texte PPTX (OCR local si nécessaire ; formules non calculées).","path:string","page:integer?","page_count:integer?","offset:integer?");
         add(all,"document_page","Aperçu d’une page PDF, indice à partir de zéro ; autorisation d’aperçus requise.","path:string","page:integer?");
         add(all,"files_preview","Aperçu d’image ou PDF ; autorisation d’aperçus requise.","path:string");
         add(all,"media_info","Durée, pistes, résolution et métadonnées locales.","path:string");

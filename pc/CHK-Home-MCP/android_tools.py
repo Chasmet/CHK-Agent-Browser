@@ -1,7 +1,7 @@
 """Specialized Android tools, preserving the existing android_action transport."""
 from __future__ import annotations
 
-FILES = {op: "files_" + op for op in ("stat", "hash", "self_test", "list", "catalog", "mkdir", "write_text", "read_text", "copy", "move", "trash", "trash_list", "restore", "zip", "unzip", "preview", "external")}
+FILES = {op: "files_" + op for op in ("stat", "hash", "self_test", "list", "catalog", "mkdir", "write_text", "edit_text", "read_text", "copy", "move", "trash", "trash_list", "restore", "zip", "unzip", "preview", "external")}
 MEDIA = {op: op for op in ("media_info", "media_frame", "media_codecs", "media_model_status", "media_transcribe", "video_editor_project_read", "video_editor_project_save", "video_editor_project_list", "video_editor_project_new", "video_editor_project_open", "video_editor_export", "video_editor_status", "video_editor_wait", "video_editor_verify_output", "video_editor_cancel", "document_read", "document_page")}
 TRANSFERS = {op: "files_transfer_" + op for op in ("begin", "write", "read", "status", "commit", "abort")}
 
@@ -43,7 +43,7 @@ def catalog() -> list[dict]:
         tool("android_capabilities", "Catalogue réel et versionné des actions de l'APK Android, paginé. À consulter avant une action nouvelle.",
              dict(offset=integer, query=string())),
         tool("android_files", "Fichiers ANDROID : lecture/écriture, SHA-256, copie, renommage, corbeille, ZIP et dossiers SAF autorisés. Vérifier success et message ; pending se lit via android_result.",
-             dict(operation=enum(FILES), path=path, destination=path, text=string(), overwrite={"type": "boolean"},
+             dict(operation=enum(FILES), path=path, destination=path, text=string(), expected_sha256=string(), overwrite={"type": "boolean"},
                   id=string(), query=string(), offset=integer, folder=path, category=string(), sort=string(),
                   external_operation=enum(("external_roots", "external_request_access", "external_list", "external_import", "external_export", "external_read_text", "external_rename", "external_mkdir")),
                   root_id=string(), source=path, name=string()), ("operation",)),
