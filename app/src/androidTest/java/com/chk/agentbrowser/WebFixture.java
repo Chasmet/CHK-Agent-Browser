@@ -39,6 +39,9 @@ final class WebFixture {
         String token=UUID.randomUUID().toString();
         String page=html+"<script>window.__chkFixturePage='"+token+"';</script>";
         instrumentation.runOnMainSync(()->{
+            // The fixture initiates a new request directly, outside the address
+            // bar/agent path. Reset the previous request's error in the same way.
+            if(web.getContext() instanceof MainActivity)((MainActivity)web.getContext()).clearPageError(web);
             WebViewClient original=web.getWebViewClient();
             if(original instanceof Client)original=((Client)original).delegate;
             web.stopLoading();web.setWebViewClient(new Client(original,url,page));web.loadUrl(url);

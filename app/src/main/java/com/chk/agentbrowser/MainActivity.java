@@ -298,6 +298,9 @@ public class MainActivity extends Activity {
     }
     private void beginNavigation(WebView web){
         Runnable pending=navigationCancels.remove(web);if(pending!=null)pending.run();
+        clearPageError(web);
+    }
+    void clearPageError(WebView web){
         pageErrors.remove(web);pageErrorUrls.remove(web);updatePageError();
     }
     private void updatePageError(){
