@@ -45,7 +45,7 @@ public final class Local2Client {
             URL parsed = new URL(value);
             String hostname = parsed.getHost().toLowerCase(java.util.Locale.ROOT);
             if (!"https".equals(parsed.getProtocol()) ||
-                parsed.getUserInfo() != null || parsed.getQuery() != null ||
+                parsed.getAuthority().contains("@") || parsed.getQuery() != null ||
                 parsed.getRef() != null)
                 throw new IllegalArgumentException("Adresse MCP HTTPS invalide.");
             String path = parsed.getPath();
