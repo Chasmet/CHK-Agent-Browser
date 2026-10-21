@@ -1,0 +1,118 @@
+name: CHK Home MCP - Cloudflare Real POST Regression
+on:
+  push:
+    branches: [feature/pc-home-mcp-20261021]
+    paths:
+      - '.github/workflows/chk-home-real-post-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-cloudflare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Start isolated CHK Home MCP and quick HTTPS tunnel with generated test-only key
+        shell: bash
+        run: |
+          set -euo pipefail
+          python pc/CHK-Home-MCP/chk_home_mcp.py > /tmp/chk-home-backend.log 2>&1 &
+          echo $! > /tmp/chk-home-backend.pid
+          for t in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8766/health >/dev/null; then break; fi
+            sleep 0.25
+          done
+          curl -fsSL --retry 2 https://github.com/cloudflare/cloudflared/releases/download/2026.9.0/cloudflared-linux-amd64 -o /tmp/cloudflared
+          echo "53b7a7a5420d188758d24341294acb0d1bca54296548ac05e38811a694ac6134  /tmp/cloudflared" | sha256sum -c -
+          chmod +x /tmp/cloudflared
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8766 --loglevel info > /tmp/cloudflared-test.log 2>&1 &
+          echo $! > /tmp/cloudflared-test.pid
+      - name: Verify full POST initialize and tools/list via temporary public Cloudflare HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib, re, time, urllib.request, urllib.error
+          logpath=pathlib.Path("/tmp/cloudflared-test.log")
+          base=None
+          for attempt in range(80):
+            if logpath.exists():
+              m=re.search(r'https://[a-z0-9-]+\.trycloudflare\.com', logpath.read_text(errors="replace"))
+              if m:
+                base=m.group(0)
+                break
+            time.sleep(1)
+          if not base:
+            print("Cloudflare quick tunnel did not supply a hostname.")
+            print(logpath.read_text(errors="replace")[-1500:] if logpath.exists() else "log missing")
+            raise SystemExit(1)
+          print("QuickTunnel hostname obtained (not printing full hostname).")
+          import sys
+          sys.path.insert(0,"pc/CHK-Home-MCP")
+          import chk_home_mcp as mcp
+          secret=mcp.init_config()["secret"]
+          init=json.dumps({"jsonrpc":"2.0","id":1,"method":"initialize",
+                           "params":{"protocolVersion":"2025-06-18",
+                           "capabilities":{},
+                           "clientInfo":{"name":"GitHub live test","version":"1"}}}).encode()
+          def request(path, method="GET", payload=None):
+            req=urllib.request.Request(base+path,method=method,data=payload,
+                  headers={"Content-Type":"application/json","Accept":"application/json, text/event-stream"})
+            try:
+              with urllib.request.urlopen(req,timeout=8) as rsp:
+                return rsp.status,rsp.read(10000)
+            except urllib.error.HTTPError as err:
+              return err.code,err.read(10000)
+          failures=[]
+          for attempt in range(24):
+            try:
+              code,_=request("/health")
+              if code==200: break
+              print("Waiting for public tunnel handshake: HTTP",code)
+            except Exception as e:
+              print("Waiting for public tunnel:",type(e).__name__)
+            time.sleep(2)
+          else:
+            raise SystemExit("QuickTunnel never reached MCP origin")
+          cases=[
+            ("POST without auth", "/mcp", "POST", init, 401),
+            ("POST bad secret", "/mcp/"+"0"*64, "POST", init, 401),
+            ("POST valid initialize", "/mcp/"+secret, "POST", init, 200),
+            ("POST valid tools list", "/mcp/"+secret, "POST",
+                 json.dumps({"jsonrpc":"2.0","id":2,"method":"tools/list"}).encode(), 200),
+            ("GET health", "/health", "GET", None, 200)
+          ]
+          for name,path,method,payload,expected in cases:
+            try:
+              status,body=request(path,method,payload)
+              result = None
+              if status==200 and name=="POST valid initialize":
+                result=json.loads(body)
+                if result.get("result",{}).get("serverInfo",{}).get("name")!="CHK Home MCP":
+                  failures.append("initialize wrong MCP response")
+              if status==200 and name=="POST valid tools list":
+                result=json.loads(body)
+                if len(result.get("result",{}).get("tools",[]))!=10:
+                  failures.append("tools/list missing tools")
+              print(name, "status", status, "expected", expected)
+              if status!=expected:
+                print("Unexpected payload type:",body[:110].decode("utf-8","replace"))
+                failures.append(name + " HTTP " + str(status))
+            except Exception as e:
+              print(name, "failed", type(e).__name__)
+              failures.append(name + ": "+type(e).__name__)
+          if failures: raise SystemExit("Failed validations: "+"; ".join(failures))
+          print("PASS: public Cloudflare QuickTunnel handles real authenticated MCP initialize and tools/list.")
+          PY
+      - name: Display minimal diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "Cloudflared connection states (sanitize URL):"
+          if test -f /tmp/cloudflared-test.log; then
+            grep -E '(Registered tunnel connection|ERR|error|connection)' /tmp/cloudflared-test.log | sed -E 's#https://[a-z0-9-]+\.trycloudflare\.com#[ephemeral-cloudflare-host]#g' | tail -25 || true
+          fi

@@ -80,7 +80,25 @@ public final class AgentClient {
         return instance;
     }
     public boolean isEnabled() { return settings.getBoolean("enabled", false); }
-    public String mcpUrl() { return settings.getString("mcp_url", ""); }
+    public boolean isDirectMode() { return settings.getBoolean("direct_mode", false); }
+    public String mcpUrl() {
+        return isDirectMode() ? DirectMcpServer.privateUrl(app) : settings.getString("mcp_url", "");
+    }
+    /** No registration, polling, heartbeat, or file transfer to Render in direct mode. */
+    public void enableDirect() {
+        DirectMcpServer.secret(app);
+        running = false;
+        generation++;
+        ui.removeCallbacks(tick);
+        ui.removeCallbacks(expiry);
+        pending = null;
+        presenting = false;
+        // Preserve old relay receipts for a possible explicit future migration.
+        settings.edit().putBoolean("direct_mode", true)
+            .putBoolean("enabled", true).commit();
+        lastError = "";
+        AgentLog.add(app,"mcp","mode serveur local Tailscale activé ; aucun relais Render");
+    }
     String deviceTokenForTransfers(){ return token(); }
     public String lastCommandStatus(){
         String action=settings.getString("last_command_action","");
@@ -97,6 +115,8 @@ public final class AgentClient {
     }
     public String shortConnectionStatus(){
         if(!isEnabled())return "MCP désactivé";
+        if(isDirectMode())return AgentService.directRunning()
+            ? "MCP direct Tailscale actif · sans Render" : "Serveur direct en attente";
         if(!running)return "Connexion arrêtée · ouvrir Réglages";
         if(!lastError.isEmpty()||(lastContact>0&&SystemClock.elapsedRealtime()-lastContact>45000L))
             return "Reconnexion à ChatGPT en cours…";
@@ -105,6 +125,9 @@ public final class AgentClient {
     }
     public String connectionStatus(){
         if(!isEnabled())return "MCP désactivé";
+        if(isDirectMode())return AgentService.directRunning()
+            ? "Serveur local Android actif sur le port 8765 · HTTPS public non configuré · 0 appel Render"
+            : "Démarrage du serveur local · aucune connexion Render";
         if(!running)return "Service arrêté : ouvre le navigateur pour reprendre";
         if(!lastError.isEmpty())return "Reconnexion automatique · " + lastError;
         if(lastContact==0)return "Connexion au relais en cours…";
@@ -113,7 +136,9 @@ public final class AgentClient {
             ((SystemClock.elapsedRealtime()-lastContact)/1000) + " s";
     }
     public void reconnect(){
+        if(isDirectMode()) return;
         ui.post(()->{
+            if(isDirectMode())return;
             if(!running||!isEnabled())return;
             long now=SystemClock.elapsedRealtime();
             if(now-lastReconnectRequest<1200L)return;
@@ -159,6 +184,11 @@ public final class AgentClient {
         return key;
     }
     public void enable(RegistrationCallback callback) {
+        if (isDirectMode()) {
+            ui.post(() -> callback.completed(false,
+                "Mode MCP direct actif : ne pas appeler Render."));
+            return;
+        }
         io.execute(() -> {
             try {
                 JSONObject request = new JSONObject(); request.put("device_token", token());
@@ -184,6 +214,12 @@ public final class AgentClient {
     }
     /** Called only from the Android foreground Service. */
     public void startServiceMode(IncomingListener listener) {
+        if(isDirectMode()) {
+            running = false;
+            ui.removeCallbacks(tick);
+            incoming = null;
+            return;
+        }
         incoming = listener;
         if(!isEnabled()) return;
         running = true;
@@ -209,8 +245,78 @@ public final class AgentClient {
             deliverPending();
         }
     }
+    /** Dispatch local Tailscale MCP requests through the exact same Android handlers as the UI. */
+    void executeDirect(String action, JSONObject args, DirectMcpServer.Reply reply) {
+        ui.post(() -> {
+            if (!isEnabled() || !isDirectMode()) {
+                reply.finish(false, "MCP direct désactivé."); return;
+            }
+            if (!isAutonomous()) {
+                reply.finish(false, "Autorise le mode autonome dans les réglages CHK."); return;
+            }
+            CommandHandler receiver = activeHandler();
+            if (receiver == null) {
+                reply.finish(false, "Aucun navigateur CHK actif."); return;
+            }
+            JSONObject command = new JSONObject();
+            try {
+                command.put("id", "direct-local");
+                command.put("action", action);
+                command.put("args", args);
+            } catch (org.json.JSONException fail) {
+                reply.finish(false, "Commande invalide."); return;
+            }
+            try {
+                receiver.onCommand(command, (ok, message) -> reply.finish(ok, message));
+            } catch (RuntimeException fail) {
+                reply.finish(false, "Erreur locale : " + fail.getClass().getSimpleName());
+            }
+        });
+    }
+
+    public void executeLocal2(String action, JSONObject args, DirectMcpServer.Reply reply) {
+        ui.post(() -> {
+            if (!Local2Client.get(app).enabled() || !isAutonomous()) {
+                reply.finish(false, "Local 2 ou mode autonome désactivé."); return;
+            }
+            CommandHandler receiver = activeHandler();
+            if(receiver == null) { reply.finish(false, "Navigateur CHK indisponible."); return; }
+            try {
+                if ("browser_status".equals(action)) {
+                    reply.finish(true, "Android actif ; page : " + receiver.pageUrl()); return;
+                }
+                String translated;
+                switch (action) {
+                    case "browser_tabs": translated = "tabs"; break;
+                    case "browser_read_page": translated = "read_page"; break;
+                    case "browser_open_url": translated = "open_url"; break;
+                    case "browser_click": translated = "click"; break;
+                    case "browser_type": translated = "type"; break;
+                    case "browser_scroll": translated = "scroll"; break;
+                    case "browser_get_form": translated = "get_form"; break;
+                    default: reply.finish(false, "Action navigateur inconnue."); return;
+                }
+                if ("browser_open_url".equals(action) &&
+                    (!args.optString("url", "").startsWith("https://") ||
+                     args.optString("url", "").length() > 2000)) {
+                    reply.finish(false, "URL HTTPS invalide."); return;
+                }
+                if (("browser_click".equals(action) || "browser_type".equals(action)) &&
+                    (args.optString("selector", "").isEmpty() ||
+                     args.optString("selector", "").length() > 350)) {
+                    reply.finish(false, "Sélecteur invalide."); return;
+                }
+                if ("browser_type".equals(action) &&
+                    args.optString("text", "").length() > 8000) {
+                    reply.finish(false, "Texte trop long."); return;
+                }
+                JSONObject cmd = new JSONObject().put("id","local2").put("action",translated).put("args",args);
+                receiver.onCommand(cmd, (ok, message) -> reply.finish(ok, message));
+            } catch(Exception e) { reply.finish(false, "Commande refusée : "+e.getClass().getSimpleName()); }
+        });
+    }
     private void poll() {
-        if(!running || !isEnabled()) return;
+        if(isDirectMode() || !running || !isEnabled()) return;
         if(inFlight) { ui.removeCallbacks(tick);ui.postDelayed(tick, 1200L); return; }
         inFlight = true;
         final int requestGeneration=generation;
@@ -357,6 +463,7 @@ public final class AgentClient {
         HttpFailure(int code){super("HTTP "+code);status=code;}
     }
     private JSONObject request(String method, String path, JSONObject body, boolean auth) throws Exception {
+        if (isDirectMode()) throw new java.io.IOException("Mode MCP direct : réseau Render désactivé.");
         HttpURLConnection c = null;
         final long requestStarted=SystemClock.elapsedRealtime();
         boolean completed=false;

@@ -1,0 +1,93 @@
+"""Isolated, bounded command mailbox for CHK Android via Windows Local 2.
+
+The mailbox never calls Render and does not execute Android commands itself.
+Authentication and HTTP exposure belong to the calling Windows MCP handler.
+Only one active lease exists per command; repeated polls return the same lease.
+"""
+from __future__ import annotations
+import threading
+import time
+import uuid
+
+ALLOWED_ACTIONS = frozenset({
+    "browser_status", "browser_tabs", "browser_read_page",
+    "browser_open_url", "browser_click", "browser_type",
+    "browser_scroll", "browser_get_form",
+})
+
+class AndroidMailbox:
+    def __init__(self, *, ttl: float = 180.0, limit: int = 32):
+        self.ttl, self.limit = ttl, limit
+        self.lock = threading.Condition()
+        self.items = {}
+        self.last_seen = 0.0
+
+    def enqueue(self, action: str, args: dict) -> str:
+        if action not in ALLOWED_ACTIONS or not isinstance(args, dict):
+            raise ValueError("Commande Android non autorisée.")
+        with self.lock:
+            self._expire()
+            if len(self.items) >= self.limit:
+                raise ValueError("File Android saturée.")
+            ident = uuid.uuid4().hex
+            self.items[ident] = {
+                "id": ident, "action": action, "args": dict(args),
+                "state": "queued", "created": time.monotonic(),
+                "result": None,
+            }
+            self.lock.notify_all()
+            return ident
+
+    def _expire(self) -> None:
+        now = time.monotonic()
+        for item in self.items.values():
+            if item["state"] in ("queued", "leased") and now - item["created"] > self.ttl:
+                item["state"], item["result"] = "expired", {
+                    "success": False, "message": "Délai Android dépassé ; vérifier avant de relancer."
+                }
+
+    def poll(self) -> dict | None:
+        with self.lock:
+            self._expire()
+            self.last_seen = time.monotonic()
+            for item in self.items.values():
+                if item["state"] == "queued":
+                    item["state"] = "leased"
+                    return {k: item[k] for k in ("id", "action", "args")}
+            return None
+
+    def resolve(self, ident: str, success: bool, message: str) -> bool:
+        with self.lock:
+            item = self.items.get(ident)
+            if item is None or item["state"] != "leased":
+                return False
+            if not isinstance(success, bool) or not isinstance(message, str):
+                return False
+            item["result"] = {"success": success, "message": message[:24000]}
+            item["state"] = "done"
+            self.lock.notify_all()
+            return True
+
+    def await_result(self, ident: str, timeout: float = 30.0) -> dict:
+        deadline = time.monotonic() + min(max(timeout, 0), self.ttl)
+        with self.lock:
+            while True:
+                self._expire()
+                item = self.items.get(ident)
+                if item is None:
+                    raise ValueError("Commande inconnue.")
+                if item["state"] in ("done", "expired"):
+                    return {"id": ident, "state": item["state"], **item["result"]}
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return {"id": ident, "state": "pending",
+                            "success": False, "message": "Android n'a pas encore répondu."}
+                self.lock.wait(min(remaining, 1.0))
+
+    def status(self) -> dict:
+        with self.lock:
+            self._expire()
+            return {"android_recent": self.last_seen > 0 and
+                    time.monotonic() - self.last_seen < 45,
+                    "queued": sum(x["state"] == "queued" for x in self.items.values()),
+                    "leased": sum(x["state"] == "leased" for x in self.items.values())}

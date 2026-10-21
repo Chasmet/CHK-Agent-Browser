@@ -56,6 +56,61 @@ public final class SettingsActivity extends Activity {
             Toast.makeText(this,enabled?"Mode éco activé : le traitement en veille peut être retardé":"Mode MCP réactif activé",Toast.LENGTH_LONG).show();
         });
         group.addView(ecoMode);
+        Button directMcp = new Button(this);
+        directMcp.setText("Activer le serveur MCP DIRECT sur mon téléphone (0 Render)");
+        directMcp.setAllCaps(false);
+        directMcp.setOnClickListener(v -> new AgentDialog.Builder(this)
+            .setTitle("MCP direct sur le Honor — sans Render")
+            .setMessage("Le serveur fonctionne uniquement sur Android et le réseau Tailscale privé. " +
+                "Aucun appel à Render ne sera envoyé. Ce mode n'est pas encore une adresse HTTPS " +
+                "publique pour ChatGPT. Activer ce mode arrête la synchronisation Render. " +
+                "Tu peux l'arrêter à tout moment avec Arrêter le MCP.")
+            .setNegativeButton("Annuler", null)
+            .setPositiveButton("Activer le serveur direct", (dialog, which) -> {
+                agent.enableDirect();
+                AgentService.ensureRunning(this);
+                requestNotificationsIfNeeded();
+                showMcp();
+            }).show());
+        group.addView(directMcp);
+        Switch local2 = new Switch(this);
+        local2.setText("CHK Agent Browser Local 2 · PC sans Render/Supabase");
+        local2.setChecked(Local2Client.get(this).enabled());
+        group.addView(local2);
+        Button local2Config = new Button(this);
+        local2Config.setText("Configurer URL HTTPS privée Local 2");
+        local2Config.setAllCaps(false);
+        group.addView(local2Config);
+        TextView local2Status = new TextView(this);
+        local2Status.setText(Local2Client.get(this).status());
+        group.addView(local2Status);
+        local2Config.setOnClickListener(v -> {
+            android.widget.EditText field = new android.widget.EditText(this);
+            field.setSingleLine(true);
+            field.setText(Local2Client.get(this).url());
+            new android.app.AlertDialog.Builder(this).setTitle("MCP Windows Local 2")
+                .setView(field).setNegativeButton("Annuler", null)
+                .setPositiveButton("Enregistrer", (dialog,which) -> {
+                    try {
+                        Local2Client.get(this).configure(field.getText().toString(),local2.isChecked());
+                        AgentService.ensureRunning(this);
+                        local2Status.setText(Local2Client.get(this).status());
+                    } catch(IllegalArgumentException e) {
+                        Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
+                    }
+                }).show();
+        });
+        local2.setOnCheckedChangeListener((button,on) -> {
+            try {
+                Local2Client.get(this).configure(Local2Client.get(this).url(),on);
+                AgentService.ensureRunning(this);
+                if(!on && !agent.isEnabled())stopService(new Intent(this,AgentService.class));
+            }catch(IllegalArgumentException e) {
+                local2.setChecked(false);
+                Toast.makeText(this,"Configure d’abord l’URL Local 2.",Toast.LENGTH_LONG).show();
+            }
+            local2Status.setText(Local2Client.get(this).status());
+        });
         Button publications=new Button(this);
         publications.setText("Publications et campagnes CHK · historique MCP");
         publications.setAllCaps(false);
@@ -116,7 +171,7 @@ public final class SettingsActivity extends Activity {
             startActivity(new Intent(this,DiagnosticActivity.class)));
         mcpDisable.setOnClickListener(v->{
             agent.disable();
-            stopService(new Intent(this, AgentService.class));
+            if(!Local2Client.get(this).enabled())stopService(new Intent(this, AgentService.class));
             showMcp();
         });
         check.setOnClickListener(v->checkUpdate());
@@ -176,7 +231,12 @@ public final class SettingsActivity extends Activity {
     private void showMcp() {
         boolean enabled=agent.isEnabled(), link=!agent.mcpUrl().isEmpty();
         String message=enabled
-            ?"MCP activé. Mode autonome : "+(agent.isAutonomous()?"ACTIF":"DÉSACTIVÉ")+". Service en arrière-plan : activé quand Android le permet."
+            ?(agent.isDirectMode()
+                ?"Serveur MCP DIRECT sur Android (aucun appel Render). Mode autonome : "
+                    +(agent.isAutonomous()?"ACTIF":"DÉSACTIVÉ")
+                    +"\\nTailscale privé : "+DirectMcpServer.tailscaleIp()+":"+DirectMcpServer.PORT
+                    +"\\nATTENTION : adresse privée, non accessible au ChatGPT cloud. HTTPS public à configurer."
+                :"MCP Render historique activé. Mode autonome : "+(agent.isAutonomous()?"ACTIF":"DÉSACTIVÉ"))
             :"MCP désactivé.";
         if(enabled && Build.VERSION.SDK_INT>=33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) {
@@ -195,6 +255,12 @@ public final class SettingsActivity extends Activity {
         mcpDisable.setEnabled(enabled);
     }
     private void connectMcp() {
+        if(agent.isDirectMode()){
+            agent.enableDirect();
+            AgentService.ensureRunning(this);
+            showMcp();
+            return;
+        }
         mcpConnect.setEnabled(false);
         mcpStatus.setText("Connexion sécurisée à Render…");
         agent.enable((ok,message)->{
@@ -212,7 +278,9 @@ public final class SettingsActivity extends Activity {
         if(!agent.isEnabled()||agent.mcpUrl().isEmpty())return;
         ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE))
             .setPrimaryClip(ClipData.newPlainText("Adresse MCP personnelle",agent.mcpUrl()));
-        Toast.makeText(this,"Adresse MCP copiée. Ne la partage pas publiquement.",Toast.LENGTH_LONG).show();
+        Toast.makeText(this,agent.isDirectMode()
+            ?"Adresse Tailscale privée copiée. Non utilisable depuis ChatGPT cloud sans HTTPS public."
+            :"Adresse MCP copiée. Ne la partage pas publiquement.",Toast.LENGTH_LONG).show();
     }
     private void requestNotificationsIfNeeded() {
         if(Build.VERSION.SDK_INT>=33 &&
@@ -318,7 +386,7 @@ public final class SettingsActivity extends Activity {
     @Override public void onResume() {
         super.onResume();
         refresh.removeCallbacks(statusTick);refresh.post(statusTick);
-        if(agent!=null && agent.isEnabled()) {
+        if(agent!=null && (agent.isEnabled() || Local2Client.get(this).enabled())) {
             AgentService.ensureRunning(this);
             requestNotificationsIfNeeded();
             showMcp();
