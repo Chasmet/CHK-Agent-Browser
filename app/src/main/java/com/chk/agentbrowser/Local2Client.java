@@ -39,8 +39,19 @@ public final class Local2Client {
     /** URL is the private HTTPS MCP URL configured on the Windows host. */
     public void configure(String url, boolean on) {
         String value = url == null ? "" : url.trim();
-        if (on && (!value.startsWith("https://") || !value.matches("https://[^ ]+/mcp/[a-f0-9]{64}/?")))
-            throw new IllegalArgumentException("URL HTTPS MCP privée attendue.");
+        if (on) {
+            try {
+                URL parsed = new URL(value);
+                String hostname = parsed.getHost().toLowerCase(java.util.Locale.ROOT);
+                if (!"https".equals(parsed.getProtocol()) ||
+                    !hostname.endsWith(".ts.net") ||
+                    !parsed.getPath().matches("/mcp/[a-f0-9]{64}/?") ||
+                    !(parsed.getPort() == 8443 || parsed.getPort() == -1))
+                    throw new IllegalArgumentException("Utilise l’URL HTTPS du PC Tailscale, pas la passerelle Supabase.");
+            } catch (java.net.MalformedURLException invalid) {
+                throw new IllegalArgumentException("Adresse HTTPS MCP du PC invalide.");
+            }
+        }
         preferences.edit().putString("url", value).putBoolean("enabled", on).apply();
         if (!on) stop();
     }

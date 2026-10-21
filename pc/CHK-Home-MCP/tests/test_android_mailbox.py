@@ -22,6 +22,22 @@ class AndroidMailboxTests(unittest.TestCase):
         queue.enqueue("browser_status", {})
         self.assertIsNotNone(queue.poll())
         self.assertIsNone(queue.poll())
+    def test_browser_batch(self):
+        queue = AndroidMailbox()
+        ident = queue.enqueue("browser_batch", {"steps": [
+            {"action": "browser_open_url", "args": {"url": "https://example.com"}},
+            {"action": "browser_read_page", "args": {}},
+        ]})
+        task = queue.poll()
+        self.assertEqual(task["id"], ident)
+        self.assertEqual(len(task["args"]["steps"]), 2)
+        self.assertTrue(queue.resolve(ident, True, "completed"))
+        self.assertEqual(queue.await_result(ident)["state"], "done")
+        for steps in ([], [{"action": "exec_shell", "args": {}}],
+                      [{"action": "browser_batch", "args": {}}]):
+            with self.assertRaises(ValueError):
+                queue.enqueue("browser_batch", {"steps": steps})
+
     def test_capacity(self):
         queue = AndroidMailbox(limit=1)
         queue.enqueue("browser_tabs", {})

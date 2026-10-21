@@ -4,6 +4,7 @@ on:
     branches:
       - feature/pc-home-mcp-20261021
       - feature/android-local2-bridge-20261021
+      - feature/local2-batched-android-20261021
     paths:
       - 'pc/CHK-Home-MCP/**'
       - '.github/workflows/chk-home-mcp-windows.yml'

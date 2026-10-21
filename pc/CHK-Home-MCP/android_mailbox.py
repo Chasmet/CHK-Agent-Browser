@@ -12,7 +12,7 @@ import uuid
 ALLOWED_ACTIONS = frozenset({
     "browser_status", "browser_tabs", "browser_read_page",
     "browser_open_url", "browser_click", "browser_type",
-    "browser_scroll", "browser_get_form",
+    "browser_scroll", "browser_get_form", "browser_batch",
 })
 
 class AndroidMailbox:
@@ -25,9 +25,18 @@ class AndroidMailbox:
     def enqueue(self, action: str, args: dict) -> str:
         if action not in ALLOWED_ACTIONS or not isinstance(args, dict):
             raise ValueError("Commande Android non autorisée.")
+        if action == "browser_batch":
+            steps = args.get("steps")
+            if not isinstance(steps, list) or not 1 <= len(steps) <= 12:
+                raise ValueError("Lot Android : 1 à 12 étapes requises.")
+            if any(not isinstance(s, dict) or s.get("action") not in
+                   ALLOWED_ACTIONS - {"browser_batch"} or
+                   not isinstance(s.get("args", {}), dict) for s in steps):
+                raise ValueError("Étape Android non autorisée.")
         with self.lock:
             self._expire()
-            if len(self.items) >= self.limit:
+            if sum(item["state"] in ("queued", "leased")
+                   for item in self.items.values()) >= self.limit:
                 raise ValueError("File Android saturée.")
             ident = uuid.uuid4().hex
             self.items[ident] = {
@@ -40,6 +49,9 @@ class AndroidMailbox:
 
     def _expire(self) -> None:
         now = time.monotonic()
+        for ident, item in list(self.items.items()):
+            if item["state"] in ("done", "expired") and now - item["created"] > self.ttl * 2:
+                del self.items[ident]
         for item in self.items.values():
             if item["state"] in ("queued", "leased") and now - item["created"] > self.ttl:
                 item["state"], item["result"] = "expired", {
