@@ -35,7 +35,8 @@ class AndroidMailbox:
                 raise ValueError("Étape Android non autorisée.")
         with self.lock:
             self._expire()
-            if len(self.items) >= self.limit:
+            if sum(item["state"] in ("queued", "leased")
+                   for item in self.items.values()) >= self.limit:
                 raise ValueError("File Android saturée.")
             ident = uuid.uuid4().hex
             self.items[ident] = {
@@ -48,6 +49,9 @@ class AndroidMailbox:
 
     def _expire(self) -> None:
         now = time.monotonic()
+        for ident, item in list(self.items.items()):
+            if item["state"] in ("done", "expired") and now - item["created"] > self.ttl * 2:
+                del self.items[ident]
         for item in self.items.values():
             if item["state"] in ("queued", "leased") and now - item["created"] > self.ttl:
                 item["state"], item["result"] = "expired", {
