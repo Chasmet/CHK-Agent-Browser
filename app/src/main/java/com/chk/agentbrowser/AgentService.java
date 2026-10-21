@@ -17,6 +17,7 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkRequest;
 import android.os.SystemClock;
+import org.json.JSONObject;
 
 /**
  * A user-enabled persistent MCP foreground service. Background WebView actions
@@ -32,6 +33,11 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     private static volatile AgentService instance;
     private NotificationManager notifications;
     private BackgroundBrowser background;
+    private DirectMcpServer direct;
+    public static boolean directRunning() {
+        AgentService running = instance;
+        return running != null && running.direct != null && running.direct.listening();
+    }
     private boolean deliberateStop=false;
     private PowerManager.WakeLock sessionLock;
     private ConnectivityManager connectivity;
@@ -40,7 +46,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     private final Handler main=new Handler(android.os.Looper.getMainLooper());
     private final Runnable maintenance=new Runnable(){
         @Override public void run(){
-            if(!AgentClient.get(AgentService.this).isEnabled())return;
+            if(!AgentClient.get(AgentService.this).isEnabled() && !Local2Client.get(AgentService.this).enabled())return;
             maintainSessionLock();
             AgentClient.get(AgentService.this).reconnect();
             refreshNotification();
@@ -56,7 +62,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     }
 
     public static void ensureRunning(Context context) {
-        if(!AgentClient.get(context).isEnabled())return;
+        if(!AgentClient.get(context).isEnabled() && !Local2Client.get(context).enabled())return;
         Intent intent=new Intent(context,AgentService.class);
         try{
             if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent);
@@ -146,7 +152,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             stopForeground(true);stopSelf();
             return START_NOT_STICKY;
         }
-        if(!AgentClient.get(this).isEnabled()){
+        if(!AgentClient.get(this).isEnabled() && !Local2Client.get(this).enabled()){
             deliberateStop=true;
             stopSelf();return START_NOT_STICKY;
         }
@@ -172,6 +178,45 @@ public final class AgentService extends Service implements AgentClient.IncomingL
                 background=null;
             }
         }
+        if (AgentClient.get(this).isDirectMode()) {
+            if (direct == null) {
+                try {
+                    direct = new DirectMcpServer(this, new DirectMcpServer.Runner() {
+                        @Override public boolean active() {
+                            AgentClient c = AgentClient.get(AgentService.this);
+                            return c.isEnabled() && c.isDirectMode();
+                        }
+                        @Override public JSONObject status() {
+                            JSONObject state = new JSONObject();
+                            try {
+                                state.put("online", directRunning());
+                                state.put("transport", "private-Tailscale-no-Render");
+                                state.put("public_https", false);
+                                state.put("cloud_chatgpt_access", false);
+                                state.put("autonomous", AgentClient.get(AgentService.this).isAutonomous());
+                                state.put("page", latestBackgroundUrl());
+                            } catch (org.json.JSONException ignored) {}
+                            return state;
+                        }
+                        @Override public void execute(String action, JSONObject args,
+                                                      DirectMcpServer.Reply callback) {
+                            AgentClient.get(AgentService.this).executeDirect(action, args, callback);
+                        }
+                    });
+                    direct.start();
+                    AgentLog.add(this,"mcp","serveur privé Tailscale sur Android démarré ; 0 appel Render");
+                } catch (Exception failure) {
+                    if (direct != null) direct.close();
+                    direct = null;
+                    AgentLog.add(this,"mcp","échec serveur direct : " + failure.getClass().getSimpleName());
+                }
+            }
+        } else if (direct != null) {
+            direct.close();
+            direct = null;
+        }
+        if (Local2Client.get(this).enabled()) Local2Client.get(this).start();
+        else Local2Client.get(this).stop();
         main.removeCallbacks(maintenance);main.post(maintenance);
         AgentClient.get(this).startServiceMode(this);
         return START_STICKY;
@@ -253,6 +298,11 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         if(connectivity!=null&&networkCallback!=null){
             try{connectivity.unregisterNetworkCallback(networkCallback);}catch(RuntimeException ignored){}
         }
+        if (direct != null) {
+            direct.close();
+            direct = null;
+        }
+        Local2Client.get(this).stop();
         AgentClient.get(this).stopServiceMode();
         if(background!=null){
             AgentClient.get(this).removeBackgroundHandler(background);
