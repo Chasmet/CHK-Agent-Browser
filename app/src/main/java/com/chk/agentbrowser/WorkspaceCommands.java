@@ -30,7 +30,7 @@ public final class WorkspaceCommands {
             }});return;
         }
         if(action.startsWith("video_editor_")){
-            VideoEditorEngine.get().command(app,action,args,(ok,result)->cb.finish(ok,result));
+            VideoEditorEngine.get().command(app,action,args,(ok,result)->finish(cb,ok,result));
             return;
         }
         if(action.equals("files_import")){
