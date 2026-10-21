@@ -1,4 +1,5 @@
 """Functional regression tests: protocol, capability auth and workspace isolation."""
+import http.client
 import json
 import sys
 import tempfile
@@ -48,6 +49,33 @@ class WindowsMcpTest(unittest.TestCase):
                 mcp.safe_tool_action("files_read_text", {"path": bad}, self.cfg)
         with self.assertRaises(ValueError):
             mcp.safe_tool_action("run_shell", {"command": "whoami"}, self.cfg)
+
+    def test_authenticated_missing_content_type_via_reverse_proxy(self):
+        server = mcp.LocalMcpServer(("127.0.0.1", 0), mcp.Handler)
+        server.cfg = self.cfg
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        payload = json.dumps({"jsonrpc": "2.0", "id": 3, "method": "initialize",
+                              "params": {"protocolVersion": "2025-06-18"}}).encode()
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=4)
+            conn.request("POST", "/mcp/" + "e"*64, body=payload,
+                         headers={"Content-Length": str(len(payload))})
+            reply = conn.getresponse()
+            self.assertEqual(reply.status, 200)
+            self.assertEqual(json.loads(reply.read())["result"]["serverInfo"]["name"], "CHK Home MCP")
+            conn.close()
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=4)
+            conn.request("POST", "/mcp/" + "e"*64, body=payload,
+                         headers={"Content-Type": "text/plain"})
+            reply = conn.getresponse()
+            self.assertEqual(reply.status, 415)
+            reply.read()
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(3)
 
     def test_real_http_security_and_mcp(self):
         server = mcp.LocalMcpServer(("127.0.0.1", 0), mcp.Handler)
