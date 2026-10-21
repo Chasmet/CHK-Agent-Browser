@@ -274,10 +274,53 @@ public final class AgentClient {
         });
     }
 
+    /** Runs a bounded Android browser workflow without intermediary MCP calls. */
+    private void executeLocal2Batch(org.json.JSONArray steps, int index,
+                                    org.json.JSONArray results,
+                                    DirectMcpServer.Reply finish) {
+        if (!Local2Client.get(app).enabled() || !isAutonomous()) {
+            finish.finish(false, "Canal Local 2 interrompu."); return;
+        }
+        if (index >= steps.length()) {
+            finish.finish(true, results.toString()); return;
+        }
+        try {
+            JSONObject step = steps.getJSONObject(index);
+            String next = step.getString("action");
+            if ("browser_batch".equals(next)) {
+                finish.finish(false, "Lots imbriqués interdits."); return;
+            }
+            executeLocal2(next, step.optJSONObject("args") == null
+                ? new JSONObject() : step.getJSONObject("args"), (ok, message) -> {
+                ui.post(() -> {
+                    try {
+                        results.put(new JSONObject().put("step", index + 1)
+                            .put("action", next).put("success", ok)
+                            .put("result", message == null ? "" : limit(message, 2000)));
+                        if (!ok) finish.finish(false, results.toString());
+                        else executeLocal2Batch(steps, index + 1, results, finish);
+                    } catch (Exception error) {
+                        finish.finish(false, "Erreur de suivi du lot Android.");
+                    }
+                });
+            });
+        } catch(Exception error) {
+            finish.finish(false, "Étape de lot invalide.");
+        }
+    }
+
     public void executeLocal2(String action, JSONObject args, DirectMcpServer.Reply reply) {
         ui.post(() -> {
             if (!Local2Client.get(app).enabled() || !isAutonomous()) {
                 reply.finish(false, "Local 2 ou mode autonome désactivé."); return;
+            }
+            if ("browser_batch".equals(action)) {
+                org.json.JSONArray steps = args.optJSONArray("steps");
+                if (steps == null || steps.length() < 1 || steps.length() > 12) {
+                    reply.finish(false, "Lot : 1 à 12 étapes maximum."); return;
+                }
+                executeLocal2Batch(steps, 0, new org.json.JSONArray(), reply);
+                return;
             }
             CommandHandler receiver = activeHandler();
             if(receiver == null) { reply.finish(false, "Navigateur CHK indisponible."); return; }
