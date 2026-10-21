@@ -168,7 +168,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             stopSelf();
             return START_NOT_STICKY;
         }
-        if(background==null) {
+        if(background==null && AgentClient.get(this).isEnabled()) {
             try {
                 background=new BackgroundBrowser(this);
                 background.restore();

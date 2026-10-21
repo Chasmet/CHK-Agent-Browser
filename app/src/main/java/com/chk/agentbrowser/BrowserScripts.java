@@ -72,6 +72,11 @@ public final class BrowserScripts {
             +"if(el.disabled)return 'Élément désactivé';el.scrollIntoView({block:'center',inline:'center'});mark(el);el.click();return 'Clic effectué';"
             +"}catch(e){return 'Erreur : '+e.message;}})()";
     }
+    public static String valueMatches(String selectorLiteral,String expectedLiteral){
+        return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");"
+            +"if(!el||el.disabled)return false;return String(el.isContentEditable?el.textContent:el.value)==="+expectedLiteral+";"
+            +"}catch(e){return false;}})()";
+    }
 
     public static String select(String selectorLiteral,String valueLiteral,String labelLiteral,int index) {
         return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Menu introuvable';"

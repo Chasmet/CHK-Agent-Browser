@@ -10,6 +10,8 @@ import java.util.WeakHashMap;
 final class BrowserWebState {
     private static final Map<WebView,String> URLS=new WeakHashMap<>();
     private static final Map<WebView,Long> DOCUMENTS=new WeakHashMap<>();
+    private static final Map<WebView,Long> FINISHED=new WeakHashMap<>();
+    private static final Map<WebView,Long> FINISHED_AT=new WeakHashMap<>();
     private static final Set<WebView> CLOSED=Collections.newSetFromMap(new WeakHashMap<WebView,Boolean>());
     private BrowserWebState(){}
     /** Called on each main-frame page start, including reloads of the same URL. */
@@ -18,7 +20,14 @@ final class BrowserWebState {
         if(url!=null&&url.startsWith("https://"))URLS.put(web,url);
     }
     static long documentVersion(WebView web){Long version=DOCUMENTS.get(web);return version==null?0:version;}
+    static void finished(WebView web,String url){
+        if(alive(web)&&url!=null&&url.equals(web.getUrl())){
+            FINISHED.put(web,documentVersion(web));FINISHED_AT.put(web,android.os.SystemClock.elapsedRealtime());
+        }
+    }
+    static boolean loaded(WebView web){Long done=FINISHED.get(web);return done!=null&&done==documentVersion(web);}
+    static long loadedAt(WebView web){Long at=FINISHED_AT.get(web);return at==null?0:at;}
     static String url(WebView web){String url=URLS.get(web);return url==null?"https://www.google.com":url;}
     static boolean alive(WebView web){return web!=null&&!CLOSED.contains(web);}
-    static void close(WebView web){CLOSED.add(web);URLS.remove(web);DOCUMENTS.remove(web);}
+    static void close(WebView web){CLOSED.add(web);URLS.remove(web);DOCUMENTS.remove(web);FINISHED.remove(web);FINISHED_AT.remove(web);}
 }

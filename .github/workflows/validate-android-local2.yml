@@ -8,6 +8,7 @@ on:
       - feature/local2-full-android-actions-20261021
       - fix/local2-toggle-activation-20261021
       - fix/local2-verified-connection-20261021
+      - fix/local2-shared-session-20261021
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,7 +37,18 @@ jobs:
       - name: Generate Gradle wrapper
         run: gradle wrapper --gradle-version 8.11.1
       - name: Build and lint Android
-        run: ./gradlew --no-daemon assembleDebug lintDebug --stacktrace
+        run: ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest lintDebug --stacktrace
+      - name: Enable KVM for Local 2 integration checks
+        run: sudo chmod 666 /dev/kvm
+      - name: Test Local 2 without Render and verify shared Android browser
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: aosp_atd
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.Local2SessionIntegrationTest,com.chk.agentbrowser.Local2ProtocolTest,com.chk.agentbrowser.BrowserTabsTranslationIntegrationTest
       - name: Upload debug build for internal testing only
         uses: actions/upload-artifact@v4
         with:

@@ -32,7 +32,7 @@ public final class SettingsActivity extends Activity {
     private Switch autonomousMode, previewMode;
     private final Handler refresh=new Handler();
     private final Runnable statusTick=new Runnable(){
-        @Override public void run(){showMcp();showDownloadProgress();if(local2Status!=null)local2Status.setText(Local2Client.get(SettingsActivity.this).status());refresh.postDelayed(this,2000L);}
+        @Override public void run(){showMcp();showDownloadProgress();if(local2Status!=null)local2Status.setText(Local2Client.get(SettingsActivity.this).status()+"\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+"\nNavigateur : "+agent.local2BrowserSummary());refresh.postDelayed(this,2000L);}
     };
 
     @Override public void onCreate(Bundle state) {

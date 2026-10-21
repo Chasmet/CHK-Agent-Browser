@@ -71,12 +71,15 @@ final class AgentTasks {
     }
     private static boolean readOnly(String action,JSONObject p){return action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","workspace_status","tabs","list_tabs","get_page_status","get_form","wait_for_element","read_page","publication_status","publication_list").contains(action);}
     static JSONObject command(Context c,JSONObject p)throws Exception{
+        return command(c,p,false);
+    }
+    static JSONObject command(Context c,JSONObject p,boolean local2)throws Exception{
         String id=p.getString("id"),op=p.optString("operation","status");File file=AgentFiles.journal(c,"tasks",id);JSONObject state;
         if(op.equals("submit")){
             JSONArray steps=p.getJSONArray("steps");validate(steps);String fingerprint=AgentVision.digest(steps.toString());
             if(file.exists()){state=AgentFiles.read(file);if(!state.getString("fingerprint").equals(fingerprint))throw new Exception("Cet identifiant appartient à une autre tâche.");}
             else{JSONArray rows=new JSONArray();for(int i=0;i<steps.length();i++)rows.put(new JSONObject(steps.getJSONObject(i).toString()).put("state","pending"));state=new JSONObject().put("id",id).put("fingerprint",fingerprint).put("state","ready").put("steps",rows).put("created",System.currentTimeMillis());AgentFiles.save(file,state);}
-            if(state.getString("state").equals("ready"))start(c,file,state);
+            if(state.getString("state").equals("ready"))start(c,file,state,local2);
         }else{
             state=AgentFiles.read(file);
             if(!running.contains(id)&&state.optString("state").equals("running")){
@@ -91,14 +94,14 @@ final class AgentTasks {
                     if(status.equals("failed")&&p.optBoolean("retry_failed",false))step.put("state","pending");
                     if(status.equals("uncertain")&&p.optBoolean("retry_uncertain",false))step.put("state","pending");
                     else if(status.equals("uncertain")&&step.has("verify"))step.put("state","effect_done");
-                }AgentFiles.save(file,state);start(c,file,state);
+                }AgentFiles.save(file,state);start(c,file,state,local2);
             }else if(!op.equals("status"))throw new Exception("Opération de tâche inconnue.");
         }
         return summary(state,p.optInt("offset",0));
     }
-    private static void start(Context c,File file,JSONObject state)throws Exception{
-        if(!AgentClient.get(c).isEnabled()||!AgentClient.get(c).isAutonomous())throw new Exception("Active le MCP et le mode autonome pour une tâche à étapes.");
-        String id=state.getString("id");if(!running.add(id))return;active.put(id,true);state.put("state","running");AgentFiles.save(file,state);WorkspaceCommands.IO.execute(()->new Runner(c,file,id).next());
+    private static void start(Context c,File file,JSONObject state,boolean local2)throws Exception{
+        if(!(local2?Local2Client.get(c).enabled():AgentClient.get(c).isEnabled())||!AgentClient.get(c).isAutonomous())throw new Exception("Active le canal MCP demandé et le mode autonome pour une tâche à étapes.");
+        String id=state.getString("id");if(!running.add(id))return;active.put(id,true);state.put("state","running").put("transport",local2?"local2":"render");AgentFiles.save(file,state);WorkspaceCommands.IO.execute(()->new Runner(c,file,id,local2).next());
     }
     private static JSONObject summary(JSONObject state,int offset)throws Exception{
         JSONArray rows=state.getJSONArray("steps"),page=new JSONArray();if(offset<0||offset>50)throw new Exception("Pagination invalide.");int done=0;
@@ -119,9 +122,9 @@ final class AgentTasks {
         return value;
     }
     private static final class Runner {
-        final Context app;final File file;final String id;
-        Runner(Context c,File f,String id){app=c.getApplicationContext();file=f;this.id=id;}
-        boolean allowed(){try{return AgentClient.get(app).isEnabled()&&AgentClient.get(app).isAutonomous()&&Boolean.TRUE.equals(active.get(id));}catch(Exception e){return false;}}
+        final Context app;final File file;final String id;final boolean local2;final int epoch;
+        Runner(Context c,File f,String id,boolean local2){app=c.getApplicationContext();file=f;this.id=id;this.local2=local2;epoch=Local2Client.get(app).sessionGeneration();}
+        boolean allowed(){try{return (local2?Local2Client.get(app).enabled()&&epoch==Local2Client.get(app).sessionGeneration():AgentClient.get(app).isEnabled())&&AgentClient.get(app).isAutonomous()&&Boolean.TRUE.equals(active.get(id));}catch(Exception e){return false;}}
         void stop(JSONObject state,String reason){try{if(!state.optString("state").equals("cancelled"))state.put("state","paused").put("error",reason);AgentFiles.save(file,state);}catch(Exception ignored){}running.remove(id);}
         void next(){
             JSONObject state=null;try{
@@ -136,7 +139,7 @@ final class AgentTasks {
                 final int stepIndex=index;final boolean verifying=verify;
                 JSONObject command=new JSONObject().put("action",source.getString("action")).put("args",args);
                 java.util.concurrent.atomic.AtomicBoolean received=new java.util.concurrent.atomic.AtomicBoolean();
-                AgentClient.ResultCallback callback=new AgentClient.ResultCallback(){public boolean isActive(){return !received.get()&&allowed();}public void finish(boolean ok,String text){if(!received.compareAndSet(false,true))return;WorkspaceCommands.IO.execute(()->receipt(stepIndex,verifying,ok,text));}};
+                AgentClient.ResultCallback callback=new AgentClient.ResultCallback(){public boolean isLocal2(){return local2;}public boolean isActive(){return !received.get()&&allowed();}public void finish(boolean ok,String text){if(!received.compareAndSet(false,true))return;WorkspaceCommands.IO.execute(()->receipt(stepIndex,verifying,ok,text));}};
                 WorkspaceCommands.UI.post(()->{if(callback.isActive())AgentClient.get(app).executeTaskStep(command,callback);else WorkspaceCommands.IO.execute(this::next);});
                 long timeout=verifying?35000L:"upload_file".equals(source.optString("action"))?180000L:
                     "wait_for_element".equals(source.optString("action"))?35000L:45000L;

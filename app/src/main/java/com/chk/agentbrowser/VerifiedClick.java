@@ -26,7 +26,7 @@ public final class VerifiedClick {
             (expectedSelector.isEmpty() && expectedText.isEmpty() && expectedUrl.isEmpty()) ||
             expectedSelector.length()>340 || expectedText.length()>250 ||
             expectedUrl.length()>500) {
-            callback.finish(false,"Clic vérifié : cible ou condition manquante/invalide.");return;
+            callback.finish(false,"Clic non exécuté : précise selector et expected_selector, expected_text ou expected_url_contains pour vérifier le résultat.");return;
         }
         final long timeout=Math.max(800L,Math.min(20000L,args.optLong("timeout_ms",10000L)));
         final String condition=BrowserScripts.condition(JSONObject.quote(expectedSelector),

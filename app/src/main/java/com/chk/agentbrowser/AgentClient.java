@@ -37,6 +37,10 @@ public final class AgentClient {
     private Activity screen;
     private CommandHandler handler;
     private CommandHandler backgroundHandler;
+    // Local 2 keeps the real Android browser while ChatGPT/Settings is in front.
+    // It must never silently switch to the separate legacy Render WebView.
+    private Activity local2Screen;
+    private CommandHandler local2Handler;
     private IncomingListener incoming;
     private volatile JSONObject pending;
     private long receivedAt;
@@ -58,12 +62,15 @@ public final class AgentClient {
     public interface ResultCallback {
         void finish(boolean success, String result);
         default boolean isActive(){return true;}
+        default boolean isLocal2(){return false;}
     }
     public interface CommandHandler {
         void onCommand(JSONObject command, ResultCallback callback);
         String pageUrl();
         String pageTitle();
         default String sessionSource() { return "background"; }
+        default boolean visible() { return false; }
+        default void workspaceChanged() {}
     }
     public interface RegistrationCallback {void completed(boolean ok, String message); }
     public interface IncomingListener {
@@ -80,6 +87,35 @@ public final class AgentClient {
         return instance;
     }
     public boolean isEnabled() { return settings.getBoolean("enabled", false); }
+    boolean commandEnabled(ResultCallback callback) {
+        return callback.isLocal2() ? Local2Client.get(app).enabled() : isEnabled();
+    }
+    private CommandHandler local2Browser() {
+        return local2Screen != null && !local2Screen.isFinishing() && !local2Screen.isDestroyed()
+            ? local2Handler : null;
+    }
+    void releaseBrowser(Activity activity) {
+        if(local2Screen == activity) { local2Screen = null; local2Handler = null; }
+        detach(activity);
+    }
+    JSONObject local2BrowserStatus() {
+        JSONObject value = new JSONObject();
+        CommandHandler browser = local2Browser();
+        try {
+            value.put("local2_enabled", Local2Client.get(app).enabled())
+                .put("render_enabled", isEnabled()).put("autonomous", isAutonomous())
+                .put("browser_available", browser != null)
+                .put("visible", browser != null && browser.visible())
+                .put("session_source", "shared_android")
+                .put("url", browser == null ? "" : browser.pageUrl());
+        } catch(org.json.JSONException ignored) {}
+        return value;
+    }
+    String local2BrowserSummary() {
+        CommandHandler browser = local2Browser();
+        return browser == null ? "fermé · ouvrir CHK pour la navigation"
+            : browser.visible() ? "onglets Android · affichés" : "onglets Android · CHK en arrière-plan";
+    }
     public boolean isDirectMode() { return settings.getBoolean("direct_mode", false); }
     public String mcpUrl() {
         return isDirectMode() ? DirectMcpServer.privateUrl(app) : settings.getString("mcp_url", "");
@@ -114,6 +150,7 @@ public final class AgentClient {
             "\nDernière commande : "+(lastCommandDurationMs<0?"non mesurée":lastCommandDurationMs+" ms");
     }
     public String shortConnectionStatus(){
+        if(Local2Client.get(app).enabled())return "Local 2 · "+Local2Client.get(app).status();
         if(!isEnabled())return "MCP désactivé";
         if(isDirectMode())return AgentService.directRunning()
             ? "MCP direct Tailscale actif · sans Render" : "Serveur direct en attente";
@@ -236,6 +273,7 @@ public final class AgentClient {
     /** MainActivity overrides the service engine while the visible browser is active. */
     public void attach(Activity activity, CommandHandler h) {
         screen = activity; handler = h;
+        local2Screen = activity; local2Handler = h;
         deliverPending();
     }
     public void detach(Activity activity) {
@@ -277,8 +315,10 @@ public final class AgentClient {
     /** Runs a bounded Android browser workflow without intermediary MCP calls. */
     private void executeLocal2Batch(org.json.JSONArray steps, int index,
                                     org.json.JSONArray results,
-                                    DirectMcpServer.Reply finish) {
-        if (!Local2Client.get(app).enabled() || !isAutonomous()) {
+                                    DirectMcpServer.Reply finish,int epoch,
+                                    java.util.concurrent.atomic.AtomicBoolean completed) {
+        if (completed.get() || epoch!=Local2Client.get(app).sessionGeneration()
+            || !Local2Client.get(app).enabled() || !isAutonomous()) {
             finish.finish(false, "Canal Local 2 interrompu."); return;
         }
         if (index >= steps.length()) {
@@ -298,7 +338,7 @@ public final class AgentClient {
                             .put("action", next).put("success", ok)
                             .put("result", message == null ? "" : limit(message, 2000)));
                         if (!ok) finish.finish(false, results.toString());
-                        else executeLocal2Batch(steps, index + 1, results, finish);
+                        else executeLocal2Batch(steps, index + 1, results, finish,epoch,completed);
                     } catch (Exception error) {
                         finish.finish(false, "Erreur de suivi du lot Android.");
                     }
@@ -310,16 +350,40 @@ public final class AgentClient {
     }
 
     public void executeLocal2(String action, JSONObject args, DirectMcpServer.Reply reply) {
+        final int epoch=Local2Client.get(app).sessionGeneration();
+        final java.util.concurrent.atomic.AtomicBoolean completed=new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable timeout=()->{
+            if(completed.compareAndSet(false,true))reply.finish(false,
+                "Délai Local 2 dépassé · résultat non confirmé, aucune répétition automatique.");
+        };
+        ui.postDelayed(timeout,150000L);
+        executeLocal2Command(action,args,(ok,message)->{
+            if(completed.compareAndSet(false,true)){
+                ui.removeCallbacks(timeout);
+                if(ok && epoch!=Local2Client.get(app).sessionGeneration())
+                    reply.finish(false,"Canal modifié pendant l’action · résultat à vérifier avant toute répétition.");
+                else reply.finish(ok,message);
+            }
+        },epoch,completed);
+    }
+    private void executeLocal2Command(String action, JSONObject args, DirectMcpServer.Reply reply,
+                                     int epoch,java.util.concurrent.atomic.AtomicBoolean completed) {
         ui.post(() -> {
-            if (!Local2Client.get(app).enabled() || !isAutonomous()) {
-                reply.finish(false, "Local 2 ou mode autonome désactivé."); return;
+            if (!Local2Client.get(app).enabled()) {
+                reply.finish(false, "Local 2 désactivé dans Réglages."); return;
+            }
+            if ("browser_status".equals(action)) {
+                reply.finish(true, local2BrowserStatus().toString()); return;
+            }
+            if (!isAutonomous()) {
+                reply.finish(false, "Mode autonome désactivé · active-le dans Réglages pour exécuter les commandes Local 2."); return;
             }
             if ("browser_batch".equals(action)) {
                 org.json.JSONArray steps = args.optJSONArray("steps");
                 if (steps == null || steps.length() < 1 || steps.length() > 12) {
                     reply.finish(false, "Lot : 1 à 12 étapes maximum."); return;
                 }
-                executeLocal2Batch(steps, 0, new org.json.JSONArray(), reply);
+                executeLocal2Batch(steps, 0, new org.json.JSONArray(), reply,epoch,completed);
                 return;
             }
             if ("android_action".equals(action)) {
@@ -329,6 +393,11 @@ public final class AgentClient {
                     reply.finish(false, "Paramètres de commande Android invalides."); return;
                 }
                 try {
+                    if(nativeAction.equals("browser_task_submit")||nativeAction.equals("browser_task_status")){
+                        nativeArgs=new JSONObject(nativeArgs.toString()).put("tool","tasks")
+                            .put("operation",nativeAction.equals("browser_task_submit")?"submit":"status");
+                        nativeAction="desktop";
+                    }
                     JSONObject cmd = new JSONObject().put("id", "local2-native")
                         .put("action", nativeAction).put("args", nativeArgs);
                     boolean allowed = WorkspaceCommands.handles(nativeAction)
@@ -343,7 +412,13 @@ public final class AgentClient {
                     if (!allowed) {
                         reply.finish(false, "Action Android non autorisée."); return;
                     }
+                    if("click".equals(nativeAction))cmd.put("action","click_verified");
                     executeTaskStep(cmd, new ResultCallback() {
+                        @Override public boolean isLocal2() { return true; }
+                        @Override public boolean isActive() {
+                            return !completed.get() && epoch==Local2Client.get(app).sessionGeneration()
+                                && Local2Client.get(app).enabled() && isAutonomous();
+                        }
                         @Override public void finish(boolean ok, String message) {
                             reply.finish(ok, message);
                         }
@@ -353,18 +428,23 @@ public final class AgentClient {
                 }
                 return;
             }
-            CommandHandler receiver = activeHandler();
-            if(receiver == null) { reply.finish(false, "Navigateur CHK indisponible."); return; }
+            CommandHandler receiver = local2Browser();
+            if(receiver == null) { reply.finish(false, "Navigateur Android fermé · ouvre CHK une fois. Aucune navigation cachée exécutée."); return; }
             try {
-                if ("browser_status".equals(action)) {
-                    reply.finish(true, "Android actif ; page : " + receiver.pageUrl()); return;
-                }
                 String translated;
                 switch (action) {
-                    case "browser_tabs": translated = "tabs"; break;
+                    case "browser_tabs":
+                        switch(args.optString("operation","list")){
+                            case "list":translated="tabs";break;
+                            case "new":case "open":translated="new_tab";break;
+                            case "close":translated="close_tab";break;
+                            case "switch":translated="switch_tab";break;
+                            default:reply.finish(false,"Opération onglets inconnue : list, new, close ou switch.");return;
+                        }
+                        break;
                     case "browser_read_page": translated = "read_page"; break;
                     case "browser_open_url": translated = "open_url"; break;
-                    case "browser_click": translated = "click"; break;
+                    case "browser_click": translated = "click_verified"; break;
                     case "browser_type": translated = "type"; break;
                     case "browser_scroll": translated = "scroll"; break;
                     case "browser_get_form": translated = "get_form"; break;
@@ -385,7 +465,15 @@ public final class AgentClient {
                     reply.finish(false, "Texte trop long."); return;
                 }
                 JSONObject cmd = new JSONObject().put("id","local2").put("action",translated).put("args",args);
-                receiver.onCommand(cmd, (ok, message) -> reply.finish(ok, message));
+                receiver.onCommand(cmd, new ResultCallback() {
+                    @Override public boolean isLocal2() { return true; }
+                    @Override public boolean isActive() {
+                        return !completed.get() && epoch==Local2Client.get(app).sessionGeneration()
+                            && Local2Client.get(app).enabled() && isAutonomous()
+                            && local2Browser() == receiver;
+                    }
+                    @Override public void finish(boolean ok, String message) { reply.finish(ok, message); }
+                });
             } catch(Exception e) { reply.finish(false, "Commande refusée : "+e.getClass().getSimpleName()); }
         });
     }
@@ -452,7 +540,21 @@ public final class AgentClient {
     }
     void executeTaskStep(JSONObject command,ResultCallback cb){
         if(!cb.isActive())return;
-        CommandHandler receiver=DesktopCommands.nativeTarget(command)?DesktopCommands.handler(app):KeyboardCommands.nativeTarget(command)?NativeKeyboard.handler(app):activeHandler();
+        String action = command.optString("action", "");
+        if(WorkspaceCommands.handles(action)) {
+            WorkspaceCommands.run(app, action, command.optJSONObject("args") == null
+                ? new JSONObject() : command.optJSONObject("args"), new ResultCallback() {
+                    public boolean isLocal2() { return cb.isLocal2(); }
+                    public boolean isActive() { return cb.isActive(); }
+                    public void finish(boolean ok, String message) {
+                        CommandHandler browser = cb.isLocal2() ? local2Browser() : activeHandler();
+                        if(ok && browser != null) browser.workspaceChanged();
+                        cb.finish(ok, message);
+                    }
+                });
+            return;
+        }
+        CommandHandler receiver=DesktopCommands.nativeTarget(command)?DesktopCommands.handler(app):KeyboardCommands.nativeTarget(command)?NativeKeyboard.handler(app):cb.isLocal2()?local2Browser():activeHandler();
         if(receiver==null){cb.finish(false,"Aucun écran CHK ou moteur web disponible.");return;}
         receiver.onCommand(command,cb);
     }

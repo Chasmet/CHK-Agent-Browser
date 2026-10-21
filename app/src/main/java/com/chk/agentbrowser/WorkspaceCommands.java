@@ -66,7 +66,9 @@ public final class WorkspaceCommands {
                 case "files_catalog":result=WorkspaceCatalog.query(app,args.optString("folder",""),args.optString("category","all"),args.optString("query",""),args.optString("sort","name"),args.optInt("offset",0));break;
                 case "files_copy":result=WorkspaceCatalog.copy(app,path,args.getString("destination"));break;
                 case "files_list":result=s.list(path,args.optString("query",""),args.optInt("offset",0));break;
-                case "files_mkdir":s.mkdir(path);result=new JSONObject().put("path",path);break;
+                case "files_mkdir":s.mkdir(path);
+                    if(!s.file(path).isDirectory())throw new Exception("Dossier créé mais présence non confirmée.");
+                    result=new JSONObject().put("path",path).put("exists",true).put("directory",true).put("storage","private_phone");break;
                 case "files_write_text":
                     if("CutVideo/schedule_inbox.json".equals(path))
                         result=CutStudioStore.importFromAgent(app,args.getString("text"));
