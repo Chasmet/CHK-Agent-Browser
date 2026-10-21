@@ -80,7 +80,24 @@ public final class AgentClient {
         return instance;
     }
     public boolean isEnabled() { return settings.getBoolean("enabled", false); }
-    public String mcpUrl() { return settings.getString("mcp_url", ""); }
+    public boolean isDirectMode() { return settings.getBoolean("direct_mode", false); }
+    public String mcpUrl() {
+        return isDirectMode() ? DirectMcpServer.privateUrl(app) : settings.getString("mcp_url", "");
+    }
+    /** No registration, polling, heartbeat, or file transfer to Render in direct mode. */
+    public void enableDirect() {
+        DirectMcpServer.secret(app);
+        running = false;
+        generation++;
+        ui.removeCallbacks(tick);
+        ui.removeCallbacks(expiry);
+        pending = null;
+        presenting = false;
+        settings.edit().remove("result_outbox").remove("executing_id")
+            .putBoolean("direct_mode", true).putBoolean("enabled", true).commit();
+        lastError = "";
+        AgentLog.add(app,"mcp","mode serveur local Tailscale activé ; aucun relais Render");
+    }
     String deviceTokenForTransfers(){ return token(); }
     public String lastCommandStatus(){
         String action=settings.getString("last_command_action","");
@@ -97,6 +114,8 @@ public final class AgentClient {
     }
     public String shortConnectionStatus(){
         if(!isEnabled())return "MCP désactivé";
+        if(isDirectMode())return AgentService.directRunning()
+            ? "MCP direct Tailscale actif · sans Render" : "Serveur direct en attente";
         if(!running)return "Connexion arrêtée · ouvrir Réglages";
         if(!lastError.isEmpty()||(lastContact>0&&SystemClock.elapsedRealtime()-lastContact>45000L))
             return "Reconnexion à ChatGPT en cours…";
@@ -105,6 +124,9 @@ public final class AgentClient {
     }
     public String connectionStatus(){
         if(!isEnabled())return "MCP désactivé";
+        if(isDirectMode())return AgentService.directRunning()
+            ? "Serveur local Android actif sur le port 8765 · HTTPS public non configuré · 0 appel Render"
+            : "Démarrage du serveur local · aucune connexion Render";
         if(!running)return "Service arrêté : ouvre le navigateur pour reprendre";
         if(!lastError.isEmpty())return "Reconnexion automatique · " + lastError;
         if(lastContact==0)return "Connexion au relais en cours…";
@@ -113,7 +135,9 @@ public final class AgentClient {
             ((SystemClock.elapsedRealtime()-lastContact)/1000) + " s";
     }
     public void reconnect(){
+        if(isDirectMode()) return;
         ui.post(()->{
+            if(isDirectMode())return;
             if(!running||!isEnabled())return;
             long now=SystemClock.elapsedRealtime();
             if(now-lastReconnectRequest<1200L)return;
@@ -159,6 +183,7 @@ public final class AgentClient {
         return key;
     }
     public void enable(RegistrationCallback callback) {
+        settings.edit().putBoolean("direct_mode", false).apply();
         io.execute(() -> {
             try {
                 JSONObject request = new JSONObject(); request.put("device_token", token());
@@ -184,6 +209,12 @@ public final class AgentClient {
     }
     /** Called only from the Android foreground Service. */
     public void startServiceMode(IncomingListener listener) {
+        if(isDirectMode()) {
+            running = false;
+            ui.removeCallbacks(tick);
+            incoming = null;
+            return;
+        }
         incoming = listener;
         if(!isEnabled()) return;
         running = true;
@@ -210,7 +241,7 @@ public final class AgentClient {
         }
     }
     private void poll() {
-        if(!running || !isEnabled()) return;
+        if(isDirectMode() || !running || !isEnabled()) return;
         if(inFlight) { ui.removeCallbacks(tick);ui.postDelayed(tick, 1200L); return; }
         inFlight = true;
         final int requestGeneration=generation;
