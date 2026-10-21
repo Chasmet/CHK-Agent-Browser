@@ -1,3 +1,17 @@
+## Local 2 — fichiers, documents et transferts vérifiés (21 octobre 2026)
+
+- Catalogue Android version 4 avec schémas paginés : `android_action` → `files_capabilities`. Compatible avec le serveur Windows 1.3.0 déjà installé.
+- Imports binaires jusqu’à 512 Mo, blocs de 48 Ko, point de reprise durable, rejeu de bloc identique sans doublon, contrôle SHA-256 final et publication atomique. Exports par blocs de 8 Ko avec contrôle de version.
+- SHA-256 et présence des fichiers, copie de dossiers, sauvegardes ZIP et extraction protégée dans un nouveau dossier. Les destinations existantes sont refusées ; quota de 5 000 entrées et 512 Mo décompressés.
+- Création locale de PDF, DOCX, XLSX, PPTX, JSON, CSV et TXT sans service cloud. Documents Office simples, éditables, sans macros ni moteur de calcul ; l’édition fidèle d’un document Office arbitraire n’est pas incluse.
+- Dossiers Android externes : création de sous-dossiers dans les accès persistants autorisés. Les exports sont relus et leur SHA-256 comparé avant confirmation.
+- Les aperçus JPEG sont adaptés à la taille du transport. Un résultat volumineux est conservé intégralement dans `Fichiers/AgentResults`, avec chemin et SHA-256, au lieu d’un JSON tronqué.
+- Tâches persistantes étendues aux documents, archives, vérifications et montage. Attente d’un export existant puis vérification du MP4, sans relancer l’export en cas de délai.
+- Contrôles locaux automatiques à la première ouverture après une mise à jour, avec fichiers synthétiques uniquement ; bilan affiché dans Diagnostic. La navigation, les accès externes et le rendu vidéo dépendent de leurs conditions réelles et ne sont pas certifiés par ce test de stockage.
+- Relais Windows 1.4.0 : 20 outils, dont 7 spécialisés Android ; copies PC ↔ Android en arrière-plan, reprise et SHA-256. L’installateur existant conserve la configuration et l’URL privée ; aucune création de nouveau serveur.
+- Le pack Windows est joint à cette même Release après ses tests Windows. Les nouveaux outils spécialisés exigent cette mise à jour du relais ; les nouvelles actions Android restent utilisables avec les 13 outils de Windows 1.3.0.
+- Vérifications : tests Android de stockage, formats, reprise, ZIP malveillant et tâches ; lecture indépendante des documents réellement produits par Android. Signature permanente et mise à jour APK intégrée conservées.
+
 ## Local 2 — onglets Android partagés et fichiers indépendants (21 octobre 2026)
 
 - Les commandes Local 2 utilisent les véritables onglets du navigateur Android, y compris lorsque CHK passe derrière ChatGPT ou Réglages. Elles ne basculent plus vers le moteur distinct du relais Render.

@@ -51,13 +51,22 @@ final class ExternalFiles {
     static void revoke(Context c,String id)throws Exception{
         Uri uri=tree(c,id,false);for(UriPermission grant:c.getContentResolver().getPersistedUriPermissions())if(grant.getUri().equals(uri))c.getContentResolver().releasePersistableUriPermission(uri,(grant.isReadPermission()?Intent.FLAG_GRANT_READ_URI_PERMISSION:0)|(grant.isWritePermission()?Intent.FLAG_GRANT_WRITE_URI_PERMISSION:0));
     }
-    static JSONObject command(Context c,JSONObject p)throws Exception{
+    static JSONObject command(Context c,JSONObject p,AgentClient.ResultCallback active)throws Exception{
+        if(!active.isActive())throw new IOException("Opération externe arrêtée.");
         String op=p.getString("operation");
         if(op.equals("external_roots"))return new JSONObject().put("ok",true).put("roots",grants(c));
         if(op.equals("external_request_access")){WorkspaceCommands.UI.post(()->c.startActivity(new Intent(c,ExternalFilesActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("pick",true)));return new JSONObject().put("ok",true).put("access_granted",false).put("owner_action_required",true);}
         String id=p.getString("root_id");
         if(op.equals("external_revoke")){revoke(c,id);return new JSONObject().put("ok",true).put("revoked",true);}
-        Uri tree=tree(c,id,op.equals("external_rename")||op.equals("external_export"));String path=p.optString("path","");Uri file=resolve(c,tree,path);
+        Uri tree=tree(c,id,op.equals("external_rename")||op.equals("external_export")||op.equals("external_mkdir"));String path=p.optString("path","");Uri file=resolve(c,tree,path);
+        if(op.equals("external_mkdir")){
+            String name=p.getString("name");WorkspacePaths.child("",name);JSONArray siblings=children(c,tree,file);
+            for(int i=0;i<siblings.length();i++)if(siblings.getJSONObject(i).getString("name").equals(name))throw new Exception("Destination externe déjà existante.");
+            Uri created=DocumentsContract.createDocument(c.getContentResolver(),file,DocumentsContract.Document.MIME_TYPE_DIR,name);
+            if(created==null)throw new Exception("Création du dossier externe refusée.");
+            String result=path.isEmpty()?name:path+"/"+name;resolve(c,tree,result);
+            return new JSONObject().put("ok",true).put("path",result).put("exists",true).put("directory",true);
+        }
         if(op.equals("external_list")){
             int offset=p.optInt("offset",0);if(offset<0||offset>2000)throw new Exception("Pagination externe invalide.");JSONArray all=children(c,tree,file),rows=new JSONArray();
             for(int i=offset;i<Math.min(offset+50,all.length());i++){JSONObject row=all.getJSONObject(i);rows.put(new JSONObject().put("name",row.getString("name")).put("path",path.isEmpty()?row.getString("name"):path+"/"+row.getString("name")).put("mime_type",row.getString("mime_type")).put("size",row.getLong("size")));}
@@ -81,9 +90,13 @@ final class ExternalFiles {
             for(int i=0;i<siblings.length();i++)if(siblings.getJSONObject(i).getString("name").equals(name))throw new Exception("Destination externe déjà existante.");
             File input=store.file(source);if(!input.isFile()||input.length()>WorkspaceStore.MAX_IMPORT)throw new Exception("Source invalide ou trop grande.");
             Uri created=DocumentsContract.createDocument(c.getContentResolver(),file,store.mime(source),name);if(created==null)throw new Exception("Création externe refusée.");
-            try(InputStream in=new FileInputStream(input);OutputStream out=c.getContentResolver().openOutputStream(created,"w")){if(out==null)throw new Exception("Écriture externe refusée.");byte[] b=new byte[32768];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}
+            try(InputStream in=new FileInputStream(input);OutputStream out=c.getContentResolver().openOutputStream(created,"w")){if(out==null)throw new Exception("Écriture externe refusée.");byte[] b=new byte[32768];int n;while((n=in.read(b))!=-1){if(!active.isActive())throw new IOException("Export externe arrêté.");out.write(b,0,n);}}
             catch(Exception e){try{DocumentsContract.deleteDocument(c.getContentResolver(),created);}catch(Exception ignored){}throw e;}
-            return new JSONObject().put("ok",true).put("exported",name).put("size",input.length());
+            // Reopen the actual provider result. A successful write alone is not proof of export.
+            String expected=WorkspaceTransfer.hash(input),actual;
+            try(InputStream check=c.getContentResolver().openInputStream(created)){if(check==null)throw new IOException("Export écrit mais relecture impossible.");actual=WorkspaceTransfer.hash(check);}
+            if(!expected.equals(actual))throw new IOException("Export écrit mais SHA-256 différent : résultat non confirmé.");
+            return new JSONObject().put("ok",true).put("exported",name).put("size",input.length()).put("sha256",actual).put("verified",true).put("root_id",id);
         }
         throw new Exception("Opération externe inconnue.");
     }

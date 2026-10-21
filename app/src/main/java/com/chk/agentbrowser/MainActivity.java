@@ -68,6 +68,7 @@ public class MainActivity extends Activity {
     private final android.os.Handler transferHandler=new android.os.Handler(android.os.Looper.getMainLooper());
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);setContentView(R.layout.activity_main);
+        WorkspaceHealth.ensure(this);
         store=new BrowserStore(this);
         agentClient=AgentClient.get(this);
         container=findViewById(R.id.web_container);

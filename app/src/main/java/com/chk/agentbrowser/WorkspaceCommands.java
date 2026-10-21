@@ -17,6 +17,18 @@ public final class WorkspaceCommands {
     public static void run(Context context,String action,JSONObject args,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
         Context app=context.getApplicationContext();
+        if(action.equals("files_task")&&args.optString("operation").equals("cancel"))AgentTasks.requestCancel(args.optString("id"));
+        if(action.equals("video_editor_wait")){
+            final long deadline=android.os.SystemClock.elapsedRealtime()+Math.max(1000,Math.min(120000,args.optLong("timeout_ms",120000)));
+            UI.post(new Runnable(){public void run(){
+                if(!cb.isActive())return;
+                JSONObject state=VideoEditorEngine.get().status();String status=state.optString("state");
+                if(status.equals("completed")){cb.finish(true,state.toString());return;}
+                if(!status.equals("preparing")&&!status.equals("running")){cb.finish(false,state.toString());return;}
+                if(android.os.SystemClock.elapsedRealtime()>=deadline){cb.finish(false,"Export encore actif : lire video_editor_status ; ne pas relancer l’export.");return;}
+                UI.postDelayed(this,1000);
+            }});return;
+        }
         if(action.startsWith("video_editor_")){
             VideoEditorEngine.get().command(app,action,args,(ok,result)->cb.finish(ok,result));
             return;
@@ -51,12 +63,23 @@ public final class WorkspaceCommands {
             if(!cb.isActive())return;
             WorkspaceStore s=new WorkspaceStore(app);String path=args.optString("path","");Object result;
             switch(action){
+                case "files_self_test":result=WorkspaceHealth.run(app);break;
+                case "files_capabilities":result=WorkspaceCapabilities.catalog(args);break;
+                case "files_stat":result=WorkspaceTransfer.stat(s,path,false);break;
+                case "files_hash":result=WorkspaceTransfer.stat(s,path,true);break;
+                case "files_zip":case "files_unzip":result=WorkspaceArchive.command(app,action,args,cb);break;
+                case "files_transfer_begin":case "files_transfer_write":case "files_transfer_status":
+                case "files_transfer_commit":case "files_transfer_abort":case "files_transfer_read":
+                    result=WorkspaceTransfer.command(app,action,args,cb);break;
+                case "files_external":result=ExternalFiles.command(app,args,cb);break;
+                case "files_task":result=AgentTasks.command(app,args,cb.isLocal2());break;
+                case "document_create":result=WorkspaceDocuments.create(app,args,cb);break;
                 case "publication_prepare":
                 case "publication_status":
                 case "publication_list":
                 case "publication_cancel":
                     result=PublicationJobs.command(app,action,args);break;
-                case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("video_editor",true).put("media_inspection",true).put("workspace_version",3).put("document_reader_version",1).put("pdf_text_extraction",true).put("scanned_pdf_ocr",true).put("docx_text_extraction",true).put("image_ocr",true).put("speech_to_text",true).put("audio_languages","fr,en").put("audio_local_only",true).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;
+                case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("video_editor",true).put("media_inspection",true).put("workspace_version",WorkspaceCapabilities.VERSION).put("capabilities_action","files_capabilities").put("health",WorkspaceHealth.cached(app)).put("resumable_transfers",true).put("sha256_verification",true).put("transfer_chunk_bytes",WorkspaceTransfer.CHUNK).put("archives",true).put("document_creation","pdf,docx,xlsx,pptx,json,csv,txt").put("external_roots",ExternalFiles.grants(app)).put("local2",AgentClient.get(app).local2BrowserStatus()).put("document_reader_version",1).put("pdf_text_extraction",true).put("scanned_pdf_ocr",true).put("docx_text_extraction",true).put("image_ocr",true).put("speech_to_text",true).put("audio_languages","fr,en").put("audio_local_only",true).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;
                 case "document_read":result=DocumentReader.readFile(app,path,args.optInt("page",1),args.optInt("page_count",8),args.optInt("offset",0));break;
                 case "document_page":result=DocumentReader.pdfPreview(app,s.file(path),args.optInt("page",0));break;
                 case "media_model_status":result=MediaTranscriber.modelStatus(app);break;
@@ -64,7 +87,7 @@ public final class WorkspaceCommands {
                 case "media_frame":result=MediaInspection.frame(app,path,args.optLong("time_ms",0));break;
                 case "media_codecs":result=MediaInspection.codecs();break;
                 case "files_catalog":result=WorkspaceCatalog.query(app,args.optString("folder",""),args.optString("category","all"),args.optString("query",""),args.optString("sort","name"),args.optInt("offset",0));break;
-                case "files_copy":result=WorkspaceCatalog.copy(app,path,args.getString("destination"));break;
+                case "files_copy":result=WorkspaceArchive.copy(app,path,args.getString("destination"),cb);break;
                 case "files_list":result=s.list(path,args.optString("query",""),args.optInt("offset",0));break;
                 case "files_mkdir":s.mkdir(path);
                     if(!s.file(path).isDirectory())throw new Exception("Dossier créé mais présence non confirmée.");
@@ -94,10 +117,11 @@ public final class WorkspaceCommands {
                 case "notes_trash":s.deleteNote(args.getString("id"),true,args.getInt("revision"));result=new JSONObject().put("trashed",true);break;
                 case "notes_restore":s.deleteNote(args.getString("id"),false,args.getInt("revision"));result=new JSONObject().put("restored",true);break;
                 case "notes_export":JSONObject n=s.note(args.getString("id"));result=s.writeText(path,"# "+n.getString("title")+"\n\n"+n.getString("body")+"\n\n"+n.getString("source_url"),false);break;
-                default:throw new Exception("Commande espace de travail inconnue");
+                default:throw new Exception("Commande espace de travail inconnue : "+action+". Consulter files_capabilities.");
             }
+            AgentLog.add(app,"WORKSPACE",action+" · résultat confirmé");
             finish(cb,true,result.toString());
-        }catch(Exception e){finish(cb,false,e.getMessage()==null?"Opération impossible":e.getMessage());}});
+        }catch(Exception e){AgentLog.add(app,"WORKSPACE",action+" · échec · "+e.getClass().getSimpleName());finish(cb,false,e.getMessage()==null?"Opération impossible":e.getMessage());}});
     }
     private static void finish(AgentClient.ResultCallback cb,boolean ok,String text){UI.post(()->cb.finish(ok,text));}
 }

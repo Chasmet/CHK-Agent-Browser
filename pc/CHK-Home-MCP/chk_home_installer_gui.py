@@ -27,7 +27,7 @@ APP = "CHK Home MCP"
 BACKEND_NAME = "CHK-Home-MCP.exe"
 WINDOWS_PORT = 8766
 PUBLIC_PORT = 8443
-VERSION = "1.5"
+VERSION = "1.6"
 CLOUDFLARED_URL = "https://github.com/cloudflare/cloudflared/releases/download/2026.9.0/cloudflared-windows-amd64.exe"
 CLOUDFLARED_SHA256 = "547057326266f0e1c7d50d102dbd22ff283d740c055bd61e94f10e2c606f89af"
 TAILSCALE_CONSOLE = "https://console.tailscale.com/admin/acls"
@@ -83,7 +83,7 @@ def fetch_health() -> dict | None:
     return None
 
 
-def verify_mcp_tools(secret: str) -> None:
+def verify_mcp_tools(secret: str) -> int:
     data = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}).encode()
     request = urllib.request.Request(
         f"http://127.0.0.1:{WINDOWS_PORT}/mcp/{secret}",
@@ -102,6 +102,7 @@ def verify_mcp_tools(secret: str) -> None:
                 "files_move", "files_trash", "files_restore", "video_probe", "video_cut"}
     if not required.issubset(names):
         raise RuntimeError("MCP Windows ancien ou incomplet : commandes Android absentes.")
+    return len(names)
 
 
 def same_binary(src: Path, dst: Path) -> bool:
@@ -200,8 +201,8 @@ def ensure_local_mcp(progress) -> str:
         progress("Serveur CHK Home déjà actif : conservation de sa configuration.")
 
     cfg = private_config()
-    verify_mcp_tools(cfg["secret"])
-    progress("13 outils MCP testés, dont les commandes Android. Render préservé.")
+    count = verify_mcp_tools(cfg["secret"])
+    progress(f"{count} outils MCP testés, dont les commandes Android. Render préservé.")
     return cfg["secret"]
 
 

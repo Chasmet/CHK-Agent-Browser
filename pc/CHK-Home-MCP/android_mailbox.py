@@ -93,7 +93,9 @@ class AndroidMailbox:
                 return False
             if not isinstance(success, bool) or not isinstance(message, str):
                 return False
-            item["result"] = {"success": success, "message": message[:24000]}
+            if len(message) > 24000:
+                success, message = False, "Résultat Android trop volumineux : aucune confirmation exploitable. Vérifier l’état avant de relancer ; mettre l’APK à jour pour les résultats par fichier."
+            item["result"] = {"success": success, "message": message}
             item["state"] = "done"
             self.lock.notify_all()
             return True

@@ -60,7 +60,9 @@ public final class WorkspaceStore {
         byte[] bytes=text.getBytes(StandardCharsets.UTF_8);if(bytes.length>65536)throw new IOException("Document limité à 64 Ko");
         File f=file(path);if(f.isDirectory()||(!overwrite&&f.exists())||!f.getParentFile().isDirectory())throw new IOException("Fichier existant ou parent absent");
         AtomicFile a=new AtomicFile(f);FileOutputStream out=null;try{out=a.startWrite();out.write(bytes);a.finishWrite(out);}catch(Exception e){if(out!=null)a.failWrite(out);throw e;}
-        return new JSONObject().put("path",path).put("size",f.length());
+        String expected=WorkspaceTransfer.hash(new ByteArrayInputStream(bytes)),actual=WorkspaceTransfer.hash(f);
+        if(!expected.equals(actual))throw new IOException("Écriture terminée mais SHA-256 non confirmé.");
+        return new JSONObject().put("path",path).put("size",f.length()).put("sha256",actual).put("exists",true).put("verified",true);
     }
     public JSONObject readText(String path,int offset)throws Exception{
         File f=file(path);if(!f.isFile()||f.length()>65536)throw new IOException("Lecture texte limitée à 64 Ko");

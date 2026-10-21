@@ -29,7 +29,7 @@ final class AgentFiles {
     }
     static JSONObject command(Context c,JSONObject p,AgentClient.ResultCallback active)throws Exception{
         String operation=p.optString("operation","plan");
-        if(operation.startsWith("external_"))return ExternalFiles.command(c,p);
+        if(operation.startsWith("external_"))return ExternalFiles.command(c,p,active);
         if(operation.equals("stat")){WorkspaceStore s=new WorkspaceStore(c);String path=p.getString("path");File f=s.file(path);return new JSONObject().put("ok",true).put("path",path).put("exists",f.exists()).put("directory",f.isDirectory()).put("size",f.length()).put("stamp",stamp(f));}
         String id=p.getString("id");File f=journal(c,"files",id);
         if(operation.equals("plan")||operation.equals("apply")){
@@ -102,7 +102,7 @@ final class AgentFiles {
                 row.put("state","running");save(file,state);
                 if(mode.equals("trash"))row.put("trash_id",store.trash(path));
                 else {parents(store,destination);
-                    if(mode.equals("copy"))WorkspaceCatalog.copy(c,path,destination);
+                    if(mode.equals("copy"))WorkspaceArchive.copy(c,path,destination,active);
                     else if(mode.equals("transform"))store.writeText(destination,transform(store.readText(path,0),p),false);
                     else store.move(path,destination);
                     if(!store.file(destination).exists()||!mode.equals("copy")&&!mode.equals("transform")&&store.file(path).exists())throw new Exception("État final du fichier non confirmé.");
