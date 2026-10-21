@@ -21,7 +21,12 @@ public final class Local2Client {
     private final SharedPreferences preferences;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
-    private boolean running;
+    private volatile boolean running;
+    private volatile int generation;
+    private volatile long lastPoll;
+    private volatile String serverVersion = "non vérifié", serverId = "non disponible";
+    private volatile String commandState = "aucune commande reçue", route = "standard";
+    private String verifiedAddress = "", bridgeAddress = "";
     private final java.util.concurrent.atomic.AtomicBoolean commandInFlight = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile String status = "Non connecté";
     private final Runnable loop = this::poll;
@@ -36,7 +41,22 @@ public final class Local2Client {
     }
     public boolean enabled() { return preferences.getBoolean("enabled", false); }
     public String url() { return preferences.getString("url", ""); }
-    public String status() { return status; }
+    public String status() {
+        if (lastPoll > 0 && android.os.SystemClock.elapsedRealtime() - lastPoll > 45000L
+            && status.startsWith("Connecté")) return "Connexion PC à revérifier";
+        return status;
+    }
+    public String diagnostic() {
+        String host = "non configuré";
+        try { URL target = new URL(url()); host = target.getHost() + (target.getPort() < 0 ? "" : ":" + target.getPort()); }
+        catch (Exception ignored) {}
+        long age = lastPoll == 0 ? -1 : (android.os.SystemClock.elapsedRealtime() - lastPoll) / 1000;
+        return "Local 2 : " + (enabled() ? "activé" : "désactivé") + " · " + status()
+            + "\nServeur contacté : " + host + "\nVersion PC : " + serverVersion
+            + "\nIdentité PC : " + serverId + "\nRoute Android : " + route
+            + "\nDernier échange Android : " + (age < 0 ? "aucun" : age + " s")
+            + "\nCommandes Local 2 : " + commandState;
+    }
     /** Import the existing ChatGPT gateway address locally; never poll Supabase. */
     public static String resolveMcpAddress(String entered) {
         String value = entered == null ? "" : entered.trim();
@@ -70,9 +90,13 @@ public final class Local2Client {
     public void configure(String url, boolean on) {
         String value = url == null ? "" : url.trim();
         value = resolveMcpAddress(value);
+        boolean changed = !value.equals(url());
+        if (changed) stop();
         preferences.edit().putString("url", value).putBoolean("enabled", on).apply();
+        if (changed) { lastPoll = 0; serverId = "non disponible"; serverVersion = "non vérifié"; }
         if (!on) stop();
         else if (value.isEmpty()) status = "Activé · URL PC à configurer (pas Supabase)";
+        else if (!running) status = "Activé · vérification du canal Android";
     }
     public void start() {
         if (!enabled() || url().isEmpty() || running) return;
@@ -81,11 +105,12 @@ public final class Local2Client {
     }
     public void stop() {
         running = false;
+        generation++;
         main.removeCallbacks(loop);
         status = "Désactivé";
     }
-    private JSONObject request(String method, JSONObject parameters) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection)new URL(url()).openConnection();
+    private JSONObject request(String address, String method, JSONObject parameters) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection)new URL(address).openConnection();
         try {
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(8000);
@@ -111,42 +136,97 @@ public final class Local2Client {
             }
         } finally { connection.disconnect(); }
     }
+    private void verifyServer(String address) throws Exception {
+        JSONObject initialized = request(address, "initialize", new JSONObject()
+            .put("protocolVersion", "2025-06-18").put("capabilities", new JSONObject())
+            .put("clientInfo", new JSONObject().put("name", "CHK Android Local 2").put("version", "1.1")));
+        Local2Protocol.checkError(initialized);
+        JSONObject result = initialized.optJSONObject("result");
+        JSONObject server = result == null ? null : result.optJSONObject("serverInfo");
+        if (server == null || !"CHK Home MCP".equals(server.optString("name")))
+            throw new java.io.IOException("Serveur CHK non reconnu");
+        serverVersion = server.optString("version", "inconnue");
+        bridgeAddress = address;
+        route = "standard";
+        verifiedAddress = address;
+    }
+    private JSONObject nextCommand(String address) throws Exception {
+        JSONObject reply = request(bridgeAddress, "android/next", new JSONObject());
+        try { Local2Protocol.checkError(reply); }
+        catch (Local2Protocol.RpcFailure failure) {
+            if (failure.code != -32601 || !bridgeAddress.equals(address)) throw failure;
+            // Retry only an explicit unknown-method response on the recognized
+            // server. No commands have been delivered or executed by this poll.
+            String compatible = Local2Protocol.proxyCompatibilityAddress(address);
+            reply = request(compatible, "android/next", new JSONObject());
+            Local2Protocol.command(reply);
+            bridgeAddress = compatible;
+            route = "compatibilité Funnel 1.3.0";
+        }
+        Local2Protocol.command(reply);
+        String identity = reply.optString("server_id");
+        if (!identity.isEmpty() && !identity.equals(Local2Protocol.fingerprint(address)))
+            throw new java.io.IOException("Identité du serveur différente");
+        serverId = identity.isEmpty() ? "non fournie par le PC " + serverVersion : identity;
+        return reply;
+    }
     private void poll() {
         if (!running || !enabled()) return;
         if (commandInFlight.get()) {
             main.postDelayed(loop, 1200L);
             return;
         }
+        final int session = generation;
+        final String address = url();
         worker.execute(() -> {
             long delay = 2000L;
             try {
-                JSONObject command = request("android/next", new JSONObject()).optJSONObject("command");
-                status = "Connecté au PC · sans Render/Supabase";
+                if (session != generation || !running || !enabled()) return;
+                if (!address.equals(verifiedAddress)) verifyServer(address);
+                JSONObject command = Local2Protocol.command(nextCommand(address));
+                if (session != generation || !running || !enabled()) return;
+                lastPoll = android.os.SystemClock.elapsedRealtime();
+                status = "Connecté au PC · canal Android vérifié";
                 if (command != null) {
                     commandInFlight.set(true);
                     final String ident = command.getString("id");
                     final String action = command.getString("action");
+                    final String replyAddress = bridgeAddress;
+                    commandState = "commande reçue · exécution en cours";
                     final JSONObject args = command.optJSONObject("args") == null ?
                         new JSONObject() : command.getJSONObject("args");
-                    main.post(() -> AgentClient.get(app).executeLocal2(action, args, (ok, message) ->
+                    main.post(() -> {
+                        if (session != generation || !running || !enabled()) {
+                            commandInFlight.set(false); return;
+                        }
+                        AgentClient.get(app).executeLocal2(action, args, (ok, message) ->
                         worker.execute(() -> {
                             try {
                                 JSONObject params = new JSONObject().put("id", ident)
                                     .put("success", ok).put("message", message);
-                                request("android/complete", params);
+                                Local2Protocol.completion(request(replyAddress, "android/complete", params));
+                                if (session == generation) commandState = ok ? "résultat reçu par le PC" : "échec transmis au PC";
                             } catch (Exception failure) {
-                                status = "Résultat non transmis : " + failure.getClass().getSimpleName();
+                                if (session == generation) {
+                                    commandState = "résultat non acquitté par le PC";
+                                    status = "Résultat non transmis : " + failure.getClass().getSimpleName();
+                                }
                             } finally {
                                 commandInFlight.set(false);
                             }
-                        })));
+                        }));
+                    });
                 }
             } catch (Exception error) {
-                status = "PC indisponible : " + error.getClass().getSimpleName();
+                if (session != generation) return;
+                verifiedAddress = "";
+                status = error instanceof Local2Protocol.RpcFailure
+                    ? error.getMessage() + " · canal Android non connecté"
+                    : "Canal Android non connecté : " + error.getClass().getSimpleName();
                 delay = 6000L;
             }
             final long next = delay;
-            main.post(() -> { if (running && enabled()) main.postDelayed(loop, next); });
+            main.post(() -> { if (session == generation && running && enabled()) main.postDelayed(loop, next); });
         });
     }
 }

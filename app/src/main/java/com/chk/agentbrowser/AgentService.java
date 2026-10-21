@@ -58,7 +58,8 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         if(sessionLock.isHeld())sessionLock.release();
         // Bounded and renewed only while the user-enabled foreground session runs.
         AgentClient client=AgentClient.get(this);
-        if(client.isEnabled()&&(!client.isEcoMode()||client.isExecuting()))sessionLock.acquire(120000L);
+        if((client.isEnabled() || Local2Client.get(this).enabled())
+            &&(!client.isEcoMode()||client.isExecuting()))sessionLock.acquire(120000L);
     }
 
     public static void ensureRunning(Context context) {
@@ -237,10 +238,12 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             PendingIntent.FLAG_UPDATE_CURRENT|
             (Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_IMMUTABLE:0));
         boolean auto=AgentClient.get(this).isAutonomous();
+        String connection = Local2Client.get(this).enabled() ? Local2Client.get(this).status()
+            : AgentClient.get(this).connectionStatus();
         return builder(CHANNEL_RUNNING)
             .setSmallIcon(R.drawable.ic_browser)
             .setContentTitle("CHK Agent Browser — MCP actif")
-            .setContentText((auto?"Autonome · ":"Confirmation · ")+AgentClient.get(this).connectionStatus())
+            .setContentText((auto?"Autonome · ":"Confirmation · ")+connection)
             .setContentIntent(openBrowser(31))
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
@@ -248,7 +251,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             .build();
     }
     public void refreshNotification() {
-        if(notifications!=null&&AgentClient.get(this).isEnabled()) {
+        if(notifications!=null&&(AgentClient.get(this).isEnabled() || Local2Client.get(this).enabled())) {
             notifications.notify(ID_RUNNING,createOngoingNotification());
         }
     }
@@ -273,7 +276,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         notifications.cancel(ID_APPROVAL);
     }
     private void scheduleRecovery() {
-        if(!AgentClient.get(this).isEnabled())return;
+        if(!AgentClient.get(this).isEnabled() && !Local2Client.get(this).enabled())return;
         try {
             AlarmManager alarms=(AlarmManager)getSystemService(ALARM_SERVICE);
             Intent intent=new Intent(this,AgentRestartReceiver.class)

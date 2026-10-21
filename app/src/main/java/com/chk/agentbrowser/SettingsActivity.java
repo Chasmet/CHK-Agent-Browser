@@ -25,14 +25,14 @@ public final class SettingsActivity extends Activity {
     private static final int NOTIFICATION_PERMISSION_CODE = 735;
     private UpdateManager updates;
     private AgentClient agent;
-    private TextView mcpStatus, status;
+    private TextView mcpStatus, status, local2Status;
     private Button mcpConnect, mcpCopy, mcpDisable, check, install;
     private boolean askedToInstall, awaitingInstallPermission;
     private long validatedDownloadId=Long.MIN_VALUE;
     private Switch autonomousMode, previewMode;
     private final Handler refresh=new Handler();
     private final Runnable statusTick=new Runnable(){
-        @Override public void run(){showMcp();showDownloadProgress();refresh.postDelayed(this,2000L);}
+        @Override public void run(){showMcp();showDownloadProgress();if(local2Status!=null)local2Status.setText(Local2Client.get(SettingsActivity.this).status());refresh.postDelayed(this,2000L);}
     };
 
     @Override public void onCreate(Bundle state) {
@@ -78,7 +78,7 @@ public final class SettingsActivity extends Activity {
         local2Paste.setText("Importer le lien MCP copié");
         local2Paste.setAllCaps(false);
         group.addView(local2Paste, localInsert++);
-        TextView local2Status = new TextView(this);
+        local2Status = new TextView(this);
         local2Status.setText(Local2Client.get(this).status());
         group.addView(local2Status, localInsert++);
         TextView local2Help = new TextView(this);

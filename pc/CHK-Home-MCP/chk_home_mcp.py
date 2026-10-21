@@ -30,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 PORT = 8766
 MAX_POST = 96 * 1024
 MAX_TEXT = 64 * 1024
@@ -102,10 +102,12 @@ def safe_tool_action(name: str, arguments: dict, cfg: dict) -> object:
     if name == "server_info":
         return {"name": "CHK Home MCP", "version": APP_VERSION,
                 "execution": "Windows PC", "hosting": "local", "render": False,
-                "workspace": str(root), "tools": len(tool_catalog())}
+                "workspace": str(root), "tools": len(tool_catalog()),
+                "server_id": hashlib.sha256(cfg["secret"].encode("ascii")).hexdigest()[:16]}
 
     if name == "android_status":
-        return ANDROID_QUEUE.status()
+        return {**ANDROID_QUEUE.status(),
+                "server_id": hashlib.sha256(cfg["secret"].encode("ascii")).hexdigest()[:16]}
     if name == "android_command":
         action = arguments.get("action", "")
         payload = arguments.get("args", {})
@@ -407,10 +409,14 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
             self.response(400, error(-32700, "Invalid JSON"))
             return
-        if path == "/mcp/" + capability and request.get("method") == "android/next":
-            self.response(200, {"command": ANDROID_QUEUE.poll(wait_seconds=15)})
+        # Authentication above already validated all supported proxy paths.
+        # Funnel may strip /mcp: bridge requests must use the same aliases
+        # as ordinary MCP requests instead of returning JSON-RPC -32601.
+        if request.get("method") == "android/next":
+            self.response(200, {"command": ANDROID_QUEUE.poll(wait_seconds=15),
+                                "server_id": hashlib.sha256(capability.encode("ascii")).hexdigest()[:16]})
             return
-        if path == "/mcp/" + capability and request.get("method") == "android/complete":
+        if request.get("method") == "android/complete":
             params = request.get("params", {})
             if not isinstance(params, dict):
                 self.response(400, {"error": "params invalid"}); return
