@@ -44,3 +44,21 @@ Le developpement/test Windows sur GitHub Actions ne prouve ni l'activation de Fu
 - **README.md** — consignes et securite.
 
 Ne telecharge pas les anciennes versions de l'installateur CMD : cette version les remplace.
+
+## Version 1.4 — Diagnostic HTTPS 443 sans toucher a IIS
+
+Le serveur MCP fonctionne localement. Tailscale Funnel 8443 et un appel HTTPS POST d'initialisation sont valides depuis le PC, mais ChatGPT refuse encore la connexion.
+
+L'installateur propose le bouton violet **TESTER UNE ADRESSE HTTPS 443 (CLOUDFLARE, PROVISOIRE)** :
+
+- Apres confirmation explicite, il telecharge Cloudflare cloudflared version 2026.9.0 sur GitHub, et verifie son empreinte officielle SHA-256.
+- Il etablit un Quick Tunnel uniquement vers 127.0.0.1:8766 : sans changer Tailscale, IIS, ni Render.
+- La passerelle donne une adresse HTTPS standard port 443 avec le jeton prive integre au chemin.
+- L'installateur confirme une requete initialize MCP POST par HTTPS avant de proposer « Copier mon lien MCP ».
+- **Cette URL est TEMPORAIRE.** Elle change lorsque cloudflared s'arrete ou au redemarrage. C'est un test, pas un connecteur permanent.
+- Le PC reste le serveur, Cloudflare est un tiers qui transporte les donnees de la connexion. Un utilisateur ayant le lien prive pourrait agir sur CHK-Workspace : ne partage jamais le lien.
+- Cloudflare indique que ses Quick Tunnels ne prennent pas en charge SSE. Le MCP CHK utilise des reponses JSON pour POST, mais la compatibilite ChatGPT n'est **pas garantie**.
+- Apres un test positif, mettre en place un hostname HTTPS 443 permanent et protege, sans exposer le site IIS prive.
+- L'ancien jeton MCP ayant ete publie dans la conversation, le renouveler avant utilisation avec de vraies donnees.
+
+Documentation Cloudflare : https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/
