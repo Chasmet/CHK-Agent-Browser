@@ -28,7 +28,7 @@ class WindowsMcpTest(unittest.TestCase):
                                   "method": method, "params": {"protocolVersion": "2025-06-18"}}, self.cfg)
             self.assertEqual(reply["id"], 9)
             self.assertIn("result", reply)
-        self.assertEqual(len(mcp.tool_catalog()), 10)
+        self.assertEqual(len(mcp.tool_catalog()), 13)
         self.assertEqual(mcp.safe_tool_action("server_info", {}, self.cfg)["render"], False)
 
     def test_workspace_save_read_trash_restore(self):
@@ -125,7 +125,7 @@ class WindowsMcpTest(unittest.TestCase):
             request = urllib.request.Request(base + "/mcp/" + "e"*64, data=payload,
                                              headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(request, timeout=3) as response:
-                self.assertEqual(len(json.load(response)["result"]["tools"]), 10)
+                self.assertEqual(len(json.load(response)["result"]["tools"]), 13)
             request = urllib.request.Request(base + "/mcp/" + "e"*64, data=payload,
                                              headers={"Content-Type": "application/json",
                                                       "Origin": "https://untrusted.example"})
