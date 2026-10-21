@@ -1,0 +1,53 @@
+name: CHK Home MCP Windows (sans Render)
+on:
+  push:
+    branches:
+      - feature/pc-home-mcp-20261021
+    paths:
+      - 'pc/CHK-Home-MCP/**'
+      - '.github/workflows/chk-home-mcp-windows.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-mcp:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Recuperer les sources GitHub
+        uses: actions/checkout@v4
+      - name: Installer Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Tester les outils MCP et les controles d'acces
+        shell: pwsh
+        run: |
+          python -m unittest discover -s pc/CHK-Home-MCP/tests -v
+          python pc/CHK-Home-MCP/chk_home_mcp.py --once-test
+      - name: Compiler un vrai EXE Windows x64
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pyinstaller==6.16.0
+          python -m PyInstaller --noconfirm --clean --onefile --console --name CHK-Home-MCP pc/CHK-Home-MCP/chk_home_mcp.py
+      - name: Verifier l'EXE compile
+        shell: pwsh
+        run: |
+          & .\dist\CHK-Home-MCP.exe --once-test
+          if ($LASTEXITCODE -ne 0) { throw 'Executable Windows invalide' }
+      - name: Preparer le ZIP d'installation
+        shell: pwsh
+        run: |
+          New-Item -Path output\CHK-Home-MCP -ItemType Directory -Force | Out-Null
+          Copy-Item dist\CHK-Home-MCP.exe output\CHK-Home-MCP\
+          Copy-Item pc\CHK-Home-MCP\INSTALLER-CHK-MCP.ps1 output\CHK-Home-MCP\
+          Copy-Item pc\CHK-Home-MCP\INSTALLER-CHK-MCP.cmd output\CHK-Home-MCP\
+          Copy-Item pc\CHK-Home-MCP\README.md output\CHK-Home-MCP\
+          Compress-Archive -Path output\CHK-Home-MCP -DestinationPath output\CHK-Home-MCP-Windows.zip -CompressionLevel Optimal
+      - name: Conserver le serveur MCP et son installateur
+        uses: actions/upload-artifact@v4
+        with:
+          name: CHK-Home-MCP-Windows
+          path: output/CHK-Home-MCP-Windows.zip
+          if-no-files-found: error
+          retention-days: 14
