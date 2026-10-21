@@ -15,7 +15,7 @@ Le service écoute sur 127.0.0.1:8766 ; Tailscale Funnel expose uniquement le po
 1. Ouvrir les Actions GitHub de CHK Agent Browser, workflow CHK Home MCP Windows, branche feature/pc-home-mcp-20261021.
 2. Telecharger et extraire completement l'artefact CHK-Home-MCP-Windows.
 3. Sur le PC Windows pc-salon, double-cliquer sur **CHK-Home-Installation.exe** (interface graphique, aucune commande CMD).
-4. Cliquer sur le bouton **INSTALLER ET ACTIVER**, puis confirmer. Le logiciel copie le serveur dans LOCALAPPDATA, active son demarrage automatique utilisateur, teste les 10 outils MCP locaux, puis configure Tailscale Funnel sur le port 8443 si autorise.
+4. Cliquer sur le bouton **INSTALLER ET ACTIVER**, puis confirmer. Le logiciel copie le serveur dans LOCALAPPDATA, active son demarrage automatique utilisateur, teste les 13 outils MCP (y compris Android), puis configure Tailscale Funnel sur le port 8443 si autorise.
 5. Cliquer sur **COPIER MON LIEN MCP**. Le jeton reste masque a l'ecran. Dans ChatGPT : Plugins > Ajouter > URL du serveur > Ctrl+V. Authentification Sans authentification (le jeton est dans l'URL).
 6. Verifier que ChatGPT peut reellement appeler server_info. Ne pas affirmer que l'adresse est operationnelle avant cet essai.
 
@@ -23,7 +23,7 @@ Si Funnel est interdit, deja utilise sur 8443, ou si ChatGPT refuse le port 8443
 
 ## Outils disponibles
 
-server_info, files_list, files_read_text, files_write_text, files_mkdir, files_move, files_trash, files_restore, video_probe, video_cut.
+server_info, android_status, android_command, android_result, files_list, files_read_text, files_write_text, files_mkdir, files_move, files_trash, files_restore, video_probe, video_cut.
 
 Tous les fichiers sont limites au dossier Documents/CHK-Workspace. Les chemins absolus, echappements hors du workspace et liens symboliques vers l'exterieur sont refuses. Suppression vers une corbeille recuperable. Les exports video requierent FFmpeg/FFprobe installes localement. Pas de shell, PowerShell ou commande administrateur a distance : le niveau de risque est trop eleve sur un serveur public.
 
