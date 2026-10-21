@@ -29,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.2.0"
 PORT = 8766
 MAX_POST = 96 * 1024
 MAX_TEXT = 64 * 1024
@@ -364,7 +364,13 @@ class Handler(BaseHTTPRequestHandler):
         if size < 0 or size > MAX_POST:
             self.response(413, {"error": "Payload exceeds limit"})
             return
-        if not self.headers.get("Content-Type", "").split(";", 1)[0].lower() == "application/json":
+        # Some older Serve/Funnel reverse proxies have been reported to
+        # omit Content-Type on authenticated MCP POSTs. Accept missing type
+        # only when the 256-bit private capability was already validated,
+        # the body has an explicit bounded Content-Length, and is valid JSON.
+        # A present but incorrect Content-Type remains rejected.
+        content_type = self.headers.get("Content-Type")
+        if content_type is not None and content_type.split(";", 1)[0].strip().lower() != "application/json":
             self.response(415, {"error": "application/json required"})
             return
         data = self.rfile.read(size)
