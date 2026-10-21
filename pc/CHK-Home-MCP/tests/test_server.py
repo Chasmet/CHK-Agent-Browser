@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -72,6 +73,47 @@ class WindowsMcpTest(unittest.TestCase):
             self.assertEqual(reply.status, 415)
             reply.read()
             conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(3)
+
+    def test_android_bridge_uses_all_authenticated_proxy_paths(self):
+        server = mcp.LocalMcpServer(("127.0.0.1", 0), mcp.Handler)
+        server.cfg = self.cfg
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            for path, authorization in (("/mcp/" + self.cfg["secret"], ""),
+                                        ("/" + self.cfg["secret"], ""),
+                                        ("/mcp", "Bearer " + self.cfg["secret"])):
+                with self.subTest(path_kind="bearer" if authorization else path[:5]):
+                    queue = mcp.AndroidMailbox()
+                    with patch.object(mcp, "ANDROID_QUEUE", queue):
+                        ident = queue.enqueue("browser_status", {})
+                        def post(method, params=None, target=path, token=authorization):
+                            connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+                            connection.request("POST", target,
+                                body=json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}),
+                                headers={"Content-Type": "application/json", "Authorization": token})
+                            response = connection.getresponse()
+                            body = json.loads(response.read())
+                            status = response.status
+                            connection.close()
+                            return status, body
+                        status, reply = post("android/next")
+                        self.assertEqual(status, 200)
+                        self.assertEqual(reply["command"]["id"], ident)
+                        info = mcp.safe_tool_action("server_info", {}, self.cfg)
+                        self.assertEqual(reply["server_id"], info["server_id"])
+                        self.assertTrue(mcp.safe_tool_action("android_status", {}, self.cfg)["android_recent"])
+                        status, reply = post("android/complete", {"id": ident, "success": True, "message": "pong"})
+                        self.assertTrue(reply["ok"])
+                        self.assertEqual(queue.await_result(ident, 0)["message"], "pong")
+                        _, reply = post("android/complete", {"id": ident, "success": True, "message": "duplicate"})
+                        self.assertFalse(reply["ok"])
+                        status, _ = post("android/next", target="/mcp/bad", token="")
+                        self.assertEqual(status, 401)
         finally:
             server.shutdown()
             server.server_close()

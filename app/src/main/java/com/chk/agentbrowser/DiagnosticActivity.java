@@ -61,6 +61,7 @@ public final class DiagnosticActivity extends Activity {
         return "CHK Agent Browser "+version+
             "\nMCP : "+(agent.isEnabled()?"activé":"désactivé")+
             "\nConnexion : "+agent.connectionStatus()+
+            "\n\n"+Local2Client.get(this).diagnostic()+"\n"+
             "\nRéseau : "+network+
             "\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+
             "\nAperçus : "+(agent.isPreviewAllowed()?"autorisés":"désactivés")+

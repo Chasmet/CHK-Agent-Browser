@@ -2,6 +2,8 @@ name: CHK Home MCP Windows (sans Render)
 on:
   push:
     branches:
+      - main
+      - fix/local2-verified-connection-20261021
       - feature/pc-home-mcp-20261021
       - feature/android-local2-bridge-20261021
       - feature/local2-batched-android-20261021

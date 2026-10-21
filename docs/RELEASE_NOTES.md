@@ -1,3 +1,13 @@
+## Correctif Local 2 — connexion Android vérifiée (21 octobre 2026)
+
+- Suppression du faux état « connecté » lorsque le PC répond HTTP 200 avec une erreur MCP ou sans canal Android.
+- Vérification du nom du serveur avant la connexion ; contrôle des réponses de commande et de l'acquittement des résultats.
+- Compatibilité automatique avec Windows MCP 1.3.0 lorsque Tailscale Funnel retire le préfixe /mcp : nouvelle tentative ciblée sur le même PC, sans réinstallation du serveur.
+- Diagnostic dans Réglages : hôte réellement contacté, version PC, route utilisée, âge du dernier échange et suivi de commande ; l'URL privée complète reste masquée.
+- Les nouveaux serveurs Windows 1.3.1 exposent une empreinte d'installation commune à server_info, android_status et au canal Android. Le serveur 1.3.0 ne fournit pas cette empreinte ; le diagnostic l'indique.
+- Rafraîchissement continu de l'état Local 2, maintien du service et reprise après mise à jour lorsque seul Local 2 est activé.
+- Tests de protocole Android et tests HTTP des différentes routes authentifiées.
+
 ## CHK Agent Browser — MCP Local 2 Android (21 octobre 2026)
 
 - Deux transports indépendants dans Réglages : relais Render existant et nouveau MCP Local 2 via le PC Windows.
