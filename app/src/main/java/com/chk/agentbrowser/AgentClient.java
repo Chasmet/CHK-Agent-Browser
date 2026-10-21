@@ -322,6 +322,37 @@ public final class AgentClient {
                 executeLocal2Batch(steps, 0, new org.json.JSONArray(), reply);
                 return;
             }
+            if ("android_action".equals(action)) {
+                String nativeAction = args.optString("action", "");
+                JSONObject nativeArgs = args.optJSONObject("args");
+                if (nativeArgs == null || nativeAction.isEmpty() || nativeAction.length() > 100) {
+                    reply.finish(false, "Paramètres de commande Android invalides."); return;
+                }
+                try {
+                    JSONObject cmd = new JSONObject().put("id", "local2-native")
+                        .put("action", nativeAction).put("args", nativeArgs);
+                    boolean allowed = WorkspaceCommands.handles(nativeAction)
+                        || KeyboardCommands.nativeTarget(cmd)
+                        || DesktopCommands.nativeTarget(cmd)
+                        || nativeAction.equals("browser_task_submit")
+                        || nativeAction.equals("browser_task_status")
+                        || nativeAction.equals("click") || nativeAction.equals("scroll")
+                        || nativeAction.equals("open_url") || nativeAction.equals("read_page")
+                        || nativeAction.equals("tabs") || nativeAction.equals("get_form")
+                        || nativeAction.equals("type");
+                    if (!allowed) {
+                        reply.finish(false, "Action Android non autorisée."); return;
+                    }
+                    executeTaskStep(cmd, new ResultCallback() {
+                        @Override public void finish(boolean ok, String message) {
+                            reply.finish(ok, message);
+                        }
+                    });
+                } catch (Exception problem) {
+                    reply.finish(false, "Commande Android invalide.");
+                }
+                return;
+            }
             CommandHandler receiver = activeHandler();
             if(receiver == null) { reply.finish(false, "Navigateur CHK indisponible."); return; }
             try {
