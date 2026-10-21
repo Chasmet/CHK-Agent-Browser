@@ -88,7 +88,7 @@ public final class Local2SessionIntegrationTest {
     private void openBrowser()throws Exception{
         browser=(MainActivity)instrument.startActivitySync(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         WebFixture.load(instrument,current(),"https://example.com/local2-fixture",
-            "<html><body><h1>Real shared Android session</h1><button id='button'>Tap</button></body></html>","!!document.getElementById('button')");
+            "<html><body><h1>Real shared Android session</h1><button id='button' onclick=\"this.textContent='Clicked exactly once';this.disabled=true;\">Tap</button><input id='field'><input id='reset' oninput=\"this.value=''\"></body></html>","!!document.getElementById('button')");
     }
     @Test public void filesWorkWithoutRenderOrAnyBrowser()throws Exception{
         folder="Local2Test"+UUID.randomUUID().toString().replace("-","");
@@ -185,5 +185,22 @@ public final class Local2SessionIntegrationTest {
             assertTrue(new WorkspaceStore(app).file(folder).isDirectory());
             assertFalse(render.getBoolean("enabled",true));
         }finally{AgentFiles.journal(app,"tasks",id).delete();}
+    }
+    @Test public void clickRequiresAnObservableResultAndIsNotRepeated()throws Exception{
+        openBrowser();
+        Outcome missing=call("browser_click",new JSONObject().put("selector","#button"));
+        assertFalse(missing.ok);
+        assertFalse(call("browser_read_page",new JSONObject()).json().getString("text").contains("Clicked exactly once"));
+        JSONObject args=new JSONObject().put("selector","#button").put("expected_text","Clicked exactly once");
+        Outcome clicked=call("browser_click",args);assertTrue(clicked.message,clicked.ok);
+        Outcome repeated=call("browser_click",args);assertTrue(repeated.message,repeated.ok);
+        assertTrue(repeated.message,repeated.message.contains("aucun clic supplémentaire"));
+    }
+    @Test public void typedValueIsReadBackAndRejectedIfPageRevertsIt()throws Exception{
+        openBrowser();
+        Outcome normal=call("browser_type",new JSONObject().put("selector","#field").put("text","verified text"));
+        assertTrue(normal.message,normal.ok);assertTrue(normal.message,normal.message.startsWith("Saisie confirmée"));
+        Outcome reverted=call("browser_type",new JSONObject().put("selector","#reset").put("text","will be reverted"));
+        assertFalse(reverted.message,reverted.ok);assertTrue(reverted.message,reverted.message.contains("non confirmée"));
     }
 }

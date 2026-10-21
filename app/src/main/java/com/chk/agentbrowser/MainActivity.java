@@ -681,9 +681,23 @@ public class MainActivity extends Activity {
                     String selector=args.optString("selector","");
                     String content=args.optString("text","");
                     if(content.length()>8000){callback.finish(false,"Texte trop long");return;}
+                    final WebView target=current;
+                    final long document=BrowserWebState.documentVersion(target);
                     String js=BrowserScripts.type(JSONObject.quote(selector),JSONObject.quote(content));
-                    current.evaluateJavascript(js,raw->{
+                    target.evaluateJavascript(js,raw->{
                         String result=fromJavascript(raw);
+                        if(callback.isLocal2()&&"Saisie effectuée".equals(result)){
+                            transferHandler.postDelayed(()->{
+                                if(!callback.isActive()||current!=target||document!=BrowserWebState.documentVersion(target)){
+                                    callback.finish(false,"Page modifiée après la saisie · résultat non confirmé.");return;
+                                }
+                                target.evaluateJavascript(BrowserScripts.valueMatches(JSONObject.quote(selector),JSONObject.quote(content)),value->{
+                                    boolean confirmed=callback.isActive()&&current==target&&document==BrowserWebState.documentVersion(target)&&"true".equals(value);
+                                    callback.finish(confirmed,confirmed?"Saisie confirmée par lecture du champ.":"Saisie exécutée mais valeur non confirmée · relis le champ avant une nouvelle action.");
+                                });
+                            },200L);
+                            return;
+                        }
                         callback.finish("Saisie effectuée".equals(result),result);
                     });return;
                 }

@@ -6,6 +6,7 @@
 - Une navigation n'est confirmée qu'après chargement et lecture du document réel. Le résultat distingue page affichée et page prête pour le retour dans CHK. Les erreurs HTTP, délais et changements d'onglet produisent un résultat non confirmé.
 - `browser_tabs` accepte les opérations list, new, close et switch ; `browser_open_url` conserve son option new_tab.
 - La création d'un dossier vérifie sa présence dans le stockage Android. Les écrans Fichiers sont actualisés après une opération réussie.
+- Les clics Local 2 utilisent `expected_selector`, `expected_text` ou `expected_url_contains` pour vérifier le résultat, avec protection contre le double clic. Une condition manquante bloque le clic. La saisie est relue dans le champ après les événements de la page ; une valeur annulée par le site n'est pas déclarée confirmée.
 - Réglages et Diagnostic séparent connexion Local 2, mode autonome, disponibilité du navigateur, exécution, acquittement PC et preuve d'affichage.
 - Tests Android ajoutés avec Render désactivé, sur le vrai WebView et le stockage de test. Le package, la signature persistante, les données et la mise à jour intégrée sont conservés.
 

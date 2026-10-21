@@ -412,6 +412,7 @@ public final class AgentClient {
                     if (!allowed) {
                         reply.finish(false, "Action Android non autorisée."); return;
                     }
+                    if("click".equals(nativeAction))cmd.put("action","click_verified");
                     executeTaskStep(cmd, new ResultCallback() {
                         @Override public boolean isLocal2() { return true; }
                         @Override public boolean isActive() {
@@ -443,7 +444,7 @@ public final class AgentClient {
                         break;
                     case "browser_read_page": translated = "read_page"; break;
                     case "browser_open_url": translated = "open_url"; break;
-                    case "browser_click": translated = "click"; break;
+                    case "browser_click": translated = "click_verified"; break;
                     case "browser_type": translated = "type"; break;
                     case "browser_scroll": translated = "scroll"; break;
                     case "browser_get_form": translated = "get_form"; break;
