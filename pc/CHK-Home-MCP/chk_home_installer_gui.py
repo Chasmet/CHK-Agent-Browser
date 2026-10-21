@@ -27,7 +27,7 @@ APP = "CHK Home MCP"
 BACKEND_NAME = "CHK-Home-MCP.exe"
 WINDOWS_PORT = 8766
 PUBLIC_PORT = 8443
-VERSION = "1.4"
+VERSION = "1.5"
 CLOUDFLARED_URL = "https://github.com/cloudflare/cloudflared/releases/download/2026.9.0/cloudflared-windows-amd64.exe"
 CLOUDFLARED_SHA256 = "547057326266f0e1c7d50d102dbd22ff283d740c055bd61e94f10e2c606f89af"
 TAILSCALE_CONSOLE = "https://console.tailscale.com/admin/acls"
@@ -358,6 +358,48 @@ def verify_public_mcp(endpoint: str) -> None:
         raise RuntimeError("La passerelle HTTPS ne répond pas avec le MCP CHK attendu.")
 
 
+def wait_public_mcp(endpoint: str, progress, *, duration_seconds: int = 115) -> None:
+    """Cloudflare quick tunnel public DNS may require >30s after local registration.
+
+    Never log the endpoint: its final path segment is the private MCP capability.
+    """
+    deadline = time.monotonic() + duration_seconds
+    attempts = 0
+    last_message = ""
+    while True:
+        attempts += 1
+        try:
+            verify_public_mcp(endpoint)
+            progress("Initialisation MCP complète validée par HTTPS 443.")
+            return
+        except RuntimeError as err:
+            last_message = str(err)
+            if time.monotonic() >= deadline:
+                break
+            if attempts % 4 == 0:
+                progress("Attente de la propagation DNS Cloudflare… (" +
+                         str(int(duration_seconds - max(0, deadline - time.monotonic()))) +
+                         " secondes)")
+            time.sleep(3)
+    raise RuntimeError("La validation MCP HTTPS 443 a échoué après la propagation. " +
+                       last_message)
+
+
+def cloudflared_process_alive(pid: object) -> bool:
+    """Check only an exact saved PID; never kill or reconfigure other tunnels."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        result = run_quiet(["tasklist.exe", "/FI", "PID eq " + str(pid),
+                            "/FO", "CSV", "/NH"], timeout=7)
+        if result.returncode != 0:
+            return False
+        return bool(re.search(r'"cloudflared\.exe"\s*,\s*"' + str(pid) + r'"',
+                              result.stdout, re.I))
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def start_cloudflare_quick_test(secret: str, progress) -> str:
     """Isolated temporary 443 test, without changing Tailscale Serve or IIS."""
     if fetch_health() is None:
@@ -365,25 +407,27 @@ def start_cloudflare_quick_test(secret: str, progress) -> str:
     verify_mcp_tools(secret)
     binary = get_official_cloudflared(progress)
 
-    # Reuse the prior temporary URL when its MCP endpoint still responds.
+    # Previous installer used just 15 seconds to validate a hostname that
+    # frequently needs 30-60 seconds of public DNS propagation. Reuse the
+    # same running tunnel rather than creating a second one on each retry.
     if CF_STATE.is_file():
         try:
             saved = json.loads(CF_STATE.read_text(encoding="utf-8"))
             base = saved.get("base", "")
-            if CF_HOST_PATTERN.fullmatch(base):
+            pid = saved.get("pid")
+            if CF_HOST_PATTERN.fullmatch(base) and cloudflared_process_alive(pid):
+                progress("Passerelle Cloudflare existante détectée : vérification en cours…")
                 endpoint = base + "/mcp/" + secret
-                verify_public_mcp(endpoint)
-                progress("Passerelle Cloudflare temporaire toujours active : lien réutilisé.")
+                wait_public_mcp(endpoint, progress)
+                progress("Passerelle temporaire réutilisée sans recréer de tunnel.")
                 return endpoint
-        except (ValueError, OSError, RuntimeError):
-            pass
+        except (ValueError, OSError, RuntimeError) as err:
+            progress("La précédente passerelle ne répond plus : nouveau test isolé.")
+            # Never log any exception containing the full private endpoint.
 
     progress("Démarrage d'une passerelle temporaire HTTPS 443, indépendante d'IIS…")
     CF_LOG.parent.mkdir(parents=True, exist_ok=True)
     CF_LOG.write_bytes(b"")
-    # stdout and stderr go to a file, never to a console or pipe. The child
-    # remains alive when this GUI window closes, but the hostname changes
-    # after the child stops/reboots. No Windows admin rights required.
     with CF_LOG.open("ab", buffering=0) as output:
         child = subprocess.Popen(
             [str(binary), "tunnel", "--no-autoupdate",
@@ -410,20 +454,13 @@ def start_cloudflare_quick_test(secret: str, progress) -> str:
     if not hostname:
         raise RuntimeError("Cloudflare n'a pas fourni d'adresse temporaire après 75 secondes.")
 
-    endpoint = hostname + "/mcp/" + secret
-    progress("Adresse HTTPS 443 obtenue, vérification MCP distante en cours…")
-    last = None
-    for attempt in range(5):
-        try:
-            verify_public_mcp(endpoint)
-            break
-        except RuntimeError as failure:
-            last = failure
-            time.sleep(3)
-    else:
-        raise RuntimeError("HTTPS 443 initialisé, mais MCP n'est pas validé : " + str(last))
-
+    # Save even before the DNS name works. If this first test times out,
+    # retrying the GUI will reuse the same running tunnel instead of spawning
+    # an unlimited number of cloudflared processes.
     CF_STATE.write_text(json.dumps({"base": hostname, "pid": child.pid}), encoding="utf-8")
+    endpoint = hostname + "/mcp/" + secret
+    progress("Adresse HTTPS 443 obtenue. Propagation DNS puis vraie requête MCP POST…")
+    wait_public_mcp(endpoint, progress)
     progress("Test MCP HTTPS 443 réussi. URL TEMPORAIRE : elle change si Cloudflare redémarre.")
     return endpoint
 
