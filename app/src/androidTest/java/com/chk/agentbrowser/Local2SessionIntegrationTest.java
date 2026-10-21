@@ -123,9 +123,9 @@ public final class Local2SessionIntegrationTest {
     }
     @Test public void newAndClosedTabsAreTheRealAndroidTabs()throws Exception{
         openBrowser();
-        Outcome opening=start("browser_tabs",new JSONObject().put("operation","new").put("url","https://example.com/second-local2"));
+        Outcome opening=start("browser_tabs",new JSONObject().put("operation","new").put("url","https://example.com/"));
         instrument.waitForIdleSync();
-        WebFixture.load(instrument,current(),"https://example.com/second-local2","<html><body>Second real tab</body></html>","true");
+        WebFixture.load(instrument,current(),"https://example.com/","<html><body>Second real tab</body></html>","true");
         assertTrue(opening.await().json().getBoolean("page_loaded"));
         Outcome listed=call("browser_tabs",new JSONObject());assertTrue(listed.message,listed.ok);
         JSONArray tabs=new JSONArray(listed.message);assertEquals(2,tabs.length());assertTrue(tabs.getJSONObject(1).getBoolean("active"));
