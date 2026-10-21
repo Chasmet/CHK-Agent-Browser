@@ -29,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 PORT = 8766
 MAX_POST = 96 * 1024
 MAX_TEXT = 64 * 1024
@@ -318,10 +318,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def response(self, status: int, data: dict | None):
         raw = json.dumps(data or {}, ensure_ascii=False).encode("utf-8") if data is not None else b""
+        # Stateless MCP never needs to reuse a downstream HTTP/1.1 connection.
+        # Closing after every response prevents unread bodies of early-rejected
+        # POSTs (401/403/413) from being parsed as a second HTTP request.
+        # The latter previously caused Cloudflare 520 / intermittent HTTP 400.
+        self.close_connection = True
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Connection", "close")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         if raw: self.wfile.write(raw)
