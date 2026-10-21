@@ -61,11 +61,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const path = new URL(req.url).pathname;
   // Privileged, non-destructive handshake test using the same public route
   // ChatGPT will use.  Nothing is logged and the response contains no token.
-  const check = /\\/self-test\\/([a-f0-9]{64})\\/?$/.exec(path);
+  const check = /\/self-test\/([a-f0-9]{64})\/?$/.exec(path);
   if (req.method === "GET" && check) {
     const cap = check[1];
     const dest = new URL(req.url);
-    dest.pathname = path.replace(/\\/self-test\\/[a-f0-9]{64}\\/?$/, "/mcp/" + cap);
+    dest.pathname = path.replace(/\/self-test\/[a-f0-9]{64}\/?$/, "/mcp/" + cap);
     const cases = [
       { method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "CHK Supabase Gateway self-test", version: "1.0" } } },
       { method: "tools/list", params: {} },
