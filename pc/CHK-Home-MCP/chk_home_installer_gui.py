@@ -16,6 +16,8 @@ import threading
 import tkinter as tk
 import urllib.error
 import urllib.request
+import webbrowser
+import time
 import winreg
 from pathlib import Path
 from tkinter import messagebox, ttk
@@ -24,7 +26,8 @@ APP = "CHK Home MCP"
 BACKEND_NAME = "CHK-Home-MCP.exe"
 WINDOWS_PORT = 8766
 PUBLIC_PORT = 8443
-VERSION = "1.1"
+VERSION = "1.2"
+TAILSCALE_CONSOLE = "https://console.tailscale.com/admin/acls"
 APP_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CHKHomeMCP"
 
 
@@ -172,16 +175,47 @@ def ensure_funnel(tailscale: str, progress) -> None:
         raise RuntimeError("Le port Funnel 8443 est déjà utilisé. Aucun réglage existant ne sera écrasé.")
     progress("Publication HTTPS 8443 via Tailscale Funnel (IIS 443 préservé)…")
     # Explicit --yes avoids command prompts. Tailscale must allow Funnel.
-    operation = run_quiet([tailscale, "funnel", "--bg", "--yes", "--https=8443",
-                           "--set-path=/mcp", "http://127.0.0.1:8766"], timeout=35)
-    if operation.returncode != 0:
-        short = (operation.stderr or operation.stdout).strip()
-        if "funnel" in short.lower() and "not" in short.lower():
-            short = "Tailscale Funnel n'est pas autorisé dans ton réseau."
-        raise RuntimeError("Tailscale Funnel n'a pas accepté la connexion. " + short[:360])
-    after = funnel_state(tailscale)
-    if not ("8443" in after and "8766" in after):
-        raise RuntimeError("Tailscale n'a pas confirmé la nouvelle route HTTPS. L'adresse n'est pas prête.")
+    # Funnel's first launch can pause until the tailnet owner approves it in the
+    # Tailscale web console; do not display raw subprocess command on timeout.
+    progress("Première activation ? Utilise le bouton AUTORISER TAILSCALE, section Funnel.")
+    timeout = False
+    operation = None
+    try:
+        operation = run_quiet([tailscale, "funnel", "--bg", "--yes", "--https=8443",
+                               "--set-path=/mcp", "http://127.0.0.1:8766"], timeout=70)
+    except subprocess.TimeoutExpired:
+        timeout = True
+
+    # Approval can finish just before a timeout, so always re-check the actual
+    # active route before declaring failure or asking to retry.
+    after = ""
+    for _ in range(4):
+        try:
+            after = funnel_state(tailscale)
+        except (RuntimeError, subprocess.TimeoutExpired):
+            after = ""
+        if "8443" in after and "8766" in after and "/mcp" in after:
+            break
+        time.sleep(1)
+
+    if not ("8443" in after and "8766" in after and "/mcp" in after):
+        if timeout:
+            raise RuntimeError(
+                "Funnel attend trop longtemps. Clique sur AUTORISER TAILSCALE, "
+                "puis dans Access controls > Funnel > Add Funnel to policy. "
+                "Ensuite reviens cliquer sur INSTALLER ET ACTIVER.")
+        if operation is not None and operation.returncode != 0:
+            info = (operation.stderr or operation.stdout).strip()
+            # Do not expose complete command lines, URLs or credentials in GUI.
+            if "permission" in info.lower() or "enable" in info.lower() or "funnel" in info.lower():
+                raise RuntimeError(
+                    "Funnel doit être autorisé. Clique sur AUTORISER TAILSCALE, "
+                    "puis sur Add Funnel to policy et réessaie.")
+            raise RuntimeError("Funnel refuse la publication (code " +
+                               str(operation.returncode) + "). Vérifie les autorisations Tailscale.")
+        raise RuntimeError(
+            "Funnel non confirmé sur le port 8443. Clique sur AUTORISER TAILSCALE "
+            "pour vérifier les droits, puis réessaie.")
     progress("Tailscale Funnel 8443 configuré. Vérification finale dans ChatGPT nécessaire.")
 
 
@@ -229,6 +263,14 @@ class Gui:
                                      state="disabled", font=("Segoe UI", 10, "bold"),
                                      command=self.copy_url)
         self.copy_button.pack(side="left")
+        auth_row = tk.Frame(panel, bg="#1f2937")
+        auth_row.pack(fill="x", padx=18, pady=(0, 12))
+        self.auth_button = tk.Button(
+            auth_row, text="AUTORISER TAILSCALE FUNNEL (NAVIGATEUR)",
+            relief="flat", bg="#a16207", fg="white", activebackground="#854d0e",
+            font=("Segoe UI", 10, "bold"), padx=12, pady=8,
+            command=self.open_tailscale_authorization)
+        self.auth_button.pack(side="left")
         tk.Label(panel, textvariable=self.status_var, font=("Segoe UI", 10, "bold"),
                  bg="#1f2937", fg="#93c5fd", wraplength=640,
                  justify="left").pack(anchor="w", padx=18, pady=(2, 10))
@@ -294,6 +336,14 @@ class Gui:
         # Credential is intentionally NEVER displayed, printed or logged.
         private_url = f"https://{dns}:8443/mcp/{secret}"
         self.messages.put(("ready", private_url))
+
+    def open_tailscale_authorization(self):
+        # Browser-only account approval, no CMD and no programmatic modification
+        # of the private tailnet's access-control policy.
+        webbrowser.open(TAILSCALE_CONSOLE, new=2)
+        self.log_line("Ouvre Tailscale > Access controls > Funnel.")
+        self.log_line("Clique sur Add Funnel to policy si le bouton apparaît.")
+        self.log_line("Puis reviens ici et clique sur INSTALLER ET ACTIVER.")
 
     def diagnose(self):
         self.run_task(self.diagnostic_worker)
