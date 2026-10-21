@@ -240,6 +240,35 @@ public final class AgentClient {
             deliverPending();
         }
     }
+    /** Dispatch local Tailscale MCP requests through the exact same Android handlers as the UI. */
+    void executeDirect(String action, JSONObject args, DirectMcpServer.Reply reply) {
+        ui.post(() -> {
+            if (!isEnabled() || !isDirectMode()) {
+                reply.finish(false, "MCP direct désactivé."); return;
+            }
+            if (!isAutonomous()) {
+                reply.finish(false, "Autorise le mode autonome dans les réglages CHK."); return;
+            }
+            CommandHandler receiver = activeHandler();
+            if (receiver == null) {
+                reply.finish(false, "Aucun navigateur CHK actif."); return;
+            }
+            JSONObject command = new JSONObject();
+            try {
+                command.put("id", "direct-local");
+                command.put("action", action);
+                command.put("args", args);
+            } catch (org.json.JSONException fail) {
+                reply.finish(false, "Commande invalide."); return;
+            }
+            try {
+                receiver.onCommand(command, (ok, message) -> reply.finish(ok, message));
+            } catch (RuntimeException fail) {
+                reply.finish(false, "Erreur locale : " + fail.getClass().getSimpleName());
+            }
+        });
+    }
+
     private void poll() {
         if(isDirectMode() || !running || !isEnabled()) return;
         if(inFlight) { ui.removeCallbacks(tick);ui.postDelayed(tick, 1200L); return; }
