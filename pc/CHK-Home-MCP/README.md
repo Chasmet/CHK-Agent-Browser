@@ -1,3 +1,7 @@
+## Mettre à jour un Local 2 déjà installé
+
+Extraire le nouveau pack Windows, ouvrir `CHK-Home-Installation.exe` puis cliquer **METTRE À JOUR LE RELAIS EXISTANT**. Cette action remplace uniquement le binaire du relais et vérifie les outils. Elle conserve configuration, dossier autorisé, jeton et URL MCP, sans reconfigurer Tailscale. Actualiser ensuite le catalogue du connecteur dans ChatGPT pour afficher les 20 outils. Les nouvelles actions Android restent accessibles via `android_command` avec le serveur 1.3.0 si seul l’APK est mis à jour.
+
 # CHK Home MCP — serveur PC Windows, sans Render
 
 Service MCP Windows natif, distribué sous forme de ZIP avec **deux vrais exécutables x64** (serveur et installateur graphique) construits par GitHub Actions. Aucun appel Render ni cle API OpenAI.
@@ -15,7 +19,7 @@ Le service écoute sur 127.0.0.1:8766 ; Tailscale Funnel expose uniquement le po
 1. Ouvrir les Actions GitHub de CHK Agent Browser, workflow CHK Home MCP Windows, branche feature/pc-home-mcp-20261021.
 2. Telecharger et extraire completement l'artefact CHK-Home-MCP-Windows.
 3. Sur le PC Windows pc-salon, double-cliquer sur **CHK-Home-Installation.exe** (interface graphique, aucune commande CMD).
-4. Cliquer sur le bouton **INSTALLER ET ACTIVER**, puis confirmer. Le logiciel copie le serveur dans LOCALAPPDATA, active son demarrage automatique utilisateur, teste les 13 outils MCP (y compris Android), puis configure Tailscale Funnel sur le port 8443 si autorise.
+4. Cliquer sur le bouton **INSTALLER ET ACTIVER**, puis confirmer. Le logiciel copie le serveur dans LOCALAPPDATA, active son demarrage automatique utilisateur, teste les 20 outils MCP (y compris Android), puis configure Tailscale Funnel sur le port 8443 si autorise.
 5. Cliquer sur **COPIER MON LIEN MCP**. Le jeton reste masque a l'ecran. Dans ChatGPT : Plugins > Ajouter > URL du serveur > Ctrl+V. Authentification Sans authentification (le jeton est dans l'URL).
 6. Verifier que ChatGPT peut reellement appeler server_info. Ne pas affirmer que l'adresse est operationnelle avant cet essai.
 

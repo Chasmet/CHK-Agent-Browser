@@ -13,11 +13,15 @@ final class AgentFiles {
     private AgentFiles(){}
     static File journal(Context c,String type,String id)throws Exception{
         if(!id.matches("[A-Za-z0-9_-]{1,80}"))throw new Exception("Identifiant requis : lettres, chiffres, tiret ou souligné (80 maximum).");
-        File dir=new File(c.getFilesDir(),"agent_desktop/"+type);if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("Journal indisponible.");return new File(dir,id+".json");
+        File dir=new File(c.getFilesDir(),"agent_desktop/"+type);if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("Journal indisponible.");
+        File file=new File(dir,id+".json");
+        // Android 6–9 AtomicFile can leave only .bak after a crash. Recover it before
+        // callers test exists(), otherwise they could create a fresh workflow over its checkpoint.
+        if(new File(file.getPath()+".bak").isFile())try(InputStream recovered=new AtomicFile(file).openRead()){}
+        return file;
     }
     static JSONObject read(File f)throws Exception{
-        if(!f.isFile()||f.length()>2000000)throw new IOException("Journal introuvable ou trop volumineux.");
-        try(InputStream in=new AtomicFile(f).openRead();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);return new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));}
+        try(InputStream in=new AtomicFile(f).openRead();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){if(out.size()+n>2000000)throw new IOException("Journal trop volumineux.");out.write(b,0,n);}return new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));}
     }
     static void save(File f,JSONObject state)throws Exception{
         AtomicFile a=new AtomicFile(f);FileOutputStream out=null;try{out=a.startWrite();out.write(state.toString().getBytes(StandardCharsets.UTF_8));a.finishWrite(out);}catch(Exception e){if(out!=null)a.failWrite(out);throw e;}
@@ -29,7 +33,7 @@ final class AgentFiles {
     }
     static JSONObject command(Context c,JSONObject p,AgentClient.ResultCallback active)throws Exception{
         String operation=p.optString("operation","plan");
-        if(operation.startsWith("external_"))return ExternalFiles.command(c,p);
+        if(operation.startsWith("external_"))return ExternalFiles.command(c,p,active);
         if(operation.equals("stat")){WorkspaceStore s=new WorkspaceStore(c);String path=p.getString("path");File f=s.file(path);return new JSONObject().put("ok",true).put("path",path).put("exists",f.exists()).put("directory",f.isDirectory()).put("size",f.length()).put("stamp",stamp(f));}
         String id=p.getString("id");File f=journal(c,"files",id);
         if(operation.equals("plan")||operation.equals("apply")){
@@ -102,7 +106,7 @@ final class AgentFiles {
                 row.put("state","running");save(file,state);
                 if(mode.equals("trash"))row.put("trash_id",store.trash(path));
                 else {parents(store,destination);
-                    if(mode.equals("copy"))WorkspaceCatalog.copy(c,path,destination);
+                    if(mode.equals("copy"))WorkspaceArchive.copy(c,path,destination,active);
                     else if(mode.equals("transform"))store.writeText(destination,transform(store.readText(path,0),p),false);
                     else store.move(path,destination);
                     if(!store.file(destination).exists()||!mode.equals("copy")&&!mode.equals("transform")&&store.file(path).exists())throw new Exception("État final du fichier non confirmé.");

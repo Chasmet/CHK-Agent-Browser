@@ -39,7 +39,7 @@ public final class DocumentReader {
 
     static boolean supported(String name){
         String s=name.toLowerCase(Locale.ROOT);
-        return s.endsWith(".pdf")||s.endsWith(".docx")||s.endsWith(".png")||s.endsWith(".jpg")||
+        return s.endsWith(".pdf")||s.endsWith(".docx")||s.endsWith(".xlsx")||s.endsWith(".pptx")||s.endsWith(".png")||s.endsWith(".jpg")||
             s.endsWith(".jpeg")||s.endsWith(".webp")||s.endsWith(".bmp");
     }
     static boolean webPdfCandidate(String url){
@@ -58,6 +58,7 @@ public final class DocumentReader {
         JSONObject result;
         if(s.endsWith(".pdf")) result=readPdf(app,f,page,count);
         else if(s.endsWith(".docx")) result=readDocx(f);
+        else if(s.endsWith(".xlsx")||s.endsWith(".pptx"))result=OfficeDocumentReader.read(f,page,count);
         else if(s.endsWith(".png")||s.endsWith(".jpg")||s.endsWith(".jpeg")||s.endsWith(".webp")||s.endsWith(".bmp"))
             result=readImage(f);
         else throw new IOException("Type de document non pris en charge; texte brut: files_read_text.");

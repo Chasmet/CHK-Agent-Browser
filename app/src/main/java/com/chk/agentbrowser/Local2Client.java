@@ -136,7 +136,8 @@ public final class Local2Client {
                 byte[] buf = new byte[4096]; int count;
                 while ((count = in.read(buf)) != -1) {
                     result.write(buf, 0, count);
-                    if (result.size() > 65536) throw new java.io.IOException("Réponse trop grande");
+                    // 48 KiB binary becomes 64 KiB Base64, plus the command envelope.
+                    if (result.size() > 96*1024) throw new java.io.IOException("Réponse trop grande");
                 }
                 return new JSONObject(new String(result.toByteArray(), StandardCharsets.UTF_8));
             }
@@ -219,17 +220,26 @@ public final class Local2Client {
                                 }catch(Exception ignored){}
                             }
                             try {
+                                String transportMessage;boolean reportedSuccess=ok;
+                                try{transportMessage=Local2Results.prepare(app,message);}
+                                catch(Exception packaging){
+                                    reportedSuccess=false;
+                                    transportMessage="Action exécutée mais résultat non transportable : vérifier son état avant de relancer. Erreur : "+packaging.getClass().getSimpleName();
+                                }
                                 JSONObject params = new JSONObject().put("id", ident)
-                                    .put("success", ok).put("message", message);
+                                    .put("success", reportedSuccess).put("message", transportMessage);
                                 Local2Protocol.completion(request(replyAddress, "android/complete", params));
-                                if (session == generation) commandState = ok ? "résultat reçu par le PC" : "échec transmis au PC";
+                                if (session == generation) commandState = reportedSuccess ? "résultat reçu par le PC" : "échec transmis au PC";
                             } catch (Exception failure) {
                                 if (session == generation) {
                                     commandState = "résultat non acquitté par le PC";
                                     status = "Résultat non transmis : " + failure.getClass().getSimpleName();
                                 }
                             } finally {
-                                if(session==generation)commandInFlight.set(false);
+                                if(session==generation){
+                                    commandInFlight.set(false);
+                                    main.post(()->{if(session==generation&&running&&enabled()){main.removeCallbacks(loop);main.post(loop);}});
+                                }
                             }
                         }));
                     });

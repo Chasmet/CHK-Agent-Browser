@@ -64,6 +64,7 @@ public final class DiagnosticActivity extends Activity {
             "\n\n"+Local2Client.get(this).diagnostic()+"\n"+
             "\nRéseau : "+network+
             "\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+
+            "\nStockage Android : "+WorkspaceHealth.summary(this)+
             "\nAperçus : "+(agent.isPreviewAllowed()?"autorisés":"désactivés")+
             "\nBatterie : "+battery+
             "\nDernière commande : "+agent.lastCommandStatus()+

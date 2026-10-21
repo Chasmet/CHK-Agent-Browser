@@ -10,6 +10,7 @@ execute arbitrary shell/PowerShell instructions received through MCP.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import hmac
 import json
@@ -25,12 +26,14 @@ import threading
 import time
 import uuid
 from android_mailbox import AndroidMailbox, ALLOWED_ACTIONS
+import android_tools
+import android_transfers
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.4.0"
 PORT = 8766
 MAX_POST = 96 * 1024
 MAX_TEXT = 64 * 1024
@@ -69,6 +72,7 @@ def init_config() -> dict:
     return data
 
 def workspace_path(root: Path, name: str, *, allow_root: bool = False) -> Path:
+    root = root.resolve()
     if not isinstance(name, str) or len(name) > 800 or "\x00" in name:
         raise ValueError("Chemin invalide.")
     # Windows absolute paths and drive-relative paths are forbidden.
@@ -83,6 +87,8 @@ def workspace_path(root: Path, name: str, *, allow_root: bool = False) -> Path:
         raise ValueError("Dossier racine protégé.")
     if candidate == root / ".trash" or root / ".trash" in candidate.parents:
         raise ValueError("Corbeille protégée.")
+    if candidate == root / ".transfers" or root / ".transfers" in candidate.parents:
+        raise ValueError("Journal de transfert protégé.")
     return candidate
 
 def relative(root: Path, path: Path) -> str:
@@ -95,10 +101,17 @@ def read_json_object(s: str) -> dict:
     return obj
 
 def safe_tool_action(name: str, arguments: dict, cfg: dict) -> object:
-    if not isinstance(arguments, dict):
+    if not isinstance(arguments, dict) or not isinstance(name, str):
         raise ValueError("Arguments invalides.")
     root = cfg["root"]
     path_name = arguments.get("path", "")
+    if name == "android_transfer_file":
+        return android_transfers.command(arguments, cfg, ANDROID_QUEUE, workspace_path)
+    routed = android_tools.route(name, arguments)
+    if routed is not None:
+        action, payload = routed
+        ident = ANDROID_QUEUE.enqueue("android_action", {"action": action, "args": payload})
+        return ANDROID_QUEUE.await_result(ident, timeout=20)
     if name == "server_info":
         return {"name": "CHK Home MCP", "version": APP_VERSION,
                 "execution": "Windows PC", "hosting": "local", "render": False,
@@ -111,7 +124,7 @@ def safe_tool_action(name: str, arguments: dict, cfg: dict) -> object:
     if name == "android_command":
         action = arguments.get("action", "")
         payload = arguments.get("args", {})
-        if action not in ALLOWED_ACTIONS:
+        if not isinstance(action, str) or action not in ALLOWED_ACTIONS:
             raise ValueError("Action Android interdite.")
         ident = ANDROID_QUEUE.enqueue(action, payload)
         return ANDROID_QUEUE.await_result(ident, timeout=20)
@@ -125,7 +138,7 @@ def safe_tool_action(name: str, arguments: dict, cfg: dict) -> object:
             raise ValueError("Dossier introuvable.")
         entries = []
         for file in sorted(folder.iterdir(), key=lambda p: (not p.is_dir(), p.name.casefold())):
-            if file.name == ".trash" or file.is_symlink():
+            if file.name in (".trash", ".transfers") or file.is_symlink():
                 continue
             entries.append({"name": file.name, "path": relative(root, file),
                             "type": "folder" if file.is_dir() else "file",
@@ -293,11 +306,26 @@ def tool_catalog() -> list[dict]:
         "video_cut": ("path", "output", "start_seconds", "duration_seconds"),
     }
     return [{"name": name, "description": desc, "inputSchema": schema(props, required.get(name, ()))}
-            for name, desc, props in items]
+            for name, desc, props in items] + android_tools.catalog()
 
 def error(code: int, message: str, identifier=None) -> dict:
     return {"jsonrpc": "2.0", "id": identifier,
             "error": {"code": code, "message": message}}
+
+def tool_content(answer: object) -> list[dict]:
+    images = []
+    if isinstance(answer, dict) and answer.get("success") is True:
+        try:
+            message = json.loads(answer.get("message", ""))
+            image = message.get("jpeg_base64", "") if isinstance(message, dict) else ""
+            if image and len(image) <= 22000 and base64.b64decode(image, validate=True).startswith(b"\xff\xd8\xff"):
+                images.append({"type": "image", "mimeType": "image/jpeg", "data": image})
+                message.pop("jpeg_base64")
+                message["preview_image_attached"] = True
+                answer = {**answer, "message": json.dumps(message, ensure_ascii=False)}
+        except (ValueError, TypeError):
+            pass
+    return [{"type": "text", "text": json.dumps(answer, ensure_ascii=False)}, *images]
 
 def dispatch(request: dict, cfg: dict) -> dict | None:
     identifier = request.get("id")
@@ -323,8 +351,8 @@ def dispatch(request: dict, cfg: dict) -> dict | None:
         args = params.get("arguments") or {}
         try:
             answer = safe_tool_action(name, args, cfg)
-            result = {"content": [{"type": "text", "text": json.dumps(answer, ensure_ascii=False)}],
-                      "isError": False}
+            result = {"content": tool_content(answer),
+                      "isError": isinstance(answer, dict) and answer.get("state") in ("done", "expired") and answer.get("success") is False}
         except (ValueError, OSError, UnicodeError, subprocess.SubprocessError) as e:
             result = {"content": [{"type": "text", "text": str(e)[:250]}], "isError": True}
     else:
@@ -447,9 +475,9 @@ def main() -> None:
         return
     if options.once_test:
         result = dispatch({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, cfg)
-        assert len(result["result"]["tools"]) == 13
+        assert len(result["result"]["tools"]) == 20
         assert safe_tool_action("server_info", {}, cfg)["render"] is False
-        print("OK — 10 MCP tools; no Render client or polling.")
+        print("OK — 20 MCP tools; no Render client or polling.")
         return
     server = LocalMcpServer(("127.0.0.1", PORT), Handler)
     server.cfg = cfg

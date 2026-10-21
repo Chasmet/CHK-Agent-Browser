@@ -88,17 +88,23 @@ class AndroidMailbox:
 
     def resolve(self, ident: str, success: bool, message: str) -> bool:
         with self.lock:
+            if not isinstance(ident, str):
+                return False
             item = self.items.get(ident)
             if item is None or item["state"] != "leased":
                 return False
             if not isinstance(success, bool) or not isinstance(message, str):
                 return False
-            item["result"] = {"success": success, "message": message[:24000]}
+            if len(message) > 24000:
+                success, message = False, "Résultat Android trop volumineux : aucune confirmation exploitable. Vérifier l’état avant de relancer ; mettre l’APK à jour pour les résultats par fichier."
+            item["result"] = {"success": success, "message": message}
             item["state"] = "done"
             self.lock.notify_all()
             return True
 
     def await_result(self, ident: str, timeout: float = 30.0) -> dict:
+        if not isinstance(ident, str):
+            raise ValueError("Identifiant de commande invalide.")
         deadline = time.monotonic() + min(max(timeout, 0), self.ttl)
         with self.lock:
             while True:

@@ -145,7 +145,10 @@ public final class Local2SessionIntegrationTest {
                 }
                 @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){delegate.onPageStarted(view,url,icon);}
                 @Override public void onPageFinished(WebView view,String url){delegate.onPageFinished(view,url);}
-                @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){receivedError.set(request.isForMainFrame());delegate.onReceivedHttpError(view,request,response);}
+                @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
+                    if(request.isForMainFrame()&&missing.equals(request.getUrl().toString()))receivedError.set(true);
+                    delegate.onReceivedHttpError(view,request,response);
+                }
             });
         });
         Outcome result=call("browser_open_url",new JSONObject().put("url",missing));
