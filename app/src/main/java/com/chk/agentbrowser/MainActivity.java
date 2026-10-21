@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
     private final List<WebView> tabs=new ArrayList<>();
     private WebView current;
     private final java.util.Map<WebView,String> pageErrors=new java.util.WeakHashMap<>();
+    private final java.util.Map<WebView,Runnable> navigationCancels=new java.util.WeakHashMap<>();
     private BrowserStore store;
     private FrameLayout container;
     private EditText address;
@@ -411,11 +412,15 @@ public class MainActivity extends Activity {
     }
     private void verifyNavigation(WebView target,String requested,long before,int timeout,AgentClient.ResultCallback cb){
         final long deadline=android.os.SystemClock.elapsedRealtime()+Math.min(25000,Math.max(1000,timeout));
+        final java.util.concurrent.atomic.AtomicBoolean completed=new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable cancel=()->{if(completed.compareAndSet(false,true))cb.finish(false,"Navigation interrompue · onglet fermé ou navigation remplacée.");};
+        Runnable previous=navigationCancels.put(target,cancel);if(previous!=null)previous.run();
         Runnable check=new Runnable(){
-            boolean done;
-            void finish(boolean ok,String text){if(!done){done=true;cb.finish(ok,text);}}
+            void finish(boolean ok,String text){if(completed.compareAndSet(false,true)){
+                if(navigationCancels.get(target)==cancel)navigationCancels.remove(target);cb.finish(ok,text);
+            }}
             @Override public void run(){
-                if(done)return;
+                if(completed.get())return;
                 if(!cb.isActive()){finish(false,"Navigation interrompue · commande ou canal désactivé.");return;}
                 if(isFinishing()||isDestroyed()||!BrowserWebState.alive(target)||current!=target){
                     finish(false,"Navigation interrompue · onglet fermé ou sélection modifiée.");return;
@@ -424,15 +429,17 @@ public class MainActivity extends Activity {
                 if(android.os.SystemClock.elapsedRealtime()>=deadline){
                     finish(false,"Chargement non confirmé dans le délai. Relis la page avant une nouvelle navigation.");return;
                 }
-                if(BrowserWebState.documentVersion(target)<=before||!BrowserWebState.loaded(target)){
+                if(BrowserWebState.documentVersion(target)<=before||!BrowserWebState.loaded(target)
+                    ||android.os.SystemClock.elapsedRealtime()-BrowserWebState.loadedAt(target)<200L){
                     transferHandler.postDelayed(this,150L);return;
                 }
                 long document=BrowserWebState.documentVersion(target);
                 target.evaluateJavascript("JSON.stringify({url:location.href,ready:document.readyState,title:document.title})",raw->{
-                    if(done)return;
+                    if(completed.get())return;
                     if(!cb.isActive()||current!=target||isFinishing()||isDestroyed()){
                         finish(false,"Navigation interrompue avant la vérification.");return;
                     }
+                    if(pageErrors.containsKey(target)){finish(false,pageErrors.get(target));return;}
                     try{
                         JSONObject page=new JSONObject(fromJavascript(raw));
                         if(document!=BrowserWebState.documentVersion(target)||!BrowserWebState.loaded(target)
@@ -1031,6 +1038,7 @@ public class MainActivity extends Activity {
         if(current!=null&&current.canGoBack())current.goBack();else super.onBackPressed();
     }
     @Override protected void onDestroy(){
+        for(Runnable cancel:new ArrayList<>(navigationCancels.values()))cancel.run();navigationCancels.clear();
         if(agentClient!=null)agentClient.releaseBrowser(this);
         super.onDestroy();
         if(home!=null)home.destroy();if(workspace!=null)workspace.destroy();hideFullScreenVideo();

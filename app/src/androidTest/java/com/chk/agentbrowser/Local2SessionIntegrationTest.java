@@ -135,6 +135,7 @@ public final class Local2SessionIntegrationTest {
     }
     @Test public void navigationHttpErrorNeverBecomesSuccess()throws Exception{
         openBrowser();WebView web=current();String missing="https://example.com/missing-local2";
+        java.util.concurrent.atomic.AtomicBoolean receivedError=new java.util.concurrent.atomic.AtomicBoolean();
         instrument.runOnMainSync(()->{
             WebViewClient delegate=web.getWebViewClient();
             web.setWebViewClient(new WebViewClient(){
@@ -144,10 +145,11 @@ public final class Local2SessionIntegrationTest {
                 }
                 @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){delegate.onPageStarted(view,url,icon);}
                 @Override public void onPageFinished(WebView view,String url){delegate.onPageFinished(view,url);}
-                @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){delegate.onReceivedHttpError(view,request,response);}
+                @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){receivedError.set(request.isForMainFrame());delegate.onReceivedHttpError(view,request,response);}
             });
         });
         Outcome result=call("browser_open_url",new JSONObject().put("url",missing));
+        assertTrue("Android did not deliver the HTTP error callback: "+result.message,receivedError.get());
         assertFalse(result.message,result.ok);assertTrue(result.message,result.message.contains("404"));
     }
     @Test public void disabledAutonomyAndLocal2AreDiagnosedSeparately()throws Exception{
