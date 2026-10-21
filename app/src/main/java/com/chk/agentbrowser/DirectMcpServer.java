@@ -86,12 +86,13 @@ final class DirectMcpServer implements AutoCloseable {
                 }
             }
         } catch (Exception ignored) { }
-        // Known previous address, shown as provisional until checked on Android.
-        return "100.86.142.102";
+        // Never reuse an address from an old screenshot after a VPN change.
+        return "";
     }
 
     static String privateUrl(Context context) {
-        return "http://" + tailscaleIp() + ":" + PORT + "/mcp/" + secret(context);
+        String ip = tailscaleIp();
+        return ip.isEmpty() ? "" : "http://" + ip + ":" + PORT + "/mcp/" + secret(context);
     }
 
     static boolean inTailnet(InetAddress address) {
