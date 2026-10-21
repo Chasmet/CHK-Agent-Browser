@@ -78,7 +78,7 @@ public final class SettingsActivity extends Activity {
         local2Status.setText(Local2Client.get(this).status());
         group.addView(local2Status, localInsert++);
         TextView local2Help = new TextView(this);
-        local2Help.setText("Configure une fois l’adresse HTTPS du MCP PC, puis active Local 2. Ce canal ne passe pas par Render ni Supabase.");
+        local2Help.setText("Local 2 peut être activé sans adresse. Pour établir la liaison Android, configure ensuite l’URL HTTPS directe du PC Tailscale. Ne colle pas ici l’URL Supabase utilisée par ChatGPT.");
         local2Help.setPadding(16,8,16,12);
         group.addView(local2Help, localInsert++);
         Button local2Off = new Button(this);
@@ -114,7 +114,7 @@ public final class SettingsActivity extends Activity {
                 if(!on && !agent.isEnabled())stopService(new Intent(this,AgentService.class));
             }catch(IllegalArgumentException e) {
                 local2.setChecked(false);
-                Toast.makeText(this,"Configure d’abord l’URL Local 2.",Toast.LENGTH_LONG).show();
+                Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
             }
             local2Status.setText(Local2Client.get(this).status());
         });
