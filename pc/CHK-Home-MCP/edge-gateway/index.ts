@@ -93,14 +93,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
         if (!correct) break;
       }
       const passed = report.length === 3 && report.every((test) => test.valid);
-      return responseJSON(passed ? 200 : 502, {
+      return responseJSON(200, {
         service: "CHK Home MCP gateway",
         passed,
         checks: report,
         render: false
       });
-    } catch (_) {
-      return responseJSON(502, { service: "CHK Home MCP gateway", passed: false, checks: report });
+    } catch (reason) {
+      return responseJSON(200, {
+        service: "CHK Home MCP gateway", passed: false, checks: report,
+        failureType: reason instanceof Error ? reason.name : "unknown"
+      });
     }
   }
   if (req.method === "GET" && path.endsWith("/healthcheck")) {
