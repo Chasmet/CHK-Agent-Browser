@@ -56,34 +56,41 @@ public final class SettingsActivity extends Activity {
             Toast.makeText(this,enabled?"Mode éco activé : le traitement en veille peut être retardé":"Mode MCP réactif activé",Toast.LENGTH_LONG).show();
         });
         group.addView(ecoMode);
-        Button directMcp = new Button(this);
-        directMcp.setText("Activer le serveur MCP DIRECT sur mon téléphone (0 Render)");
-        directMcp.setAllCaps(false);
-        directMcp.setOnClickListener(v -> new AgentDialog.Builder(this)
-            .setTitle("MCP direct sur le Honor — sans Render")
-            .setMessage("Le serveur fonctionne uniquement sur Android et le réseau Tailscale privé. " +
-                "Aucun appel à Render ne sera envoyé. Ce mode n'est pas encore une adresse HTTPS " +
-                "publique pour ChatGPT. Activer ce mode arrête la synchronisation Render. " +
-                "Tu peux l'arrêter à tout moment avec Arrêter le MCP.")
-            .setNegativeButton("Annuler", null)
-            .setPositiveButton("Activer le serveur direct", (dialog, which) -> {
-                agent.enableDirect();
-                AgentService.ensureRunning(this);
-                requestNotificationsIfNeeded();
-                showMcp();
-            }).show());
-        group.addView(directMcp);
+        int localInsert = group.indexOfChild(findViewById(R.id.mcp_diagnostic)) + 1;
+        TextView channels = new TextView(this);
+        channels.setText("CONNEXIONS MCP INDÉPENDANTES");
+        channels.setTextSize(18);
+        channels.setPadding(16,24,16,12);
+        group.addView(channels, localInsert++);
+        TextView renderHelp = new TextView(this);
+        renderHelp.setText("MCP Render : utilise Activer / reconnecter Render ci-dessus. Render et Local 2 fonctionnent indépendamment.");
+        renderHelp.setPadding(16,8,16,16);
+        group.addView(renderHelp, localInsert++);
         Switch local2 = new Switch(this);
-        local2.setText("CHK Agent Browser Local 2 · PC sans Render/Supabase");
+        local2.setText("MCP Local 2 (PC) : activer / désactiver");
         local2.setChecked(Local2Client.get(this).enabled());
-        group.addView(local2);
+        group.addView(local2, localInsert++);
         Button local2Config = new Button(this);
         local2Config.setText("Configurer URL HTTPS privée Local 2");
         local2Config.setAllCaps(false);
-        group.addView(local2Config);
+        group.addView(local2Config, localInsert++);
         TextView local2Status = new TextView(this);
         local2Status.setText(Local2Client.get(this).status());
-        group.addView(local2Status);
+        group.addView(local2Status, localInsert++);
+        TextView local2Help = new TextView(this);
+        local2Help.setText("Configure une fois l’adresse HTTPS du MCP PC, puis active Local 2. Ce canal ne passe pas par Render ni Supabase.");
+        local2Help.setPadding(16,8,16,12);
+        group.addView(local2Help, localInsert++);
+        Button local2Off = new Button(this);
+        local2Off.setText("Désactiver MCP Local 2 uniquement");
+        local2Off.setAllCaps(false);
+        local2Off.setOnClickListener(v -> {
+            Local2Client.get(this).configure(Local2Client.get(this).url(),false);
+            local2.setChecked(false);
+            if(!agent.isEnabled()) stopService(new Intent(this,AgentService.class));
+            local2Status.setText("Local 2 désactivé · Render inchangé");
+        });
+        group.addView(local2Off, localInsert++);
         local2Config.setOnClickListener(v -> {
             android.widget.EditText field = new android.widget.EditText(this);
             field.setSingleLine(true);
@@ -162,6 +169,8 @@ public final class SettingsActivity extends Activity {
         mcpConnect=findViewById(R.id.mcp_connect);
         mcpCopy=findViewById(R.id.mcp_copy);
         mcpDisable=findViewById(R.id.mcp_disable);
+        mcpDisable.setText("Désactiver MCP Render uniquement");
+        mcpConnect.setText("Activer / reconnecter MCP Render");
         status=findViewById(R.id.update_status);
         check=findViewById(R.id.check_update);
         install=findViewById(R.id.install_update);
