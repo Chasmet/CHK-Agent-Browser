@@ -59,6 +59,50 @@ async function safeBody(req: Request): Promise<Uint8Array> {
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const path = new URL(req.url).pathname;
+  // Privileged, non-destructive handshake test using the same public route
+  // ChatGPT will use.  Nothing is logged and the response contains no token.
+  const check = /\\/self-test\\/([a-f0-9]{64})\\/?$/.exec(path);
+  if (req.method === "GET" && check) {
+    const cap = check[1];
+    const dest = new URL(req.url);
+    dest.pathname = path.replace(/\\/self-test\\/[a-f0-9]{64}\\/?$/, "/mcp/" + cap);
+    const cases = [
+      { method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "CHK Supabase Gateway self-test", version: "1.0" } } },
+      { method: "tools/list", params: {} },
+      { method: "tools/call", params: { name: "server_info", arguments: {} } }
+    ];
+    const report = [];
+    try {
+      for (let i = 0; i < cases.length; i++) {
+        const rpc = { jsonrpc: "2.0", id: i + 1, ...cases[i] };
+        const resp = await fetch(dest.toString(), {
+          method: "POST",
+          headers: { "content-type": "application/json", "accept": "application/json, text/event-stream" },
+          body: JSON.stringify(rpc),
+          redirect: "manual",
+          signal: AbortSignal.timeout(12000)
+        });
+        let body: any = null;
+        try { body = await resp.json(); } catch (_) { }
+        const correct = i === 0
+          ? body?.result?.serverInfo?.name === "CHK Home MCP"
+          : i === 1
+          ? body?.result?.tools?.length === 10
+          : body?.result?.isError === false;
+        report.push({ step: cases[i].method, httpStatus: resp.status, valid: !!correct });
+        if (!correct) break;
+      }
+      const passed = report.length === 3 && report.every((test) => test.valid);
+      return responseJSON(passed ? 200 : 502, {
+        service: "CHK Home MCP gateway",
+        passed,
+        checks: report,
+        render: false
+      });
+    } catch (_) {
+      return responseJSON(502, { service: "CHK Home MCP gateway", passed: false, checks: report });
+    }
+  }
   if (req.method === "GET" && path.endsWith("/healthcheck")) {
     // Public status contains no tokens, filenames, or content.
     try {
