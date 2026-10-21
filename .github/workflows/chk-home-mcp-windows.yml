@@ -36,14 +36,19 @@ jobs:
         shell: pwsh
         run: |
           python -m unittest discover -s pc/CHK-Home-MCP/tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Tests MCP en échec' }
           python pc/CHK-Home-MCP/chk_home_mcp.py --once-test
+          if ($LASTEXITCODE -ne 0) { throw 'Protocole MCP invalide' }
           python -m py_compile pc/CHK-Home-MCP/chk_home_installer_gui.py
+          if ($LASTEXITCODE -ne 0) { throw 'Installateur Python invalide' }
       - name: Compiler un vrai EXE Windows x64
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check pyinstaller==6.16.0
           python -m PyInstaller --noconfirm --clean --onefile --console --name CHK-Home-MCP pc/CHK-Home-MCP/chk_home_mcp.py
+          if ($LASTEXITCODE -ne 0) { throw 'Compilation serveur en échec' }
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name CHK-Home-Installation pc/CHK-Home-MCP/chk_home_installer_gui.py
+          if ($LASTEXITCODE -ne 0) { throw 'Compilation interface en échec' }
       - name: Verifier l'EXE compile
         shell: pwsh
         run: |

@@ -493,7 +493,7 @@ class Gui:
         panel.pack(fill="both", expand=True, padx=28, pady=4)
         tk.Label(panel, text="INSTALLATION EN UN CLIC", bg="#1f2937", fg="#f8fafc",
                  font=("Segoe UI", 13, "bold")).pack(anchor="w", padx=18, pady=(19, 9))
-        tk.Label(panel, text="Le programme crée le serveur MCP local, teste ses 10 outils puis\n"
+        tk.Label(panel, text="Installation initiale : crée le serveur et teste ses 20 outils puis\n"
                             "configure Tailscale HTTPS sur le port 8443. IIS 443 et le premier\n"
                             "connecteur CHK Agent Browser/Render restent inchangés.",
                  bg="#1f2937", fg="#cbd5e1", justify="left", font=("Segoe UI", 10)).pack(anchor="w", padx=18)
@@ -514,6 +514,10 @@ class Gui:
                                      state="disabled", font=("Segoe UI", 10, "bold"),
                                      command=self.copy_url)
         self.copy_button.pack(side="left")
+        self.update_button = tk.Button(panel, text="METTRE À JOUR LE RELAIS EXISTANT", relief="flat",
+                                       bg="#0e7490", fg="white", padx=14, pady=9,
+                                       font=("Segoe UI", 10, "bold"), command=lambda: self.run_task(self.update_existing))
+        self.update_button.pack(anchor="w", padx=18, pady=(0, 12))
         auth_row = tk.Frame(panel, bg="#1f2937")
         auth_row.pack(fill="x", padx=18, pady=(0, 12))
         self.auth_button = tk.Button(
@@ -554,6 +558,7 @@ class Gui:
             return
         self.is_busy = True
         self.install_button.configure(state="disabled")
+        self.update_button.configure(state="disabled")
         self.diagnostic_button.configure(state="disabled")
         self.cloudflare_button.configure(state="disabled")
         self.copy_button.configure(state="disabled")
@@ -596,6 +601,17 @@ class Gui:
         private_url = f"https://{dns}:8443/mcp/{secret}"
         self.messages.put(("ready", private_url))
 
+    def update_existing(self):
+        if not (APP_DIR / "config.json").is_file():
+            raise RuntimeError("Aucun relais existant détecté. Utilise l’installation initiale.")
+        before = private_config()
+        secret = ensure_local_mcp(self.msg)
+        after = private_config()
+        if secret != before["secret"] or before != after:
+            raise RuntimeError("Configuration modifiée pendant la mise à jour : vérifier avant de continuer.")
+        self.msg("Relais existant mis à jour et outils vérifiés. Configuration et lien MCP conservés.")
+        self.messages.put(("updated", None))
+
     def open_tailscale_authorization(self):
         # Browser-only account approval, no CMD and no programmatic modification
         # of the private tailnet's access-control policy.
@@ -630,8 +646,8 @@ class Gui:
         self.msg("État local MCP : " + ("ACTIF" if fetch_health() is not None else "INACTIF"))
         cfg = APP_DIR / "config.json"
         if cfg.is_file() and fetch_health():
-            verify_mcp_tools(private_config()["secret"])
-            self.msg("Protocole MCP : 10 outils répondent correctement.")
+            count = verify_mcp_tools(private_config()["secret"])
+            self.msg(f"Protocole MCP : {count} outils répondent correctement.")
         tailscale, dns = tailscale_status()
         self.msg("Tailscale : connecté (" + dns + ")")
         status = funnel_state(tailscale)
@@ -659,6 +675,9 @@ class Gui:
                     self.log_line("Clique sur COPIER MON LIEN MCP, puis colle-le dans ChatGPT.")
                     self.log_line("La connexion depuis les serveurs ChatGPT doit encore être validée.")
                     self.status_var.set("MCP prêt pour l'essai depuis ChatGPT.")
+                elif action == "updated":
+                    self.status_var.set("Mise à jour terminée · même connexion Local 2.")
+                    self.log_line("Actualise le catalogue du connecteur dans ChatGPT pour afficher les nouveaux outils.")
                 elif action == "cloudflare_ready":
                     self.url = data
                     self.copy_button.configure(state="normal")
@@ -673,6 +692,7 @@ class Gui:
                 elif action == "done":
                     self.is_busy = False
                     self.install_button.configure(state="normal")
+                    self.update_button.configure(state="normal")
                     self.diagnostic_button.configure(state="normal")
                     self.cloudflare_button.configure(state="normal")
                     if self.url:

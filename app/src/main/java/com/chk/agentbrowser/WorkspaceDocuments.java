@@ -93,10 +93,10 @@ final class WorkspaceDocuments {
             if(paragraph.isEmpty())lines.add("");else for(int offset=0;offset<paragraph.length();){int count=paint.breakText(paragraph,offset,paragraph.length(),true,499,null);if(count<=0)count=Character.charCount(paragraph.codePointAt(offset));if(offset+count<paragraph.length()&&Character.isHighSurrogate(paragraph.charAt(offset+count-1)))count--;if(count==0)count=2;lines.add(paragraph.substring(offset,offset+count));offset+=count;}
         }
         int pages=Math.max(1,(lines.size()+43)/44);if(pages>100)throw new IOException("PDF limité à 100 pages.");
-        try(PdfDocument doc=new PdfDocument()){
+        PdfDocument doc=new PdfDocument();try{
             for(int page=0;page<pages;page++){PdfDocument.Page sheet=doc.startPage(new PdfDocument.PageInfo.Builder(595,842,page+1).create());Canvas canvas=sheet.getCanvas();for(int i=page*44;i<Math.min(lines.size(),(page+1)*44);i++)canvas.drawText(lines.get(i),48,60+(i-page*44)*16,paint);doc.finishPage(sheet);}
             try(FileOutputStream out=new FileOutputStream(f)){doc.writeTo(out);out.getFD().sync();}
-        }return pages;
+        }finally{doc.close();}return pages;
     }
     private static int pptx(Context c,File f,JSONObject p)throws Exception{
         JSONArray slides=p.getJSONArray("slides");if(slides.length()<1||slides.length()>50)throw new IOException("Présentation : 1 à 50 diapositives.");
