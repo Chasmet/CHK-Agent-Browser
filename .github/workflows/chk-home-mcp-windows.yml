@@ -25,11 +25,13 @@ jobs:
         run: |
           python -m unittest discover -s pc/CHK-Home-MCP/tests -v
           python pc/CHK-Home-MCP/chk_home_mcp.py --once-test
+          python -m py_compile pc/CHK-Home-MCP/chk_home_installer_gui.py
       - name: Compiler un vrai EXE Windows x64
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check pyinstaller==6.16.0
           python -m PyInstaller --noconfirm --clean --onefile --console --name CHK-Home-MCP pc/CHK-Home-MCP/chk_home_mcp.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name CHK-Home-Installation pc/CHK-Home-MCP/chk_home_installer_gui.py
       - name: Verifier l'EXE compile
         shell: pwsh
         run: |
@@ -40,9 +42,17 @@ jobs:
         run: |
           New-Item -Path output\CHK-Home-MCP -ItemType Directory -Force | Out-Null
           Copy-Item dist\CHK-Home-MCP.exe output\CHK-Home-MCP\
-          Copy-Item pc\CHK-Home-MCP\INSTALLER-CHK-MCP.ps1 output\CHK-Home-MCP\
-          Copy-Item pc\CHK-Home-MCP\INSTALLER-CHK-MCP.cmd output\CHK-Home-MCP\
+          Copy-Item dist\CHK-Home-Installation.exe output\CHK-Home-MCP\
           Copy-Item pc\CHK-Home-MCP\README.md output\CHK-Home-MCP\
+      - name: Valider les fichiers Windows du nouveau pack sans CMD
+        shell: pwsh
+        run: |
+          $required = @("output/CHK-Home-MCP/CHK-Home-MCP.exe", "output/CHK-Home-MCP/CHK-Home-Installation.exe", "output/CHK-Home-MCP/README.md")
+          foreach ($f in $required) {
+            if (-not (Test-Path $f)) { throw "Fichier absent : $f" }
+          }
+          $files = Get-ChildItem output/CHK-Home-MCP -File
+          if ($files.Count -ne 3) { throw 'ZIP doit contenir exactement deux EXE et README' }
       - name: Conserver le serveur MCP et son installateur
         uses: actions/upload-artifact@v4
         with:
