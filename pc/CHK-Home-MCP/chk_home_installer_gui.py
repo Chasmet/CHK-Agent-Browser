@@ -27,9 +27,14 @@ APP = "CHK Home MCP"
 BACKEND_NAME = "CHK-Home-MCP.exe"
 WINDOWS_PORT = 8766
 PUBLIC_PORT = 8443
-VERSION = "1.3"
+VERSION = "1.4"
+CLOUDFLARED_URL = "https://github.com/cloudflare/cloudflared/releases/download/2026.9.0/cloudflared-windows-amd64.exe"
+CLOUDFLARED_SHA256 = "547057326266f0e1c7d50d102dbd22ff283d740c055bd61e94f10e2c606f89af"
 TAILSCALE_CONSOLE = "https://console.tailscale.com/admin/acls"
 APP_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CHKHomeMCP"
+CF_HOST_PATTERN = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com", re.I)
+CF_LOG = APP_DIR / "cloudflared-test.log"
+CF_STATE = APP_DIR / "cloudflared-test.json"
 
 
 def hidden_kwargs() -> dict:
@@ -285,12 +290,150 @@ def ensure_funnel(tailscale: str, progress) -> None:
     progress("Tailscale Funnel 8443 configuré. Vérification finale dans ChatGPT nécessaire.")
 
 
+
+def checksum_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def get_official_cloudflared(progress) -> Path:
+    """Download a pinned Cloudflare binary only after explicit GUI consent."""
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    binary = APP_DIR / "cloudflared.exe"
+    if binary.is_file() and checksum_file(binary) == CLOUDFLARED_SHA256:
+        progress("Client Cloudflare officiel vérifié (SHA-256).")
+        return binary
+    progress("Téléchargement du client officiel Cloudflare (55 Mo, uniquement pour ce test)…")
+    temp = APP_DIR / "cloudflared-download.tmp"
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        with urllib.request.urlopen(CLOUDFLARED_URL, timeout=35) as source, temp.open("wb") as output:
+            while True:
+                block = source.read(1024 * 1024)
+                if not block:
+                    break
+                total += len(block)
+                if total > 60 * 1024 * 1024:
+                    raise RuntimeError("Le téléchargement Cloudflare dépasse la limite attendue.")
+                digest.update(block)
+                output.write(block)
+        if digest.hexdigest() != CLOUDFLARED_SHA256:
+            raise RuntimeError("Empreinte Cloudflare incorrecte. Exécutable non installé.")
+        temp.replace(binary)
+    except (OSError, urllib.error.URLError) as e:
+        raise RuntimeError("Impossible de télécharger le client officiel Cloudflare. Vérifie Internet.") from e
+    finally:
+        temp.unlink(missing_ok=True)
+    progress("Client Cloudflare officiel vérifié et installé dans CHKHomeMCP.")
+    return binary
+
+
+def verify_public_mcp(endpoint: str) -> None:
+    """A complete MCP initialize POST through a public HTTPS 443 or 8443 route."""
+    rpc = {
+        "jsonrpc": "2.0", "id": 110, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                   "clientInfo": {"name": "CHK Local GUI", "version": VERSION}}
+    }
+    request = urllib.request.Request(endpoint, method="POST",
+        data=json.dumps(rpc).encode("utf-8"),
+        headers={"Accept": "application/json, text/event-stream",
+                 "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=13) as response:
+            data = json.loads(response.read(32768))
+    except urllib.error.HTTPError as err:
+        raise RuntimeError(
+            "Adresse publique joignable mais initialisation MCP refusée (HTTP " +
+            str(err.code) + "). Aucun jeton n'a été affiché.") from None
+    except (OSError, ValueError):
+        raise RuntimeError(
+            "Échec de la négociation MCP publique (POST). "
+            "Un simple test GET dans Chrome ne garantit pas ChatGPT.") from None
+    if not isinstance(data, dict) or data.get("result", {}).get("serverInfo", {}).get("name") != APP:
+        raise RuntimeError("La passerelle HTTPS ne répond pas avec le MCP CHK attendu.")
+
+
+def start_cloudflare_quick_test(secret: str, progress) -> str:
+    """Isolated temporary 443 test, without changing Tailscale Serve or IIS."""
+    if fetch_health() is None:
+        raise RuntimeError("Démarre d'abord le serveur MCP local.")
+    verify_mcp_tools(secret)
+    binary = get_official_cloudflared(progress)
+
+    # Reuse the prior temporary URL when its MCP endpoint still responds.
+    if CF_STATE.is_file():
+        try:
+            saved = json.loads(CF_STATE.read_text(encoding="utf-8"))
+            base = saved.get("base", "")
+            if CF_HOST_PATTERN.fullmatch(base):
+                endpoint = base + "/mcp/" + secret
+                verify_public_mcp(endpoint)
+                progress("Passerelle Cloudflare temporaire toujours active : lien réutilisé.")
+                return endpoint
+        except (ValueError, OSError, RuntimeError):
+            pass
+
+    progress("Démarrage d'une passerelle temporaire HTTPS 443, indépendante d'IIS…")
+    CF_LOG.parent.mkdir(parents=True, exist_ok=True)
+    CF_LOG.write_bytes(b"")
+    # stdout and stderr go to a file, never to a console or pipe. The child
+    # remains alive when this GUI window closes, but the hostname changes
+    # after the child stops/reboots. No Windows admin rights required.
+    with CF_LOG.open("ab", buffering=0) as output:
+        child = subprocess.Popen(
+            [str(binary), "tunnel", "--no-autoupdate",
+             "--url", "http://127.0.0.1:8766", "--loglevel", "info"],
+            cwd=str(APP_DIR), stdin=subprocess.DEVNULL,
+            stdout=output, stderr=subprocess.STDOUT,
+            close_fds=True, **hidden_kwargs()
+        )
+    hostname = None
+    for _ in range(75):
+        if child.poll() is not None:
+            raise RuntimeError(
+                "La passerelle Cloudflare s'est arrêtée. "
+                "Ce mode peut être indisponible sur ton réseau.")
+        try:
+            logs = CF_LOG.read_bytes()[-25000:].decode("utf-8", errors="replace")
+            found = CF_HOST_PATTERN.search(logs)
+            if found:
+                hostname = found.group(0)
+                break
+        except OSError:
+            pass
+        time.sleep(1)
+    if not hostname:
+        raise RuntimeError("Cloudflare n'a pas fourni d'adresse temporaire après 75 secondes.")
+
+    endpoint = hostname + "/mcp/" + secret
+    progress("Adresse HTTPS 443 obtenue, vérification MCP distante en cours…")
+    last = None
+    for attempt in range(5):
+        try:
+            verify_public_mcp(endpoint)
+            break
+        except RuntimeError as failure:
+            last = failure
+            time.sleep(3)
+    else:
+        raise RuntimeError("HTTPS 443 initialisé, mais MCP n'est pas validé : " + str(last))
+
+    CF_STATE.write_text(json.dumps({"base": hostname, "pid": child.pid}), encoding="utf-8")
+    progress("Test MCP HTTPS 443 réussi. URL TEMPORAIRE : elle change si Cloudflare redémarre.")
+    return endpoint
+
+
 class Gui:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("CHK HOME MCP — Sans CMD, sans Render")
-        self.root.geometry("740x560")
-        self.root.minsize(640, 485)
+        self.root.geometry("760x640")
+        self.root.minsize(660, 560)
         self.root.configure(bg="#111827")
         self.messages = queue.Queue()
         self.is_busy = False
@@ -337,6 +480,12 @@ class Gui:
             font=("Segoe UI", 10, "bold"), padx=12, pady=8,
             command=self.open_tailscale_authorization)
         self.auth_button.pack(side="left")
+        self.cloudflare_button = tk.Button(
+            panel, text="TESTER UNE ADRESSE HTTPS 443 (CLOUDFLARE, PROVISOIRE)",
+            relief="flat", bg="#6d28d9", fg="white", activebackground="#5b21b6",
+            font=("Segoe UI", 10, "bold"), padx=13, pady=10,
+            command=self.confirm_cloudflare)
+        self.cloudflare_button.pack(anchor="w", padx=18, pady=(0, 10))
         tk.Label(panel, textvariable=self.status_var, font=("Segoe UI", 10, "bold"),
                  bg="#1f2937", fg="#93c5fd", wraplength=640,
                  justify="left").pack(anchor="w", padx=18, pady=(2, 10))
@@ -364,6 +513,7 @@ class Gui:
         self.is_busy = True
         self.install_button.configure(state="disabled")
         self.diagnostic_button.configure(state="disabled")
+        self.cloudflare_button.configure(state="disabled")
         self.copy_button.configure(state="disabled")
         self.log_line("────────────────────────────────────────────────────────")
         threading.Thread(target=self.worker, args=(callback,), daemon=True).start()
@@ -412,6 +562,25 @@ class Gui:
         self.log_line("Clique sur Add Funnel to policy si le bouton apparaît.")
         self.log_line("Puis reviens ici et clique sur INSTALLER ET ACTIVER.")
 
+    def confirm_cloudflare(self):
+        if not messagebox.askyesno(
+            "Test externe temporaire - Cloudflare",
+            "Tester CHK Home MCP avec une adresse HTTPS publique sur le port 443 ?\n\n"
+            "Le PC reste l'hôte, mais Cloudflare transmettra les requêtes.\n"
+            "Ce service est distinct de Tailscale, IIS et Render.\n\n"
+            "L'URL sera TEMPORAIRE : elle changera si le processus s'arrête\n"
+            "ou après un redémarrage Windows. Le jeton MCP privé y sera intégré.\n\n"
+            "Ce test sert seulement à vérifier l'accès depuis ChatGPT. Continuer ?"
+        ):
+            return
+        self.run_task(self.cloudflare_worker)
+
+    def cloudflare_worker(self):
+        secret = ensure_local_mcp(self.msg)
+        register_autostart()
+        endpoint = start_cloudflare_quick_test(secret, self.msg)
+        self.messages.put(("cloudflare_ready", endpoint))
+
     def diagnose(self):
         self.run_task(self.diagnostic_worker)
 
@@ -448,6 +617,13 @@ class Gui:
                     self.log_line("Clique sur COPIER MON LIEN MCP, puis colle-le dans ChatGPT.")
                     self.log_line("La connexion depuis les serveurs ChatGPT doit encore être validée.")
                     self.status_var.set("MCP prêt pour l'essai depuis ChatGPT.")
+                elif action == "cloudflare_ready":
+                    self.url = data
+                    self.copy_button.configure(state="normal")
+                    self.status_var.set("Test HTTPS 443 prêt : lien TEMPORAIRE à essayer dans ChatGPT.")
+                    self.log_line("Clique sur COPIER MON LIEN MCP. Cette URL Cloudflare est TEMPORAIRE.")
+                    self.log_line("Si le PC ou la passerelle redémarre, ce lien pourra changer.")
+                    self.log_line("Aucune modification des ports Tailscale, IIS ou Render.")
                 elif action == "failed":
                     self.status_var.set("Installation incomplète — voir le diagnostic ci-dessous.")
                     self.log_line("PROBLÈME : " + data)
@@ -456,6 +632,7 @@ class Gui:
                     self.is_busy = False
                     self.install_button.configure(state="normal")
                     self.diagnostic_button.configure(state="normal")
+                    self.cloudflare_button.configure(state="normal")
                     if self.url:
                         self.copy_button.configure(state="normal")
         except queue.Empty:
