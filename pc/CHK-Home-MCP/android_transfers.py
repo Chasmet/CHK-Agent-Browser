@@ -51,7 +51,7 @@ def command(args: dict, cfg: dict, queue, resolve_path) -> dict:
         raise ValueError("Identifiant de transfert : 1 à 64 lettres/chiffres/tirets.")
     if operation not in ("start", "status", "resume", "cancel"):
         raise ValueError("Opération de transfert invalide.")
-    root = Path(cfg["root"])
+    root = Path(cfg["root"]).resolve()
     folder = root / ".transfers"
     folder.mkdir(exist_ok=True)
     if folder.is_symlink():
@@ -71,7 +71,7 @@ def command(args: dict, cfg: dict, queue, resolve_path) -> dict:
             else:
                 for other in folder.glob("*.json"):
                     prior = json.loads(other.read_text("utf-8"))
-                    if prior.get("direction") == direction and prior.get("destination") == destination and prior.get("state") != "cancelled":
+                    if prior.get("direction") == direction and prior.get("destination") == destination and prior.get("state") in ("ready", "running", "paused"):
                         raise ValueError("Destination réservée par un transfert précédent.")
                 state = dict(id=ident, direction=direction, source=source, destination=destination,
                              state="ready", received=0)
@@ -89,6 +89,11 @@ def command(args: dict, cfg: dict, queue, resolve_path) -> dict:
             state["state"] = "cancelled"
             (folder / (ident + ".part")).unlink(missing_ok=True)
             save(journal, state)
+            if state["direction"] == "to_android":
+                stop = threading.Event()
+                stop.set()
+                _running[key] = stop
+                threading.Thread(target=_run, args=(journal, state, cfg, queue, resolve_path, stop), daemon=True).start()
         elif operation in ("start", "resume") and state["state"] != "completed":
             if state["state"] == "cancelled":
                 raise ValueError("Transfert annulé : utiliser un nouvel identifiant.")
@@ -114,7 +119,8 @@ def _run(journal: Path, state: dict, cfg: dict, queue, resolve_path, stop: threa
         with _lock:
             save(journal, state)
     try:
-        root = Path(cfg["root"])
+        checkpoint()
+        root = Path(cfg["root"]).resolve()
         part = journal.with_suffix(".part")
         if state["direction"] == "to_android":
             source = resolve_path(root, state["source"])
@@ -197,14 +203,18 @@ def _run(journal: Path, state: dict, cfg: dict, queue, resolve_path, stop: threa
                     raise ValueError("Destination Windows occupée.")
                 part.rename(target)
                 state.update(state="completed", verified=True)
-        with _lock:
-            save(journal, state)
     except Exception as error:
         state.update(state="cancelled" if stop.is_set() else "paused", error=str(error)[:250])
         if stop.is_set():
             journal.with_suffix(".part").unlink(missing_ok=True)
-        with _lock:
-            save(journal, state)
+            if state["direction"] == "to_android":
+                try:
+                    request(queue, "files_transfer_abort", dict(id=state["id"]))
+                except Exception:
+                    state["android_cleanup_pending"] = True
     finally:
         with _lock:
-            _running.pop(str(journal), None)
+            try:
+                save(journal, state)
+            finally:
+                _running.pop(str(journal), None)

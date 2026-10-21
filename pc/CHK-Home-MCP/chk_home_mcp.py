@@ -72,6 +72,7 @@ def init_config() -> dict:
     return data
 
 def workspace_path(root: Path, name: str, *, allow_root: bool = False) -> Path:
+    root = root.resolve()
     if not isinstance(name, str) or len(name) > 800 or "\x00" in name:
         raise ValueError("Chemin invalide.")
     # Windows absolute paths and drive-relative paths are forbidden.
@@ -100,7 +101,7 @@ def read_json_object(s: str) -> dict:
     return obj
 
 def safe_tool_action(name: str, arguments: dict, cfg: dict) -> object:
-    if not isinstance(arguments, dict):
+    if not isinstance(arguments, dict) or not isinstance(name, str):
         raise ValueError("Arguments invalides.")
     root = cfg["root"]
     path_name = arguments.get("path", "")
@@ -123,7 +124,7 @@ def safe_tool_action(name: str, arguments: dict, cfg: dict) -> object:
     if name == "android_command":
         action = arguments.get("action", "")
         payload = arguments.get("args", {})
-        if action not in ALLOWED_ACTIONS:
+        if not isinstance(action, str) or action not in ALLOWED_ACTIONS:
             raise ValueError("Action Android interdite.")
         ident = ANDROID_QUEUE.enqueue(action, payload)
         return ANDROID_QUEUE.await_result(ident, timeout=20)
@@ -351,7 +352,7 @@ def dispatch(request: dict, cfg: dict) -> dict | None:
         try:
             answer = safe_tool_action(name, args, cfg)
             result = {"content": tool_content(answer),
-                      "isError": False}
+                      "isError": isinstance(answer, dict) and answer.get("state") in ("done", "expired") and answer.get("success") is False}
         except (ValueError, OSError, UnicodeError, subprocess.SubprocessError) as e:
             result = {"content": [{"type": "text", "text": str(e)[:250]}], "isError": True}
     else:

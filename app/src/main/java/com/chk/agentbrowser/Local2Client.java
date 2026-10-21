@@ -136,7 +136,8 @@ public final class Local2Client {
                 byte[] buf = new byte[4096]; int count;
                 while ((count = in.read(buf)) != -1) {
                     result.write(buf, 0, count);
-                    if (result.size() > 65536) throw new java.io.IOException("Réponse trop grande");
+                    // 48 KiB binary becomes 64 KiB Base64, plus the command envelope.
+                    if (result.size() > 96*1024) throw new java.io.IOException("Réponse trop grande");
                 }
                 return new JSONObject(new String(result.toByteArray(), StandardCharsets.UTF_8));
             }

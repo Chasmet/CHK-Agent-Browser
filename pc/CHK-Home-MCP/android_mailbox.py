@@ -88,6 +88,8 @@ class AndroidMailbox:
 
     def resolve(self, ident: str, success: bool, message: str) -> bool:
         with self.lock:
+            if not isinstance(ident, str):
+                return False
             item = self.items.get(ident)
             if item is None or item["state"] != "leased":
                 return False
@@ -101,6 +103,8 @@ class AndroidMailbox:
             return True
 
     def await_result(self, ident: str, timeout: float = 30.0) -> dict:
+        if not isinstance(ident, str):
+            raise ValueError("Identifiant de commande invalide.")
         deadline = time.monotonic() + min(max(timeout, 0), self.ttl)
         with self.lock:
             while True:

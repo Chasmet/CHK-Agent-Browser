@@ -107,6 +107,13 @@ public final class WorkspaceAutonomyIntegrationTest {
         }
         assertTrue(DocumentReader.readFile(app,folder+"/document.docx",1,1,0).getString("text").contains("Bonjour é & <Android>"));
         assertTrue(DocumentReader.readFile(app,folder+"/document.pdf",1,1,0).getString("text").contains("Bonjour"));
+        // Gradle uninstalls the debug app after instrumentation, removing its external directory.
+        // Preserve only these synthetic documents in the emulator shell's temporary test directory.
+        android.os.ParcelFileDescriptor descriptor=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(
+            "mkdir -p /data/local/tmp/chk-autonomy-fixtures && cp '"+fixtures.getAbsolutePath()+"'/* /data/local/tmp/chk-autonomy-fixtures/ && echo CHK_FIXTURES_OK");
+        try(InputStream in=new android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor);ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            byte[] b=new byte[1024];int n;while((n=in.read(b))!=-1)out.write(b,0,n);assertTrue(out.toString("UTF-8"),out.toString("UTF-8").contains("CHK_FIXTURES_OK"));
+        }
     }
     @Test public void capabilitySchemasAndVersionAreAvailableWithoutRender()throws Exception{
         Set<String> actions=new HashSet<>();int offset=0;do{JSONObject page=call("files_capabilities",new JSONObject().put("offset",offset)).json();assertEquals(4,page.getInt("workspace_version"));JSONArray rows=page.getJSONArray("actions");for(int i=0;i<rows.length();i++){JSONObject item=rows.getJSONObject(i);assertTrue(actions.add(item.getString("action")));assertEquals("object",item.getJSONObject("inputSchema").getString("type"));}offset=page.getInt("next_offset");}while(offset>=0);

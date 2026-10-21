@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_tools
@@ -174,6 +175,21 @@ class AndroidAutonomyTest(unittest.TestCase):
         queue.poll()
         self.assertTrue(queue.resolve(ident, True, "x"*24001))
         self.assertFalse(queue.await_result(ident, 0)["success"])
+
+    def test_android_failures_are_mcp_errors_but_pending_is_not(self):
+        for state in ("done", "expired", "pending"):
+            with patch.object(mcp.ANDROID_QUEUE, "await_result", return_value=dict(state=state, success=False, message="unconfirmed")):
+                result = mcp.dispatch(dict(jsonrpc="2.0", id=1, method="tools/call", params=dict(name="android_result", arguments=dict(id="x"))), self.cfg)
+                self.assertEqual(result["result"]["isError"], state != "pending")
+
+    def test_maximum_upload_block_fits_the_actual_http_envelopes(self):
+        payload = dict(action="files_transfer_write", args=dict(id="test", offset=0,
+            base64=base64.b64encode(b"x"*49152).decode(), chunk_sha256="e"*64))
+        request = dict(jsonrpc="2.0", id=1, method="tools/call", params=dict(name="android_command", arguments=dict(action="android_action", args=payload)))
+        self.assertLess(len(json.dumps(request).encode()), mcp.MAX_POST)
+        response = dict(command=dict(id="f"*32, action="android_action", args=payload), server_id="e"*16)
+        self.assertGreater(len(json.dumps(response)), 65536)
+        self.assertLess(len(json.dumps(response)), 96*1024)
 
 
 if __name__ == "__main__":

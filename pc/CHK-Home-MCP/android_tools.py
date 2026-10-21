@@ -18,7 +18,7 @@ def route(name: str, args: dict) -> tuple[str, dict] | None:
     table = {"android_files": FILES, "android_media": MEDIA, "android_transfer": TRANSFERS}.get(name)
     if table is not None:
         op = args.get("operation")
-        if op not in table:
+        if not isinstance(op, str) or op not in table:
             raise ValueError("Opération Android inconnue ; consulter android_capabilities.")
         payload = dict(args)
         payload.pop("operation")

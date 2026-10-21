@@ -1,5 +1,6 @@
 """No-network regressions for the Windows GUI's isolated optional 443 test."""
 import hashlib
+import queue
 import sys
 import tempfile
 import unittest
@@ -11,6 +12,22 @@ import chk_home_installer_gui as gui
 
 
 class CloudflareGuiSmoke(unittest.TestCase):
+    def test_existing_relay_update_keeps_config_and_does_not_reconfigure_funnel(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / "config.json").write_text("{}")
+            cfg = {"secret": "e"*64, "workspace": "unchanged"}
+            instance = object.__new__(gui.Gui)
+            instance.messages = queue.Queue()
+            instance.msg = lambda text: None
+            with patch.object(gui, "APP_DIR", folder), patch.object(gui, "private_config", return_value=cfg), \
+                 patch.object(gui, "ensure_local_mcp", return_value=cfg["secret"]) as update, \
+                 patch.object(gui, "ensure_funnel") as funnel, patch.object(gui, "register_autostart") as autostart:
+                instance.update_existing()
+                update.assert_called_once()
+                funnel.assert_not_called()
+                autostart.assert_not_called()
+            self.assertEqual(instance.messages.get_nowait(), ("updated", None))
     def test_temporary_hostname_capture(self):
         typical_log = "INF +-----------------------------+\nINF | https://quiet-marble-otter.trycloudflare.com |\n"
         match = gui.CF_HOST_PATTERN.search(typical_log)

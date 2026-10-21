@@ -56,7 +56,7 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
             ./gradlew --no-daemon connectedDebugAndroidTest
-            adb pull /sdcard/Android/data/com.chk.agentbrowser.debug/files/autonomy-fixtures app/build/autonomy-fixtures
+            adb pull /data/local/tmp/chk-autonomy-fixtures app/build/autonomy-fixtures
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
