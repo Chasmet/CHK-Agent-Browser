@@ -34,7 +34,15 @@ public final class BrowserTabsTranslationIntegrationTest {
                 ok.set(success);result.set(message);done.countDown();
             });}catch(Exception e){result.set(e.toString());done.countDown();}
         });
-        assertTrue("No MCP reply for "+action,done.await(10,TimeUnit.SECONDS));
+        if(action.equals("new_tab")||action.equals("switch_tab")){
+            // Navigation now waits for a committed document: provide a real
+            // intercepted HTTPS page instead of depending on public internet.
+            android.webkit.WebView web=(android.webkit.WebView)getCurrent(activity);
+            AtomicReference<String> url=new AtomicReference<>();
+            instrument.runOnMainSync(()->url.set(BrowserWebState.url(web)));
+            WebFixture.load(instrument,web,url.get(),"<html><body>Tab fixture</body></html>","true");
+        }
+        assertTrue("No MCP reply for "+action,done.await(30,TimeUnit.SECONDS));
         assertTrue("MCP "+action+": "+result.get(),ok.get());
         return result.get();
     }

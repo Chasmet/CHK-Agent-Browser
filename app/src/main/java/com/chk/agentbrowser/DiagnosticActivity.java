@@ -59,8 +59,8 @@ public final class DiagnosticActivity extends Activity {
                 ?"optimisation batterie ignorée":"optimisation batterie active";
         }
         return "CHK Agent Browser "+version+
-            "\nMCP : "+(agent.isEnabled()?"activé":"désactivé")+
-            "\nConnexion : "+agent.connectionStatus()+
+            "\nMCP Render : "+(agent.isEnabled()?"activé":"désactivé")+
+            "\nConnexion Render : "+agent.connectionStatus()+
             "\n\n"+Local2Client.get(this).diagnostic()+"\n"+
             "\nRéseau : "+network+
             "\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+

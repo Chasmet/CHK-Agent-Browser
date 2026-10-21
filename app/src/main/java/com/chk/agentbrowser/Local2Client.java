@@ -26,6 +26,7 @@ public final class Local2Client {
     private volatile long lastPoll;
     private volatile String serverVersion = "non vérifié", serverId = "non disponible";
     private volatile String commandState = "aucune commande reçue", route = "standard";
+    private volatile String executionState = "aucune", displayState = "non vérifié";
     private String verifiedAddress = "", bridgeAddress = "";
     private final java.util.concurrent.atomic.AtomicBoolean commandInFlight = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile String status = "Non connecté";
@@ -40,6 +41,7 @@ public final class Local2Client {
         return instance;
     }
     public boolean enabled() { return preferences.getBoolean("enabled", false); }
+    int sessionGeneration() { return generation; }
     public String url() { return preferences.getString("url", ""); }
     public String status() {
         if (lastPoll > 0 && android.os.SystemClock.elapsedRealtime() - lastPoll > 45000L
@@ -55,7 +57,10 @@ public final class Local2Client {
             + "\nServeur contacté : " + host + "\nVersion PC : " + serverVersion
             + "\nIdentité PC : " + serverId + "\nRoute Android : " + route
             + "\nDernier échange Android : " + (age < 0 ? "aucun" : age + " s")
-            + "\nCommandes Local 2 : " + commandState;
+            + "\nMode autonome : " + (AgentClient.get(app).isAutonomous() ? "actif" : "désactivé")
+            + "\nNavigateur Local 2 : " + AgentClient.get(app).local2BrowserSummary()
+            + "\nRéception / PC : " + commandState
+            + "\nExécution Android : " + executionState + "\nAffichage : " + displayState;
     }
     /** Import the existing ChatGPT gateway address locally; never poll Supabase. */
     public static String resolveMcpAddress(String entered) {
@@ -106,6 +111,7 @@ public final class Local2Client {
     public void stop() {
         running = false;
         generation++;
+        commandInFlight.set(false);
         main.removeCallbacks(loop);
         status = "Désactivé";
     }
@@ -193,14 +199,25 @@ public final class Local2Client {
                     final String action = command.getString("action");
                     final String replyAddress = bridgeAddress;
                     commandState = "commande reçue · exécution en cours";
+                    executionState = "en cours";
+                    displayState = "à vérifier";
                     final JSONObject args = command.optJSONObject("args") == null ?
                         new JSONObject() : command.getJSONObject("args");
                     main.post(() -> {
                         if (session != generation || !running || !enabled()) {
-                            commandInFlight.set(false); return;
+                            if(session==generation)commandInFlight.set(false); return;
                         }
                         AgentClient.get(app).executeLocal2(action, args, (ok, message) ->
                         worker.execute(() -> {
+                            if(session==generation){
+                                executionState = ok ? "réussie" : "échec · " + safeFailure(message);
+                                displayState = "action sans preuve d’affichage";
+                                try{
+                                    JSONObject proof=new JSONObject(message);
+                                    if(proof.has("visible"))displayState=proof.optBoolean("visible")
+                                        ? "confirmé dans CHK" : "CHK en arrière-plan · page prête à son retour";
+                                }catch(Exception ignored){}
+                            }
                             try {
                                 JSONObject params = new JSONObject().put("id", ident)
                                     .put("success", ok).put("message", message);
@@ -212,7 +229,7 @@ public final class Local2Client {
                                     status = "Résultat non transmis : " + failure.getClass().getSimpleName();
                                 }
                             } finally {
-                                commandInFlight.set(false);
+                                if(session==generation)commandInFlight.set(false);
                             }
                         }));
                     });
@@ -228,5 +245,15 @@ public final class Local2Client {
             final long next = delay;
             main.post(() -> { if (session == generation && running && enabled()) main.postDelayed(loop, next); });
         });
+    }
+    private static String safeFailure(String message){
+        if(message==null)return "résultat non confirmé";
+        // Diagnostics never copy private URLs, file contents or account details.
+        if(message.startsWith("Mode autonome"))return "mode autonome désactivé";
+        if(message.startsWith("Local 2 désactivé"))return "Local 2 désactivé";
+        if(message.startsWith("Navigateur Android fermé"))return "navigateur Android fermé";
+        if(message.startsWith("Page inaccessible"))return "page inaccessible";
+        if(message.startsWith("Chargement non confirmé"))return "chargement non confirmé";
+        return "consulter le résultat de commande";
     }
 }

@@ -1,3 +1,14 @@
+## Local 2 — onglets Android partagés et fichiers indépendants (21 octobre 2026)
+
+- Les commandes Local 2 utilisent les véritables onglets du navigateur Android, y compris lorsque CHK passe derrière ChatGPT ou Réglages. Elles ne basculent plus vers le moteur distinct du relais Render.
+- Si Android ferme l'activité du navigateur, Local 2 indique qu'il faut rouvrir CHK ; aucune navigation cachée n'est déclarée visible. Les fichiers restent utilisables sans navigateur ouvert.
+- Fichiers, dossiers et tâches Local 2 fonctionnent lorsque Render est désactivé. Le canal d'origine et le consentement autonome sont contrôlés séparément ; désactiver Local 2 interrompt ses commandes.
+- Une navigation n'est confirmée qu'après chargement et lecture du document réel. Le résultat distingue page affichée et page prête pour le retour dans CHK. Les erreurs HTTP, délais et changements d'onglet produisent un résultat non confirmé.
+- `browser_tabs` accepte les opérations list, new, close et switch ; `browser_open_url` conserve son option new_tab.
+- La création d'un dossier vérifie sa présence dans le stockage Android. Les écrans Fichiers sont actualisés après une opération réussie.
+- Réglages et Diagnostic séparent connexion Local 2, mode autonome, disponibilité du navigateur, exécution, acquittement PC et preuve d'affichage.
+- Tests Android ajoutés avec Render désactivé, sur le vrai WebView et le stockage de test. Le package, la signature persistante, les données et la mise à jour intégrée sont conservés.
+
 ## Correctif Local 2 — connexion Android vérifiée (21 octobre 2026)
 
 - Suppression du faux état « connecté » lorsque le PC répond HTTP 200 avec une erreur MCP ou sans canal Android.
