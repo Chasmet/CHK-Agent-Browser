@@ -417,6 +417,7 @@ public final class AgentClient {
         HttpFailure(int code){super("HTTP "+code);status=code;}
     }
     private JSONObject request(String method, String path, JSONObject body, boolean auth) throws Exception {
+        if (isDirectMode()) throw new java.io.IOException("Mode MCP direct : réseau Render désactivé.");
         HttpURLConnection c = null;
         final long requestStarted=SystemClock.elapsedRealtime();
         boolean completed=false;
