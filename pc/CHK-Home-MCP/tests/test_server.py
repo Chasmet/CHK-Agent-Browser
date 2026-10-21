@@ -77,6 +77,36 @@ class WindowsMcpTest(unittest.TestCase):
             server.server_close()
             thread.join(3)
 
+    def test_http_early_auth_rejection_closes_connection(self):
+        # Regression: a reverse proxy can convert an unread unauthorized
+        # HTTP/1.1 POST body into a Cloudflare 520/400 on connection reuse.
+        server = mcp.LocalMcpServer(("127.0.0.1", 0), mcp.Handler)
+        server.cfg = self.cfg
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        payload = json.dumps({"jsonrpc": "2.0", "id": 9,
+                              "method": "initialize"}).encode()
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request("POST", "/mcp", body=payload,
+                         headers={"Content-Type": "application/json",
+                                  "Connection": "keep-alive"})
+            result = conn.getresponse()
+            self.assertEqual(result.status, 401)
+            self.assertEqual(result.headers.get("Connection"), "close")
+            self.assertEqual(json.loads(result.read())["error"], "MCP authentication required")
+            # Client can transparently open a fresh socket for subsequent
+            # requests; no trailing request-body bytes are reused.
+            conn.request("GET", "/health")
+            second = conn.getresponse()
+            self.assertEqual(second.status, 200)
+            self.assertEqual(json.loads(second.read())["server"], "CHK Home MCP")
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(3)
+
     def test_real_http_security_and_mcp(self):
         server = mcp.LocalMcpServer(("127.0.0.1", 0), mcp.Handler)
         server.cfg = self.cfg
