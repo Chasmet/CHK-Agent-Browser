@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
     private final List<WebView> tabs=new ArrayList<>();
     private WebView current;
     private final java.util.Map<WebView,String> pageErrors=new java.util.WeakHashMap<>();
+    private final java.util.Map<WebView,String> pageErrorUrls=new java.util.WeakHashMap<>();
     private final java.util.Map<WebView,Runnable> navigationCancels=new java.util.WeakHashMap<>();
     private BrowserStore store;
     private FrameLayout container;
@@ -84,7 +85,7 @@ public class MainActivity extends Activity {
         workspace=new WorkspacePanel(this,findViewById(R.id.workspace_container));
         workspace.restoreState(state);
         findViewById(R.id.browser_error).setOnClickListener(v->{
-            if(BrowserWebState.alive(current))current.loadUrl(BrowserWebState.url(current));
+            if(BrowserWebState.alive(current)){beginNavigation(current);current.loadUrl(BrowserWebState.url(current));}
         });
         findViewById(R.id.nav_browser).setOnClickListener(v->showSpace("browser"));
         findViewById(R.id.nav_files).setOnClickListener(v->showSpace("files"));
@@ -143,7 +144,7 @@ public class MainActivity extends Activity {
         showSpace("browser");
         String url=normalize(text);
         if(url.isEmpty()){toast("Adresse non autorisée");return;}
-        if(current!=null)current.loadUrl(url);
+        if(current!=null){beginNavigation(current);current.loadUrl(url);}
         ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(),0);
         address.clearFocus();
     }
@@ -178,14 +179,18 @@ public class MainActivity extends Activity {
                 toast("Lien non autorisé");return true;
             }
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap favicon){
-                BrowserWebState.remember(v,url);pageErrors.remove(v);updatePageError();
+                BrowserWebState.remember(v,url);
+                // Chromium can deliver a main-frame HTTP error before page-start.
+                // Keep that error for this URL; clear old errors before loadUrl.
+                if(!url.equals(pageErrorUrls.get(v))){pageErrors.remove(v);pageErrorUrls.remove(v);}
+                updatePageError();
                 applyCookiePolicy(v,url);if(v==current&&home!=null)home.page(url);
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
-                if(request.isForMainFrame())pageError(view,"Page inaccessible. Vérifie la connexion. Toucher pour réessayer.");
+                if(request.isForMainFrame())pageError(view,"Page inaccessible. Vérifie la connexion. Toucher pour réessayer.",request.getUrl().toString());
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,android.webkit.WebResourceResponse response){
-                if(request.isForMainFrame())pageError(view,"Page inaccessible · HTTP "+response.getStatusCode());
+                if(request.isForMainFrame())pageError(view,"Page inaccessible · HTTP "+response.getStatusCode(),request.getUrl().toString());
             }
             @Override public boolean onRenderProcessGone(WebView view,android.webkit.RenderProcessGoneDetail detail){
                 recoverRenderer(view);return true;
@@ -284,8 +289,16 @@ public class MainActivity extends Activity {
         toast("Téléchargement lancé · disponible dans Fichiers > Téléchargements");
     }
     private void pageError(WebView web,String message){
+        pageError(web,message,web.getUrl()==null?BrowserWebState.url(web):web.getUrl());
+    }
+    private void pageError(WebView web,String message,String url){
         pageErrors.put(web,message);
+        pageErrorUrls.put(web,url);
         if(web==current){progress.setVisibility(View.GONE);if(home!=null)home.revealWeb();updatePageError();}
+    }
+    private void beginNavigation(WebView web){
+        Runnable pending=navigationCancels.remove(web);if(pending!=null)pending.run();
+        pageErrors.remove(web);pageErrorUrls.remove(web);updatePageError();
     }
     private void updatePageError(){
         TextView banner=findViewById(R.id.browser_error);String error=pageErrors.get(current);
@@ -299,7 +312,7 @@ public class MainActivity extends Activity {
         if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}
         if(pendingUploadWeb==dead){pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;}
         if(dead.getParent() instanceof ViewGroup)((ViewGroup)dead.getParent()).removeView(dead);
-        BrowserWebState.close(dead);dead.destroy();pageErrors.remove(dead);
+        beginNavigation(dead);BrowserWebState.close(dead);dead.destroy();pageErrors.remove(dead);pageErrorUrls.remove(dead);
         WebView replacement=new WebView(this);configure(replacement);BrowserWebState.remember(replacement,url);
         tabs.set(index,replacement);if(selected){current=null;select(replacement);}
         pageError(replacement,"Page interrompue par Android. Toucher pour la rouvrir.");
@@ -320,7 +333,7 @@ public class MainActivity extends Activity {
         }
         progress.setVisibility(View.GONE);refreshTabs();updatePageError();
         // Restored background tabs are lazy: only the selected tab loads over the network.
-        if(web.getUrl()==null&&BrowserWebState.alive(web))web.loadUrl(page);
+        if(web.getUrl()==null&&BrowserWebState.alive(web)){beginNavigation(web);web.loadUrl(page);}
     }
     private void close(WebView web){
         int i=tabs.indexOf(web);if(i<0)return;
@@ -329,7 +342,7 @@ public class MainActivity extends Activity {
             container.removeView(web);current=null;
             if(!tabs.isEmpty())select(tabs.get(Math.max(0,i-1)));
         }
-        BrowserWebState.close(web);pageErrors.remove(web);web.destroy();if(tabs.isEmpty())newTab(HOME);refreshTabs();saveTabs();
+        beginNavigation(web);BrowserWebState.close(web);pageErrors.remove(web);pageErrorUrls.remove(web);web.destroy();if(tabs.isEmpty())newTab(HOME);refreshTabs();saveTabs();
     }
     private void refreshTabs(){
         ((TextView)findViewById(R.id.tab_count)).setText(String.valueOf(tabs.size()));
@@ -354,7 +367,7 @@ public class MainActivity extends Activity {
         String[] names=new String[rows.length()];
         for(int i=0;i<rows.length();i++){JSONObject o=rows.optJSONObject(i);names[i]=o==null?"":o.optString("title",o.optString("url"));}
         new AgentDialog.Builder(this).setTitle(key.equals("favorites")?"Favoris":"Historique")
-        .setItems(names,(d,i)->{JSONObject o=rows.optJSONObject(i);if(o!=null&&current!=null)current.loadUrl(o.optString("url"));})
+        .setItems(names,(d,i)->{JSONObject o=rows.optJSONObject(i);if(o!=null&&current!=null)navigate(o.optString("url"));})
         .setNegativeButton("Fermer",null).show();
     }
     private void readPage(){
@@ -603,6 +616,8 @@ public class MainActivity extends Activity {
                 }
                 case "read_page":{
                     final WebView web=current;
+                    if(callback.isLocal2()&&pageErrors.containsKey(web)){callback.finish(false,pageErrors.get(web));return;}
+                    if(callback.isLocal2()&&!BrowserWebState.loaded(web)){callback.finish(false,"Page en cours de chargement · lecture non confirmée.");return;}
                     final String page=web.getUrl(),title=web.getTitle();
                     web.evaluateJavascript(BrowserScripts.readPage(),raw->{
                         String content=fromJavascript(raw);
@@ -638,6 +653,7 @@ public class MainActivity extends Activity {
                         newTab(url);verifyNavigation(current,url,0,args.optInt("timeout_ms",20000),callback);return;
                     }
                     long before=BrowserWebState.documentVersion(current);
+                    beginNavigation(current);
                     current.loadUrl(url);
                     verifyNavigation(current,url,before,args.optInt("timeout_ms",20000),callback);return;
                 }
@@ -895,8 +911,8 @@ public class MainActivity extends Activity {
                 case 0:newTab(HOME);break;
                 case 1:tabOverview();break;
                 case 2:translateMenu();break;
-                case 3:if(current!=null)current.reload();break;
-                case 4:if(current!=null&&current.canGoForward())current.goForward();break;
+                case 3:if(current!=null){beginNavigation(current);current.reload();}break;
+                case 4:if(current!=null&&current.canGoForward()){beginNavigation(current);current.goForward();}break;
                 case 5:if(current!=null)close(current);break;
                 case 6:toggleBookmark();break;
                 case 7:library();break;
@@ -925,7 +941,7 @@ public class MainActivity extends Activity {
         new AgentDialog.Builder(this).setTitle("Ouvrir la page MCP")
             .setMessage("Les 12 onglets sont utilisés. Remplacer la page actuelle ? Les formulaires non enregistrés seront perdus.")
             .setNegativeButton("Annuler",null)
-            .setPositiveButton("Remplacer",(dialog,which)->{if(current!=null)current.loadUrl(destination);})
+            .setPositiveButton("Remplacer",(dialog,which)->{if(current!=null)navigate(destination);})
             .show();
     }
     private void textSize(){new AgentDialog.Builder(this).setTitle("Taille du texte des pages").setItems(new String[]{"100 % · Standard","115 % · Confort","130 % · Grand","150 % · Très grand"},(d,i)->{int zoom=new int[]{100,115,130,150}[i];getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putInt("text_zoom",zoom).apply();for(WebView web:tabs)web.getSettings().setTextZoom(zoom);}).show();}
@@ -1035,7 +1051,7 @@ public class MainActivity extends Activity {
         if(fullScreenVideo!=null){hideFullScreenVideo();return;}
         if(focusMode){setFocusMode(false);return;}
         if(!activeSpace.equals("browser")){if(workspace.back())return;showSpace("browser");return;}
-        if(current!=null&&current.canGoBack())current.goBack();else super.onBackPressed();
+        if(current!=null&&current.canGoBack()){beginNavigation(current);current.goBack();}else super.onBackPressed();
     }
     @Override protected void onDestroy(){
         for(Runnable cancel:new ArrayList<>(navigationCancels.values()))cancel.run();navigationCancels.clear();
