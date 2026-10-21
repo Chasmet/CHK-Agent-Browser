@@ -43,11 +43,10 @@ jobs:
           Copy-Item pc\CHK-Home-MCP\INSTALLER-CHK-MCP.ps1 output\CHK-Home-MCP\
           Copy-Item pc\CHK-Home-MCP\INSTALLER-CHK-MCP.cmd output\CHK-Home-MCP\
           Copy-Item pc\CHK-Home-MCP\README.md output\CHK-Home-MCP\
-          Compress-Archive -Path output\CHK-Home-MCP -DestinationPath output\CHK-Home-MCP-Windows.zip -CompressionLevel Optimal
       - name: Conserver le serveur MCP et son installateur
         uses: actions/upload-artifact@v4
         with:
           name: CHK-Home-MCP-Windows
-          path: output/CHK-Home-MCP-Windows.zip
+          path: output/CHK-Home-MCP/*
           if-no-files-found: error
           retention-days: 14
