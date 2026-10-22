@@ -33,6 +33,7 @@ public final class WorkspaceCommands {
             VideoEditorEngine.get().command(app,action,args,(ok,result)->finish(cb,ok,result));
             return;
         }
+        if(action.equals("files_open")){IO.execute(()->{try{FileFormats.detect(app,args.optString("path"));FileOpenRequests.open(app,args.optString("path"),cb);}catch(Exception ex){finish(cb,false,ex.getMessage());}});return;}
         if(action.equals("files_import")){
             BrowserTransferManager.prepareUploads(app,args.optJSONArray("files"),AgentClient.get(app).deviceTokenForTransfers(),(ok,uris,message)->{
                 if(!ok){cb.finish(false,message);return;}
@@ -63,6 +64,17 @@ public final class WorkspaceCommands {
             if(!cb.isActive())return;
             WorkspaceStore s=new WorkspaceStore(app);String path=args.optString("path","");Object result;
             switch(action){
+                case "files_detect_format":result=FileFormats.detect(app,path);break;
+                case "files_copy_content":result=new JSONObject().put("path",path).put("text",FileContent.full(app,path,200000)).put("complete",true).put("clipboard_written",false);break;
+                case "files_archive_list":result=UniversalFiles.archiveList(app,path,args.optInt("offset",0));break;
+                case "files_archive_read":result=UniversalFiles.archiveText(app,path,args.getString("entry"));break;
+                case "files_extract_archive":result=UniversalFiles.extract(app,path,args.getString("destination"),args.optJSONArray("entries"),cb);break;
+                case "files_convert":result=UniversalFiles.convert(app,args,cb);break;
+                case "files_search_content":result=FileOperations.search(app,args,cb);break;
+                case "files_database":result=UniversalFiles.database(app,path,args);break;
+                case "files_media_inspect":result=UniversalFiles.preview(app,path,args);break;
+                case "files_batch":result=FileOperations.batch(app,args,cb);break;
+                case "files_verify":JSONObject stat=WorkspaceTransfer.stat(s,path,true);boolean matches=!args.has("expected_sha256")||args.getString("expected_sha256").equals(stat.getString("sha256"));result=stat.put("verified",matches);if(!matches)throw new Exception("Empreinte SHA-256 différente de celle attendue");break;
                 case "files_self_test":result=WorkspaceHealth.run(app);break;
                 case "files_capabilities":result=WorkspaceCapabilities.catalog(args);break;
                 case "files_stat":result=WorkspaceTransfer.stat(s,path,false);break;
@@ -102,12 +114,15 @@ public final class WorkspaceCommands {
                     else result=s.writeText(path,args.getString("text"),args.optBoolean("overwrite",false));
                     break;
                 case "files_edit_text":result=s.editText(path,args.getString("text"),args.getString("expected_sha256"));break;
-                case "files_read_text":result=DocumentReader.supported(path)?DocumentReader.readFile(app,path,args.optInt("page",1),args.optInt("page_count",8),args.optInt("offset",0)):
-                        (path.toLowerCase(java.util.Locale.ROOT).matches(".*\\.(mp3|wav|m4a|aac|ogg|flac|mp4|webm|mkv|mov)$")?MediaTranscriber.transcribe(app,path,"fr",120):s.readText(path,args.optInt("offset",0)));break;
+                case "files_read_text":JSONObject type=FileFormats.detect(app,path);String kind=type.getString("kind");
+                    if(kind.equals("text"))result=FileContent.page(app,path,args.optInt("offset",0));
+                    else if(kind.equals("image"))result=DocumentReader.pageText(DocumentReader.readImage(s.file(path)),args.optInt("offset",0));
+                    else if(kind.equals("audio")||kind.equals("media"))result=MediaTranscriber.transcribe(app,path,"fr",120);
+                    else result=UniversalFiles.preview(app,path,args);break;
                 case "files_read_bytes":result=s.readBytes(path,args.optLong("offset",0));break;
                 case "files_downloads":result=s.downloads();break;
                 case "files_import_download":result=new JSONObject().put("path",s.importDownload(args.getString("name"),path));break;
-                case "files_preview":result=path.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf")?DocumentReader.pdfPreview(app,s.file(path),0):s.preview(path);break;
+                case "files_preview":JSONObject info=FileFormats.detect(app,path);result=info.optString("kind").equals("image")?s.preview(path):info.optString("format").equals("pdf")&&!args.optString("view").equals("text")?DocumentReader.pdfPreview(app,s.file(path),args.optInt("page",0)):UniversalFiles.preview(app,path,args);break;
                 case "files_move":s.move(path,args.getString("destination"));result=new JSONObject().put("path",args.getString("destination"));break;
                 case "files_trash":result=new JSONObject().put("trash_id",s.trash(path));break;
                 case "files_trash_list":result=s.trashList();break;

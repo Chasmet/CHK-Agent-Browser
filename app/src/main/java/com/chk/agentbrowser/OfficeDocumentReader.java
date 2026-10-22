@@ -13,8 +13,11 @@ final class OfficeDocumentReader {
     private static final String R="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private OfficeDocumentReader(){}
     static JSONObject read(File file,int page,int count)throws Exception{
+        return read(file,page,count,file.getName().toLowerCase(Locale.ROOT).endsWith(".xlsx"));
+    }
+    static JSONObject read(File file,int page,int count,boolean sheet)throws Exception{
         if(file.length()>20L*1024*1024)throw new IOException("Document Office supérieur à 20 Mo.");
-        boolean sheet=file.getName().toLowerCase(Locale.ROOT).endsWith(".xlsx");String base=sheet?"xl/workbook.xml":"ppt/presentation.xml";
+        String base=sheet?"xl/workbook.xml":"ppt/presentation.xml";
         try(ZipFile zip=new ZipFile(file)){
             if(zip.size()>5000)throw new IOException("Paquet Office trop complexe.");
             Map<String,String> links=links(zip,sheet?"xl/_rels/workbook.xml.rels":"ppt/_rels/presentation.xml.rels",base);
@@ -65,11 +68,11 @@ final class OfficeDocumentReader {
             links.put(id,path.substring(1));
         }return links;
     }
-    private static XmlPullParser parser(String xml)throws Exception{
+    static XmlPullParser parser(String xml)throws Exception{
         if(xml.contains("<!DOCTYPE"))throw new IOException("DTD interdite dans un document Office.");
         XmlPullParser p=Xml.newPullParser();p.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES,true);p.setInput(new StringReader(xml));return p;
     }
-    private static String xml(ZipFile zip,String path)throws Exception{
+    static String xml(ZipFile zip,String path)throws Exception{
         ZipEntry entry=zip.getEntry(path);if(entry==null||entry.isDirectory())throw new IOException("Composant Office absent : "+path);
         try(InputStream in=zip.getInputStream(entry);ByteArrayOutputStream out=new ByteArrayOutputStream()){
             byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){if(out.size()+n>2*1024*1024)throw new IOException("Composant Office décompressé supérieur à 2 Mo.");out.write(b,0,n);}return new String(out.toByteArray(),StandardCharsets.UTF_8);

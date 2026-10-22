@@ -2,6 +2,7 @@ name: Validate Android Local 2 bridge
 on:
   push:
     branches:
+      - feat/universal-files-20261022
       - feat/studio-android-photos-20261022
       - feat/local2-workspace-autonomy-20261021
       - feature/android-local2-bridge-20261021
@@ -51,7 +52,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.StudioImagesIntegrationTest,com.chk.agentbrowser.WorkspaceAutonomyIntegrationTest,com.chk.agentbrowser.Local2SessionIntegrationTest,com.chk.agentbrowser.Local2ProtocolTest,com.chk.agentbrowser.BrowserTabsTranslationIntegrationTest
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.UniversalFilesIntegrationTest,com.chk.agentbrowser.StudioImagesIntegrationTest,com.chk.agentbrowser.WorkspaceAutonomyIntegrationTest,com.chk.agentbrowser.Local2SessionIntegrationTest,com.chk.agentbrowser.Local2ProtocolTest,com.chk.agentbrowser.BrowserTabsTranslationIntegrationTest
             adb pull /data/local/tmp/chk-autonomy-fixtures app/build/autonomy-fixtures
       - uses: actions/setup-python@v5
         with:

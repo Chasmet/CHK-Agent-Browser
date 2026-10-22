@@ -6,19 +6,31 @@ import java.util.*;
 
 /** Versioned, paged discovery usable even through the Windows 1.3.0 android_action tool. */
 final class WorkspaceCapabilities {
-    static final int VERSION=4;
+    static final int VERSION=5;
     private WorkspaceCapabilities(){}
     static JSONObject catalog(JSONObject args)throws Exception{
         List<JSONObject> all=new ArrayList<>();
+        add(all,"files_open","Ouvre la visionneuse CHK ; succès seulement après chargement et fenêtre au premier plan.","path:string");
+        add(all,"files_detect_format","Extension, MIME et signature ; capacités et avertissements réels.","path:string");
+        add(all,"files_copy_content","Prépare le texte complet jusqu’à 200000 caractères, sans toucher au presse-papiers Android.","path:string");
+        add(all,"files_archive_list","Liste paginée du ZIP sans extraction, 100 entrées par page, maximum 5000.","path:string","offset:integer?");
+        add(all,"files_archive_read","Aperçu texte d’une entrée ZIP, maximum 1 Mo décompressé.","path:string","entry:string");
+        add(all,"files_extract_archive","Extraction ZIP complète ou sélective dans un nouveau dossier, sans écrasement.","path:string","destination:string","entries:array?");
+        add(all,"files_convert","Copie convertie : images vers png/jpg/webp ; texte vers txt/pdf/docx/pptx/json ; csv/tsv vers csv/xlsx. Cadres simples, pas de conservation d’une mise en page Office arbitraire.","path:string","destination:string","format:string","quality:integer?","max_dimension:integer?");
+        add(all,"files_search_content","Recherche progressive, 2000 entrées et 32 Mo scannés maximum ; complete=false si limite atteinte.","folder:string?","query:string");
+        add(all,"files_database","SQLite en lecture seule, choix table et pagination de 100 lignes.","path:string","table:string?","offset:integer?");
+        add(all,"files_media_inspect","Aperçu universel selon signature, texte/PDF/Office/table/ZIP/SQLite/hex et propriétés médias.","path:string","offset:integer?","page:integer?","byte_offset:integer?");
+        add(all,"files_verify","Présence, taille, SHA-256 ; erreur si l’empreinte attendue diffère.","path:string","expected_sha256:string?");
+        add(all,"files_batch","Lot durable de 1 à 50 actions autorisées via le moteur de tâches, id stable.","id:string","operations:array");
         add(all,"files_stat","Présence, type, taille et date du fichier.","path:string");
         add(all,"files_self_test","Teste les fichiers synthétiques, archives et paquets documentaires ; aucun média personnel lu.");
         add(all,"files_hash","Calcule SHA-256 sur le fichier Android complet.","path:string");
         add(all,"files_list","Liste un dossier Android privé (racine : path vide).","path:string","query:string?","offset:integer?");
         add(all,"files_catalog","Recherche et tri dans le catalogue Android.","folder:string?","category:string?","query:string?","sort:string?","offset:integer?");
         add(all,"files_mkdir","Crée un dossier sans écrasement ; le parent doit exister.","path:string");
-        add(all,"files_write_text","Écriture UTF-8 atomique, 64 Ko ; overwrite explicite.","path:string","text:string","overwrite:boolean?");
+        add(all,"files_write_text","Écriture UTF-8 atomique, 1 Mo ; overwrite explicite.","path:string","text:string","overwrite:boolean?");
         add(all,"files_edit_text","Modifie le texte seulement si SHA-256 attendu correspond ; conserve l’ancienne version en corbeille.","path:string","text:string","expected_sha256:string");
-        add(all,"files_read_text","Lecture paginée texte ou extraction des documents pris en charge.","path:string","offset:integer?","page:integer?","page_count:integer?");
+        add(all,"files_read_text","Lecture progressive Unicode ou extraction des documents pris en charge.","path:string","offset:integer?","page:integer?","page_count:integer?");
         add(all,"files_read_bytes","Lecture Base64 par blocs de 8 Ko (compatibilité).","path:string","offset:integer?");
         add(all,"files_copy","Copie fichier ou dossier privé sans écraser, vérifie SHA-256 des fichiers ; 5 000 entrées / 512 Mo maximum.","path:string","destination:string");
         add(all,"files_move","Déplace ou renomme sans écraser.","path:string","destination:string");
