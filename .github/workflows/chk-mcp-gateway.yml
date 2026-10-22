@@ -1,0 +1,23 @@
+name: CHK MCP HTTPS gateway
+on:
+  push:
+    branches: [main, feat/local2-request-efficiency-20261022]
+    paths:
+      - 'pc/CHK-Home-MCP/edge-gateway/**'
+      - '.github/workflows/chk-mcp-gateway.yml'
+  pull_request:
+    paths:
+      - 'pc/CHK-Home-MCP/edge-gateway/**'
+      - '.github/workflows/chk-mcp-gateway.yml'
+permissions:
+  contents: read
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test relay, diagnostics, batching guidance and error handling
+        run: node --test pc/CHK-Home-MCP/edge-gateway/tests/gateway.test.ts
