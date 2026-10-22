@@ -32,6 +32,12 @@ public final class UniversalFilesIntegrationTest {
             InstrumentationRegistry.getInstrumentation().runOnMainSync(()->activity.getWindow().getDecorView().findViewWithTag("Copier tout").performClick());Thread.sleep(300);AtomicReference<String> clipboard=new AtomicReference<>();InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{ClipboardManager manager=(ClipboardManager)app.getSystemService(Context.CLIPBOARD_SERVICE);clipboard.set(manager.getPrimaryClip().getItemAt(0).getText().toString());});assertEquals(meta,clipboard.get());assertEquals(meta,FileContent.full(app,path,1000));
         }finally{InstrumentationRegistry.getInstrumentation().runOnMainSync(activity::finish);}
     }
+    @Test public void mcpOpenConfirmsTheFocusedViewer()throws Exception{
+        String path=text("META_A_COPIER.txt","Test affichage MCP");app.getSharedPreferences("update_monitor",0).edit().putBoolean("enabled",false).commit();
+        android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();MainActivity main=(MainActivity)instrumentation.startActivitySync(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try{JSONObject opened=invoke("files_open",new JSONObject().put("path",path));assertTrue(opened.getBoolean("visible"));assertEquals(path,opened.getString("path"));instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);}
+        finally{instrumentation.runOnMainSync(main::finish);}
+    }
     @Test public void detectsRealImageAndBinaryDespiteExtensions()throws Exception{
         String path=folder+"/photo.txt";Bitmap bitmap=Bitmap.createBitmap(32,24,Bitmap.Config.ARGB_8888);bitmap.eraseColor(Color.BLUE);try(OutputStream out=new FileOutputStream(store.file(path))){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}finally{bitmap.recycle();}
         JSONObject info=FileFormats.detect(app,path);assertEquals("png",info.getString("format"));assertEquals("image",info.getString("kind"));assertFalse(info.getBoolean("editable"));
@@ -46,7 +52,8 @@ public final class UniversalFilesIntegrationTest {
     }
     @Test public void validatesJsonAndShowsQuotedCsv()throws Exception{
         String valid=text("data.json","{\"titre\":\"Été\"}");assertTrue(UniversalFiles.preview(app,valid,new JSONObject()).getBoolean("json_valid"));
-        String bad=text("bad.json","{broken");assertFalse(UniversalFiles.preview(app,bad,new JSONObject()).getBoolean("json_valid"));
+        String bad=text("bad.json","{broken");
+        try{StrictJson.validate("{unquoted:1}");fail("Lenient JavaScript object is not valid JSON");}catch(IOException expected){}assertFalse(UniversalFiles.preview(app,bad,new JSONObject()).getBoolean("json_valid"));
         JSONArray rows=UniversalFiles.table("nom,phrase\nCHK,\"bonjour, monde\"\n",',');assertEquals("bonjour, monde",rows.getJSONArray(1).getString(1));
         String csv=text("rows.csv","nom,valeur\nCHK,12\n");JSONObject converted=UniversalFiles.convert(app,new JSONObject().put("path",csv).put("destination",folder+"/rows.xlsx").put("format","xlsx"),active);assertTrue(converted.getBoolean("verified"));assertEquals("xlsx",FileFormats.detect(app,folder+"/rows.xlsx").getString("format"));
     }

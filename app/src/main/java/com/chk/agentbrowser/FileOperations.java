@@ -26,7 +26,7 @@ final class FileOperations {
         return new JSONObject().put("matches",matches).put("scanned_files",scanned).put("visited_entries",entries).put("limited",limited).put("complete",!limited);
     }
     static JSONObject batch(Context app,JSONObject args,AgentClient.ResultCallback active)throws Exception{
-        JSONArray operations=args.getJSONArray("operations");if(operations.length()<1||operations.length()>100)throw new IOException("1 à 100 opérations requises");String id=args.getString("id");if(!id.matches("[A-Za-z0-9_-]{1,80}"))throw new IOException("Identifiant de lot invalide");
+        JSONArray operations=args.getJSONArray("operations");if(operations.length()<1||operations.length()>50)throw new IOException("1 à 50 opérations requises");String id=args.getString("id");if(!id.matches("[A-Za-z0-9_-]{1,80}"))throw new IOException("Identifiant de lot invalide");
         JSONArray steps=new JSONArray();for(int i=0;i<operations.length();i++){JSONObject op=operations.getJSONObject(i);String action=op.getString("action");if(!Arrays.asList("files_copy","files_move","files_mkdir","files_write_text","files_edit_text","files_convert","files_verify","files_extract_archive").contains(action))throw new IOException("Action de lot non disponible : "+action);steps.put(new JSONObject().put("action",action).put("args",op.getJSONObject("args")));}
         if(steps.length()>50)throw new IOException("Ce moteur accepte 50 étapes par tâche : répartir le lot en deux identifiants");
         return AgentTasks.command(app,new JSONObject().put("operation","submit").put("id",id).put("steps",steps),active.isLocal2());

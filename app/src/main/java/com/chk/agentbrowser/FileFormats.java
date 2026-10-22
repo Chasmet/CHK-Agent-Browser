@@ -34,7 +34,7 @@ final class FileFormats {
                 else if(zip.getEntry("AndroidManifest.xml")!=null&&ext.equals("apk")){format="apk";kind="package";mime="application/vnd.android.package-archive";}
                 else if(zip.getEntry("content.xml")!=null){format="opendocument";kind="document";}
                 else if(zip.getEntry("META-INF/container.xml")!=null){format="epub";kind="archive";}
-            }catch(ZipException ex){warning="Archive ZIP corrompue ou chiffrée";kind="binary";}
+            }catch(IOException ex){warning="Archive ZIP illisible : "+ex.getMessage();kind="binary";}
         }
         else if(ascii(head,0,"RIFF")&&ascii(head,8,"WAVE")){format="wav";kind="audio";mime="audio/wav";}
         else if(ascii(head,0,"fLaC")){format="flac";kind="audio";mime="audio/flac";}
@@ -55,6 +55,7 @@ final class FileFormats {
             else if(TEXT.contains(ext)||Arrays.asList("pdf","png","jpg","jpeg","webp","docx","xlsx","pptx").contains(ext))warning="Extension annoncée non confirmée : fichier binaire, corrompu ou chiffré";
         }
         if(!ext.isEmpty()&&!format.equals(ext)&&!Arrays.asList("text","binary","media").contains(format)&&!(format.equals("jpeg")&&ext.equals("jpg")))warning=(warning.isEmpty()?"":warning+" · ")+"Format réel : "+format+" ; extension : "+ext;
+        if(file.length()==0)warning="Fichier vide";
         boolean editable=kind.equals("text")&&file.length()<=1048576;
         return new JSONObject().put("path",path).put("name",file.getName()).put("format",format).put("kind",kind).put("mime_type",mime).put("extension",ext)
             .put("encoding",encoding).put("size_bytes",file.length()).put("updated",file.lastModified()).put("editable",editable).put("read_only_default",true)

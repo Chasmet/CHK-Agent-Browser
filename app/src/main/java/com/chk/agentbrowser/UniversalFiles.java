@@ -18,11 +18,11 @@ final class UniversalFiles {
         if(kind.equals("text")){
             result=FileContent.page(app,path,args.optInt("offset",0));
             if((format.equals("json")||format.equals("jsonl")||format.equals("ndjson"))&&s.file(path).length()<=1048576){
-                String text=FileContent.full(app,path,1048576);try{if(format.equals("json")){org.json.JSONTokener parser=new org.json.JSONTokener(text);Object value=parser.nextValue();if(!(value instanceof JSONObject)&&!(value instanceof JSONArray)||parser.nextClean()!=0)throw new JSONException("Objet ou tableau JSON attendu, sans texte supplémentaire");result.put("json_valid",true);if(args.optBoolean("pretty")&&args.optInt("offset",0)==0&&result.optInt("next_offset",-1)==-1)result.put("text",value instanceof JSONObject?((JSONObject)value).toString(2):((JSONArray)value).toString(2));}
-                    else{int count=0;for(String line:text.split("\\r?\\n")){if(line.trim().isEmpty())continue;Object value=new JSONTokener(line).nextValue();if(!(value instanceof JSONObject)&&!(value instanceof JSONArray))throw new JSONException("Ligne "+(count+1)+" invalide");count++;}result.put("json_valid",true).put("records",count);}}
+                String text=FileContent.full(app,path,1048576);try{if(format.equals("json")){StrictJson.validate(text);org.json.JSONTokener parser=new org.json.JSONTokener(text);Object value=parser.nextValue();if(!(value instanceof JSONObject)&&!(value instanceof JSONArray)||parser.nextClean()!=0)throw new JSONException("Objet ou tableau JSON attendu, sans texte supplémentaire");result.put("json_valid",true);if(args.optBoolean("pretty")&&args.optInt("offset",0)==0&&result.optInt("next_offset",-1)==-1)result.put("text",value instanceof JSONObject?((JSONObject)value).toString(2):((JSONArray)value).toString(2));}
+                    else{int count=0;for(String line:text.split("\\r?\\n")){if(line.trim().isEmpty())continue;StrictJson.validate(line);Object value=new JSONTokener(line).nextValue();if(!(value instanceof JSONObject)&&!(value instanceof JSONArray))throw new JSONException("Ligne "+(count+1)+" invalide");count++;}result.put("json_valid",true).put("records",count);}}
                 catch(Exception ex){result.put("json_valid",false).put("validation_error",ex.getMessage());}
             }
-            if(format.equals("csv")||format.equals("tsv"))result.put("rows",table(result.getString("text"),format.equals("tsv")?'\t':','));
+            if(format.equals("csv")||format.equals("tsv"))try{result.put("rows",table(result.getString("text"),format.equals("tsv")?'\t':','));}catch(IOException ex){result.put("table_warning",ex.getMessage()+" ; aperçu texte conservé");}
         }else if(format.equals("pdf"))result=DocumentReader.pageText(DocumentReader.readPdf(app,s.file(path),args.optInt("page",1),args.optInt("page_count",1)),args.optInt("offset",0));
         else if(format.equals("docx"))result=DocumentReader.pageText(DocumentReader.readDocx(s.file(path)),args.optInt("offset",0));
         else if(format.equals("xlsx")||format.equals("pptx"))result=DocumentReader.pageText(OfficeDocumentReader.read(s.file(path),args.optInt("page",1),args.optInt("page_count",1),format.equals("xlsx")),args.optInt("offset",0));
@@ -42,6 +42,7 @@ final class UniversalFiles {
             else if((ch=='\n'||ch=='\r')&&!quoted){if(ch=='\r'&&i+1<text.length()&&text.charAt(i+1)=='\n')i++;row.put(field.toString());field.setLength(0);rows.put(row);if(rows.length()>2000)throw new IOException("Tableau limité à 2000 lignes");row=new JSONArray();}
             else field.append(ch);
         }
+        if(quoted)throw new IOException("CSV : guillemets non fermés dans cette portion");
         if(field.length()>0||row.length()>0){row.put(field.toString());rows.put(row);}if(rows.length()>2000)throw new IOException("Tableau limité à 2000 lignes");return rows;
     }
     private static JSONObject openDocument(File file)throws Exception{
@@ -106,7 +107,7 @@ final class UniversalFiles {
         }
         String text=FileContent.full(app,path,60000);JSONObject request=new JSONObject().put("path",destination).put("format",format).put("text",text).put("title",s.file(path).getName());
         if(Arrays.asList("csv","xlsx").contains(format)){String ext=detected.optString("format");if(!ext.equals("csv")&&!ext.equals("tsv"))throw new IOException("Conversion en tableau : source CSV ou TSV requise");request.put("rows",table(text,ext.equals("tsv")?'\t':','));}
-        else if(format.equals("json"))request.put("data",new JSONTokener(text).nextValue());
+        else if(format.equals("json")){StrictJson.validate(text);request.put("data",new JSONTokener(text).nextValue());}
         else if(format.equals("pptx"))request.put("slides",new JSONArray().put(new JSONObject().put("title",s.file(path).getName()).put("text",text)));
         else if(!Arrays.asList("txt","pdf","docx").contains(format))throw new IOException("Conversion locale non disponible pour ce couple de formats");
         return WorkspaceDocuments.create(app,request,active);
