@@ -30,7 +30,8 @@ final class StudioProjectLibrary {
         File current=new File(app.getFilesDir(),ACTIVE);
         JSONObject p=(current.isFile()||new File(current+".bak").isFile())?read(current):blank();
         String id=p.optString("project_id","");
-        boolean migrated=!validId(id);
+        boolean migrated=!validId(id);boolean initialized=!p.has("revision");
+        p.put("revision",p.optInt("revision",0));
         if(migrated){
             id=UUID.randomUUID().toString();
             p.put("project_id",id);
@@ -40,14 +41,15 @@ final class StudioProjectLibrary {
         File archive=entry(app,id,false);
         if(archive.exists()){JSONObject saved=read(archive);if(saved.optInt("revision")>p.optInt("revision")){p=saved;write(current,p);}}
         else write(archive,p);
-        if(migrated||!current.isFile())write(current,p);
+        if(initialized)write(archive,p);
+        if(initialized||migrated||!current.isFile())write(current,p);
         return p;
     }
     static JSONObject blank()throws Exception{
         return new JSONObject().put("name","Nouveau montage")
             .put("output","Montage-"+System.currentTimeMillis()+"-"+UUID.randomUUID().toString().substring(0,6)+".mp4")
             .put("aspect_ratio","9:16").put("aspect_mode","fit")
-            .put("resolution",720).put("clips",new JSONArray())
+            .put("resolution",720).put("revision",0).put("clips",new JSONArray())
             .put("audio",new JSONArray());
     }
     private static boolean validId(String id){
