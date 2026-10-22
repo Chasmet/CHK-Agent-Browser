@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 FILES = {op: "files_" + op for op in ("stat", "hash", "self_test", "list", "catalog", "mkdir", "write_text", "edit_text", "read_text", "copy", "move", "trash", "trash_list", "restore", "zip", "unzip", "preview", "external")}
-MEDIA = {op: op for op in ("media_info", "media_frame", "media_codecs", "media_model_status", "media_transcribe", "video_editor_project_read", "video_editor_project_save", "video_editor_project_list", "video_editor_project_new", "video_editor_project_open", "video_editor_export", "video_editor_status", "video_editor_wait", "video_editor_verify_output", "video_editor_cancel", "document_read", "document_page")}
+MEDIA = {op: op for op in ("media_info", "media_frame", "media_codecs", "media_model_status", "media_transcribe", "video_editor_project_read", "video_editor_project_save", "video_editor_project_list", "video_editor_project_new", "video_editor_project_open", "video_editor_export", "video_editor_status", "video_editor_wait", "video_editor_verify_output", "video_editor_cancel", "video_editor_capabilities", "video_editor_project_import", "video_editor_timeline", "video_editor_history", "video_editor_queue_add", "video_editor_queue_status", "video_editor_queue_pause", "video_editor_queue_resume", "document_read", "document_page")}
 TRANSFERS = {op: "files_transfer_" + op for op in ("begin", "write", "read", "status", "commit", "abort")}
 
 
@@ -55,7 +55,7 @@ def catalog() -> list[dict]:
         tool("android_media", "Lecture PDF/images/vidéos et studio natif Android. Export asynchrone : attendre video_editor_wait/status puis vérifier valid=true via video_editor_verify_output. L'aperçu nécessite l'autorisation Android.",
              dict(operation=enum(MEDIA), path=path, page=integer, page_count=integer, offset=integer, time_ms=integer,
                   language=enum(("fr", "en")), max_seconds=integer, project={"type": "object"}, expected_revision=integer,
-                  id=string(), trash={"type": "boolean"}, replace={"type": "boolean"}, timeout_ms=integer), ("operation",)),
+                  id=string(), request_id=string(), operations={"type": "array", "items": {"type": "object"}}, projects={"type": "array", "items": {"type": "object"}}, redo={"type": "boolean"}, trash={"type": "boolean"}, replace={"type": "boolean"}, timeout_ms=integer), ("operation",)),
         tool("android_transfer", "Transfert binaire bas niveau Android : begin(id,path,size,sha256), write(id,offset,base64), status/commit/abort(id), read(path,offset,size,updated). 48 Ko par écriture, 8 Ko par lecture, SHA-256 final obligatoire.",
              dict(operation=enum(TRANSFERS), id=string(), path=path, size=integer, updated=integer, sha256=string(),
                   offset=integer, base64=string(), chunk_sha256=string()), ("operation",)),

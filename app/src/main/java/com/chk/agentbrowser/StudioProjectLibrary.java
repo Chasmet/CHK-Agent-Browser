@@ -28,7 +28,7 @@ final class StudioProjectLibrary {
 
     static JSONObject active(Context app)throws Exception{
         File current=new File(app.getFilesDir(),ACTIVE);
-        JSONObject p=current.isFile()?read(current):blank();
+        JSONObject p=(current.isFile()||new File(current+".bak").isFile())?read(current):blank();
         String id=p.optString("project_id","");
         boolean migrated=!validId(id);
         if(migrated){
@@ -38,7 +38,8 @@ final class StudioProjectLibrary {
             p.put("updated_at",System.currentTimeMillis());
         }
         File archive=entry(app,id,false);
-        if(!archive.exists())write(archive,p);
+        if(archive.exists()){JSONObject saved=read(archive);if(saved.optInt("revision")>p.optInt("revision")){p=saved;write(current,p);}}
+        else write(archive,p);
         if(migrated||!current.isFile())write(current,p);
         return p;
     }
@@ -62,6 +63,7 @@ final class StudioProjectLibrary {
         return new File(dir(app,deleted),id+".json");
     }
     private static JSONObject read(File source)throws Exception{
+        try(FileInputStream recovered=new AtomicFile(source).openRead()){ /* restore a legacy interrupted write first */ }
         if(!source.isFile()||source.length()==0||source.length()>250000)throw new java.io.IOException("Projet absent ou illisible");
         byte[] bytes=new byte[(int)source.length()];
         try(FileInputStream in=new FileInputStream(source)){
@@ -92,8 +94,27 @@ final class StudioProjectLibrary {
         p.put("project_id",id);
         p.put("created_at",current.optLong("created_at",System.currentTimeMillis()));
         p.put("updated_at",System.currentTimeMillis());
+        recordHistory(app,current);
         write(entry(app,id,false),p);
         write(new File(app.getFilesDir(),ACTIVE),p);
+    }
+    private static File historyFile(Context app,String id)throws Exception{return new File(dir(app,false),id+".history.json");}
+    private static void recordHistory(Context app,JSONObject before)throws Exception{
+        File file=historyFile(app,before.getString("project_id"));
+        JSONObject h=file.exists()?StudioAutomation.read(file):new JSONObject();
+        JSONArray undo=h.optJSONArray("undo");if(undo==null)undo=new JSONArray();undo.put(new JSONObject(before.toString()));
+        while(undo.length()>30)undo.remove(0);
+        h.put("undo",undo).put("redo",new JSONArray());StudioAutomation.write(file,h);
+    }
+    static JSONObject history(Context app,boolean forward)throws Exception{
+        JSONObject current=active(app);File file=historyFile(app,current.getString("project_id"));
+        JSONObject h=StudioAutomation.read(file);String from=forward?"redo":"undo",to=forward?"undo":"redo";
+        JSONArray source=h.optJSONArray(from),target=h.optJSONArray(to);if(source==null||source.length()==0)throw new java.io.IOException("Historique vide");
+        if(target==null)target=new JSONArray();JSONObject previous=source.getJSONObject(source.length()-1);
+        VideoEditorEngine.get().validate(app,previous);source.remove(source.length()-1);target.put(current);
+        previous.put("revision",current.optInt("revision")+1).put("updated_at",System.currentTimeMillis());
+        h.put(from,source).put(to,target);StudioAutomation.write(file,h);
+        write(entry(app,previous.getString("project_id"),false),previous);write(new File(app.getFilesDir(),ACTIVE),previous);return previous;
     }
     static JSONObject create(Context app,JSONObject value)throws Exception{
         JSONObject before=active(app);

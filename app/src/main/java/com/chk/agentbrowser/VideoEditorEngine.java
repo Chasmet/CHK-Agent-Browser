@@ -50,7 +50,7 @@ public final class VideoEditorEngine {
         "musique/chknoirshadow/clip-grok-videos/ALPHA_OMEGA_CLIP_OFFICIEL_9x16_V2.mp4";
     private static final String DEFAULT_OUTPUT =
         "musique/chknoirshadow/clip-grok-videos/ALPHA_OMEGA_CLIP_FINAL_GROK.mp4";
-    private static final ExecutorService DISK=Executors.newSingleThreadExecutor();
+    static final ExecutorService DISK=Executors.newSingleThreadExecutor();
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private static final VideoEditorEngine INSTANCE=new VideoEditorEngine();
     private volatile String state="idle", error="",lastOutput="";
@@ -67,12 +67,13 @@ public final class VideoEditorEngine {
     public interface Done {void completed(boolean ok,String json);}
     public void command(Context context,String action,JSONObject args,Done cb){
         Context application=context.getApplicationContext();
+        if(StudioAutomation.handles(action)){StudioAutomation.command(application,action,args,cb);return;}
         if("video_editor_status".equals(action)){
             MAIN.post(()->cb.completed(true,status().toString()));return;
         }
         if("video_editor_verify_output".equals(action)){
             DISK.execute(()->{
-                try{cb.completed(true,verifyOutput(application).toString());}
+                try{cb.completed(true,(args.has("project")?verifyProjectOutput(application,args.getJSONObject("project")):verifyOutput(application)).toString());}
                 catch(Exception ex){cb.completed(false,ex.getMessage()==null?ex.getClass().getSimpleName():ex.getMessage());}
             });
             return;
@@ -82,7 +83,7 @@ public final class VideoEditorEngine {
                 if("running".equals(state)||"preparing".equals(state)){cb.completed(false,"Un export est déjà actif");return;}
                 final long ticket; synchronized(exportLock){ticket=++exportGeneration;state="preparing";error="";percent=0;}
                 DISK.execute(()->{try{
-                    JSONObject project=load(application);validate(application,project);
+                    JSONObject project=args.has("project")?new JSONObject(args.getJSONObject("project").toString()):load(application);validate(application,project);
                     if(project.getJSONArray("clips").length()==0)throw new IllegalArgumentException("Ajoute une vidéo avant d’exporter");
                     Composition composition=composition(application,project);
                     MAIN.post(()->{if(ticket!=exportGeneration||!"preparing".equals(state)){cb.completed(false,"Export annulé");return;}startExport(application,project,composition,args.optBoolean("replace",false),ticket,cb);});
@@ -173,6 +174,9 @@ public final class VideoEditorEngine {
     public JSONObject verifyOutput(Context context)throws Exception{
         File record=new File(context.getFilesDir(),"video_last_export.json");
         JSONObject project=record.isFile()?readProject(record):load(context);
+        return verifyProjectOutput(context,project);
+    }
+    JSONObject verifyProjectOutput(Context context,JSONObject project)throws Exception{
         String output=project.optString("output",DEFAULT_OUTPUT);
         WorkspaceStore store=new WorkspaceStore(context);
         File file=store.file(output);
@@ -218,7 +222,7 @@ public final class VideoEditorEngine {
             boolean correctAspect=ratio==0 || (displayWidth!=null&&displayHeight!=null&&Math.abs(Float.parseFloat(displayWidth)/Float.parseFloat(displayHeight)-ratio)<0.015f);
             JSONObject frames=inspectRenderedClips(context,file,project);
             boolean noBlackCuts=frames.getJSONArray("black_video_segments").length()==0;
-            boolean valid=picture&&(!(audioCount>0)||sound)&&correctDuration&&sourcesPresent&&correctAspect&&noBlackCuts;
+            boolean valid=picture&&(!(audioCount>0)||sound)&&correctDuration&&sourcesPresent&&correctAspect&&noBlackCuts&&frames.getInt("unverified_video_segments")==0;
             result.put("duration_ms",durationMs).put("has_video",picture)
                 .put("has_audio",sound).put("width_px",displayWidth).put("height_px",displayHeight)
                 .put("encoded_width_px",width).put("encoded_height_px",height).put("rotation_degrees",rotation)
@@ -242,7 +246,7 @@ public final class VideoEditorEngine {
         JSONArray clips=project.optJSONArray("clips");
         JSONArray black=new JSONArray(),samples=new JSONArray();
         int checked=0,unverifiable=0;
-        if(clips==null||clips.length()<2)return new JSONObject()
+        if(clips==null||clips.length()==0)return new JSONObject()
             .put("verified_video_segments",0).put("unverified_video_segments",0)
             .put("black_video_segments",black).put("frame_samples",samples);
         MediaMetadataRetriever output=new MediaMetadataRetriever();
@@ -260,16 +264,18 @@ public final class VideoEditorEngine {
                 MediaMetadataRetriever source=new MediaMetadataRetriever();
                 android.graphics.Bitmap rendered=null,original=null;
                 try{
-                    source.setDataSource(store.file(clip.getString("path")).getAbsolutePath());
+                    File input=store.file(clip.getString("path"));
+                    boolean image=StudioImages.isImage(input);
+                    if(!image)source.setDataSource(input.getAbsolutePath());
                     long srcAt=(clip.optLong("start_ms",0)+duration/2)*1000;
                     if(android.os.Build.VERSION.SDK_INT>=27){
                         rendered=output.getScaledFrameAtTime(at*1000,
                             MediaMetadataRetriever.OPTION_CLOSEST,64,64);
-                        original=source.getScaledFrameAtTime(srcAt,
+                        original=image?StudioImages.thumbnail(input,64):source.getScaledFrameAtTime(srcAt,
                             MediaMetadataRetriever.OPTION_CLOSEST,64,64);
                     }else{
                         rendered=output.getFrameAtTime(at*1000,MediaMetadataRetriever.OPTION_CLOSEST);
-                        original=source.getFrameAtTime(srcAt,MediaMetadataRetriever.OPTION_CLOSEST);
+                        original=image?StudioImages.thumbnail(input,64):source.getFrameAtTime(srcAt,MediaMetadataRetriever.OPTION_CLOSEST);
                     }
                     if(rendered==null||original==null){unverifiable++;continue;}
                     checked++;
@@ -292,7 +298,7 @@ public final class VideoEditorEngine {
         }finally{output.release();}
         return new JSONObject().put("verified_video_segments",checked)
             .put("unverified_video_segments",unverifiable)
-            .put("black_video_segments",black);
+            .put("black_video_segments",black).put("frame_samples",samples);
     }
     private static float sampleBrightness(android.graphics.Bitmap picture){
         int w=picture.getWidth(),h=picture.getHeight();
@@ -333,6 +339,7 @@ public final class VideoEditorEngine {
         if(path==null||path.length()>700||path.isEmpty())throw new IllegalArgumentException("Chemin source invalide");
         File f=store.file(path);
         if(!f.isFile()||!f.canRead()||f.length()==0)throw new IllegalArgumentException("Fichier absent: "+path);
+        if("video".equals(type)&&StudioImages.isImage(f)){StudioImages.bounds(f);return f;}
         android.media.MediaExtractor extractor=new android.media.MediaExtractor();
         boolean found=false;
         try{extractor.setDataSource(f.getAbsolutePath());for(int i=0;i<extractor.getTrackCount();i++){
@@ -374,14 +381,16 @@ public final class VideoEditorEngine {
             throw new IllegalArgumentException("Recadrage inconnu: "+layout);
         WorkspaceStore store=new WorkspaceStore(context);
         JSONArray clips=p.getJSONArray("clips"),sounds=p.optJSONArray("audio");
-        if(clips.length()>40)throw new IllegalArgumentException("40 vidéos maximum");
+        if(clips.length()>100)throw new IllegalArgumentException("100 plans maximum");
+        int fps=p.optInt("fps",30);if(fps!=24&&fps!=30&&fps!=60)throw new IllegalArgumentException("Cadence 24, 30 ou 60 images/s requise");
         long videoDuration=0,audioDuration=0;
         for(int i=0;i<clips.length();i++){
             JSONObject c=clips.getJSONObject(i);
             File f=requireSource(store,c.getString("path"),"video");
             long clipStart=c.optLong("start_ms",0),duration=c.optLong("duration_ms",10000);
             if(clipStart<0||duration<500||duration>1200000)throw new IllegalArgumentException("Découpe vidéo invalide");
-            checkMediaDuration(f,clipStart+duration);
+            if(StudioImages.isImage(f)){if(clipStart!=0||duration<1000||duration>60000)throw new IllegalArgumentException("Une photo dure de 1 à 60 secondes, sans découpe de départ");}
+            else checkMediaDuration(f,clipStart+duration);
             String filter=c.optString("filter","aucun");
             if(!filter.equals("aucun")&&!filter.equals("noir")&&!filter.equals("vintage")
                     &&!filter.equals("chaud")&&!filter.equals("froid")
@@ -403,6 +412,10 @@ public final class VideoEditorEngine {
                 double max=key.contains("saturation")?2:0.5, min=key.contains("saturation")?0:-0.5;
                 if(Double.isNaN(x)||Double.isInfinite(x)||x<min||x>max)
                     throw new IllegalArgumentException("Étalonnage invalide : "+key);
+            }
+            for(String key:new String[]{"zoom","zoom_end","pan_x","pan_x_end","pan_y","pan_y_end"})if(c.has(key)){
+                double v=c.optDouble(key,Double.NaN);double min=key.startsWith("zoom")?1:-1,max=key.startsWith("zoom")?4:1;
+                if(Double.isNaN(v)||Double.isInfinite(v)||v<min||v>max)throw new IllegalArgumentException("Animation invalide : "+key);
             }
             videoDuration+=Math.round(duration/speed);
         }
@@ -439,7 +452,8 @@ public final class VideoEditorEngine {
                 throw new IllegalArgumentException("Découpe au-delà du média: "+f.getName());
         }finally{r.release();}
     }
-    private static MediaItem media(File file,long start,long duration){
+    private static MediaItem media(File file,long start,long duration)throws Exception{
+        if(StudioImages.isImage(file))return StudioImages.media(file,duration);
         return new MediaItem.Builder().setUri(android.net.Uri.fromFile(file))
            .setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder()
                .setStartPositionMs(start).setEndPositionMs(start+duration).build()).build();
@@ -544,6 +558,17 @@ public final class VideoEditorEngine {
             if(c.has("grade_exposure")||c.has("grade_warmth")||c.has("grade_saturation")||
                c.has("grade_exposure_end")||c.has("grade_warmth_end")||c.has("grade_saturation_end"))
                 fx.add(gradedColor(c,len));
+            if(c.has("zoom")||c.has("zoom_end")||c.has("pan_x")||c.has("pan_x_end")||c.has("pan_y")||c.has("pan_y_end")){
+                final java.util.concurrent.atomic.AtomicLong first=new java.util.concurrent.atomic.AtomicLong(Long.MIN_VALUE);
+                final float z0=(float)c.optDouble("zoom",1),z1=(float)c.optDouble("zoom_end",z0);
+                final float x0=(float)c.optDouble("pan_x",0),x1=(float)c.optDouble("pan_x_end",x0);
+                final float y0=(float)c.optDouble("pan_y",0),y1=(float)c.optDouble("pan_y_end",y0);
+                fx.add((androidx.media3.effect.MatrixTransformation)(timeUs)->{
+                    first.compareAndSet(Long.MIN_VALUE,timeUs);float t=Math.max(0,Math.min(1,(timeUs-first.get())/(len*1000f)));
+                    android.graphics.Matrix matrix=new android.graphics.Matrix();float z=z0+(z1-z0)*t;
+                    matrix.setScale(z,z);matrix.postTranslate(x0+(x1-x0)*t,y0+(y1-y0)*t);return matrix;
+                });
+            }
             if(c.optDouble("rotation",0)!=0)fx.add(new androidx.media3.effect.ScaleAndRotateTransformation.Builder().setRotationDegrees((float)c.optDouble("rotation")).build());
             String caption=c.optString("text","");
             if(!caption.isEmpty()){
@@ -555,9 +580,10 @@ public final class VideoEditorEngine {
             }
             final float speed=(float)c.optDouble("speed",1);
             EditedMediaItem.Builder video=new EditedMediaItem.Builder(media(store.file(c.getString("path")),c.optLong("start_ms",0),len))
-                .setDurationUs(sourceDurationUs(store,c,sourceDurations))
-                .setRemoveAudio(!original||c.optBoolean("mute",false))
+                .setFrameRate(project.optInt("fps",30))
+                .setRemoveAudio(StudioImages.isImage(store.file(c.getString("path")))||!original||c.optBoolean("mute",false))
                 .setEffects(new Effects(Collections.emptyList(),fx));
+            if(!StudioImages.isImage(store.file(c.getString("path"))))video.setDurationUs(sourceDurationUs(store,c,sourceDurations));
             if(speed!=1)video.setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return speed;}public long getNextSpeedChangeTimeUs(long timeUs){return androidx.media3.common.C.TIME_UNSET;}});
             videos.add(video.build());
         }
@@ -603,7 +629,12 @@ public final class VideoEditorEngine {
                         try{
                             if(!partial.isFile()||partial.length()<1000)
                                 throw new IllegalStateException("Rendu MP4 absent ou incomplet");
+                            JSONObject renderedInfo=MediaInspection.infoFile(partial);
+                            long expected=0;JSONArray cuts=project.getJSONArray("clips");for(int k=0;k<cuts.length();k++){JSONObject cut=cuts.getJSONObject(k);expected+=Math.round(cut.optLong("duration_ms",10000)/cut.optDouble("speed",1));}
+                            if(Math.abs(renderedInfo.optLong("duration_ms",-1)-expected)>500)throw new IllegalStateException("Durée MP4 incorrecte");
+                            if(project.optJSONArray("audio")!=null&&project.getJSONArray("audio").length()>0&&!renderedInfo.optBoolean("has_audio"))throw new IllegalStateException("Piste audio absente du MP4");
                             JSONObject visual=inspectRenderedClips(context,partial,project);
+                            if(visual.optInt("unverified_video_segments")>0)throw new IllegalStateException("Images MP4 non vérifiables");
                             if(visual.getJSONArray("black_video_segments").length()>0)
                                 throw new IllegalStateException("Export rejeté : images noires dans les cuts "
                                     +visual.getJSONArray("black_video_segments")

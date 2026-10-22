@@ -44,6 +44,14 @@ final class WorkspaceCapabilities {
         add(all,"media_frame","Image vidéo à time_ms (image clé la plus proche).","path:string","time_ms:integer?");
         add(all,"media_codecs","Codecs réellement disponibles sur cet Android.");
         add(all,"media_transcribe","Transcription locale fr/en, modèle local requis.","path:string","language:string?","max_seconds:integer?");
+        add(all,"video_editor_capabilities","Fonctions Studio réellement disponibles sur ce téléphone.");
+        add(all,"video_editor_project_import","Valide puis ouvre un montage JSON depuis Fichiers, sans perdre le projet précédent.","path:string");
+        add(all,"video_editor_timeline","Modifications atomiques du projet visible : add/update/move/delete/settings. Photos 1..60 s, maximum 100 plans.","expected_revision:integer","operations:array");
+        add(all,"video_editor_history","Annuler ou rétablir, historique durable par projet.","expected_revision:integer","redo:boolean?");
+        add(all,"video_editor_queue_add","Ajoute 1..10 projets indépendants, sans écraser de sortie ; request_id stable empêche les doubles exports.","request_id:string","projects:array");
+        add(all,"video_editor_queue_status","Progression et vérification par export.");
+        add(all,"video_editor_queue_pause","Arrête les prochains démarrages ; laisse finir le rendu actif.");
+        add(all,"video_editor_queue_resume","Reprend la file, vérifie les exports interrompus avant de relancer.");
         add(all,"video_editor_project_read","Projet de montage actif avec révision.");
         add(all,"video_editor_project_save","Enregistre un projet validé, protège contre les révisions périmées.","project:object","expected_revision:integer?");
         add(all,"video_editor_project_list","Projets enregistrés ou corbeille.","trash:boolean?");
