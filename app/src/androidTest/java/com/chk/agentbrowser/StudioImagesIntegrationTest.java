@@ -58,8 +58,15 @@ public final class StudioImagesIntegrationTest {
         try{VideoEditorEngine.get().validate(app,invalid);fail("A photo must stay below 60 seconds");}catch(IllegalArgumentException expected){}
         assertEquals(redone.getInt("revision"),invoke("video_editor_project_read",new JSONObject()).getInt("revision"));
     }
+    @Test public void importedPhotoAppearsInTheVisibleEditor()throws Exception{
+        String path=image("png",Bitmap.CompressFormat.PNG);invoke("video_editor_project_import",new JSONObject().put("project",project(path,"-visible")));
+        android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
+        VideoEditorActivity activity=(VideoEditorActivity)instrumentation.startActivitySync(new android.content.Intent(app,VideoEditorActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+        try{AtomicBoolean visible=new AtomicBoolean();for(int i=0;i<50;i++){instrumentation.runOnMainSync(()->{android.widget.ImageView image=activity.findViewById(androidx.media3.ui.R.id.exo_image);visible.set(image!=null&&image.getVisibility()==android.view.View.VISIBLE&&image.getDrawable()!=null);});if(visible.get())break;Thread.sleep(200);}assertTrue("A decoded photo must be visible in Studio",visible.get());}
+        finally{instrumentation.runOnMainSync(activity::finish);}
+    }
     @Test public void photoSequenceKeepsMusicAndFilters()throws Exception{
-        String path=image("png",Bitmap.CompressFormat.PNG),music=prefix+"-music.mp4";files.add(music);
+        String path=image("png",Bitmap.CompressFormat.PNG),music=prefix+"-source-music.mp4";files.add(music);
         try(InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("editor-fixture.mp4");OutputStream out=new FileOutputStream(store.file(music))){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}
         JSONObject p=project(path,"-music");JSONArray cuts=new JSONArray();for(int i=0;i<3;i++)cuts.put(new JSONObject().put("path",path).put("duration_ms",1000).put("filter",i==1?"noir":"cinema").put("fade_ms",100));
         p.put("clips",cuts).put("audio",new JSONArray().put(new JSONObject().put("path",music).put("duration_ms",3000)));
