@@ -1,3 +1,11 @@
+## Render MCP — dossiers visibles et renommage de fiches (22 octobre 2026)
+
+- Corrige l’écart entre le chemin affiché « Documents » et le chemin de stockage « Categories/Documents ». Les commandes MCP existantes acceptent désormais `Documents/...`, `Images/...`, `Vidéos/...` et `Audio/...` en plus des chemins réels ; les anciens chemins et le contenu des dossiers sont conservés.
+- `browser_files_list(path="")` annonce `visible_categories` avec le chemin simple et le chemin canonique. Les commandes existantes de lecture, aperçu, renommage, copie et corbeille fonctionnent dans ces sous-dossiers, sans nouveau service Render et sans PC Windows.
+- Régression Android ajoutée : liste, lecture texte/binaire, renommage, corbeille/restauration, protection contre la traversée des dossiers.
+- Ce correctif concerne les fichiers **importés dans CHK**. Les fichiers d’autres applications et les répertoires Android externes continuent à exiger une autorisation explicite du propriétaire via le sélecteur système (SAF). Aucun accès root, aucune suppression de protection Android.
+- Mises à jour : même application, même package et même signature Release persistante via GitHub Actions ; données privées conservées à l’installation par-dessus la version précédente.
+
 ## Local 2 — efficacité des requêtes et état du navigateur (22 octobre 2026)
 
 - Passerelle HTTPS 1.1.0 : diagnostic sans récursion Supabase, catalogue réel de 13/20 outils, identité vérifiée lorsqu'elle est disponible et connexion Android séparée de la preuve d'exécution/affichage.
