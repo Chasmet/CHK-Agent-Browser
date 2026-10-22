@@ -91,14 +91,23 @@ final class UniversalFiles {
             return new JSONObject().put("format","sqlite").put("tables",tables).put("table",table).put("columns",columns).put("rows",rows).put("next_offset",more?offset+100:-1).put("text",columns.toString()+"\n"+rows.toString(2)).put("read_only",true);
         }
     }
+    static Bitmap decodeImage(File file,int maximum)throws Exception{
+        BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeFile(file.getPath(),bounds);if(bounds.outWidth<=0)throw new IOException("Codec image absent ou image corrompue");
+        BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=1;while(Math.max(bounds.outWidth,bounds.outHeight)/options.inSampleSize>maximum*2)options.inSampleSize*=2;
+        Bitmap bitmap=BitmapFactory.decodeFile(file.getPath(),options);if(bitmap==null)throw new IOException("Image indécodable");
+        try{android.media.ExifInterface exif=new android.media.ExifInterface(file.getPath());int orientation=exif.getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION,1);Matrix matrix=new Matrix();
+            switch(orientation){case 2:matrix.setScale(-1,1);break;case 3:matrix.setRotate(180);break;case 4:matrix.setScale(1,-1);break;case 5:matrix.setRotate(90);matrix.postScale(-1,1);break;case 6:matrix.setRotate(90);break;case 7:matrix.setRotate(-90);matrix.postScale(-1,1);break;case 8:matrix.setRotate(-90);break;default:break;}
+            if(!matrix.isIdentity()){Bitmap transformed=Bitmap.createBitmap(bitmap,0,0,bitmap.getWidth(),bitmap.getHeight(),matrix,true);if(transformed!=bitmap){bitmap.recycle();bitmap=transformed;}}
+        }catch(IOException ignored){ /* Formats without EXIF retain decoded orientation. */ }
+        return bitmap;
+    }
     static JSONObject convert(Context app,JSONObject args,AgentClient.ResultCallback active)throws Exception{
         WorkspaceStore s=new WorkspaceStore(app);String path=args.getString("path"),destination=args.getString("destination"),format=args.getString("format").toLowerCase(Locale.ROOT);JSONObject detected=FileFormats.detect(app,path);
         File target=s.file(destination);if(target.exists()||!target.getParentFile().isDirectory()||!FileFormats.extension(destination).equals(format))throw new IOException("Nouvelle destination avec l’extension du format requise");
         if(detected.getString("kind").equals("image")&&Arrays.asList("png","jpg","webp").contains(format)){
             BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeFile(s.file(path).getPath(),bounds);if(bounds.outWidth<=0)throw new IOException("Codec image absent ou image corrompue");
             int maximum=args.optInt("max_dimension",2048),quality=args.optInt("quality",90);if(maximum<16||maximum>4096||quality<1||quality>100)throw new IOException("Dimension 16..4096 et qualité 1..100 requises");
-            BitmapFactory.Options options=new BitmapFactory.Options();while(Math.max(bounds.outWidth,bounds.outHeight)/Math.max(1,options.inSampleSize)>maximum*2)options.inSampleSize=Math.max(1,options.inSampleSize)*2;
-            Bitmap bitmap=BitmapFactory.decodeFile(s.file(path).getPath(),options);if(bitmap==null)throw new IOException("Image indécodable");File stage=new File(target.getParentFile(),".convert-"+UUID.randomUUID());
+            Bitmap bitmap=decodeImage(s.file(path),maximum);File stage=new File(target.getParentFile(),".convert-"+UUID.randomUUID());
             try{float scale=Math.min(1,(float)maximum/Math.max(bitmap.getWidth(),bitmap.getHeight()));if(scale<1){Bitmap small=Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(bitmap.getWidth()*scale)),Math.max(1,Math.round(bitmap.getHeight()*scale)),true);bitmap.recycle();bitmap=small;}
                 if(format.equals("jpg")){Bitmap opaque=Bitmap.createBitmap(bitmap.getWidth(),bitmap.getHeight(),Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(opaque);canvas.drawColor(Color.WHITE);canvas.drawBitmap(bitmap,0,0,null);bitmap.recycle();bitmap=opaque;}
                 try(FileOutputStream out=new FileOutputStream(stage)){if(!bitmap.compress(format.equals("png")?Bitmap.CompressFormat.PNG:format.equals("jpg")?Bitmap.CompressFormat.JPEG:Bitmap.CompressFormat.WEBP,quality,out))throw new IOException("Encodage image refusé");out.getFD().sync();}
