@@ -23,9 +23,9 @@ final class UniversalFiles {
                 catch(Exception ex){result.put("json_valid",false).put("validation_error",ex.getMessage());}
             }
             if(format.equals("csv")||format.equals("tsv"))try{result.put("rows",table(result.getString("text"),format.equals("tsv")?'\t':','));}catch(IOException ex){result.put("table_warning",ex.getMessage()+" ; aperçu texte conservé");}
-        }else if(format.equals("pdf"))result=DocumentReader.pageText(DocumentReader.readPdf(app,s.file(path),args.optInt("page",1),args.optInt("page_count",1)),args.optInt("offset",0));
+        }else if(format.equals("pdf"))result=DocumentReader.pageText(DocumentReader.readPdf(app,s.file(path),args.optInt("page",1),args.optInt("page_count",8)),args.optInt("offset",0));
         else if(format.equals("docx"))result=DocumentReader.pageText(DocumentReader.readDocx(s.file(path)),args.optInt("offset",0));
-        else if(format.equals("xlsx")||format.equals("pptx"))result=DocumentReader.pageText(OfficeDocumentReader.read(s.file(path),args.optInt("page",1),args.optInt("page_count",1),format.equals("xlsx")),args.optInt("offset",0));
+        else if(format.equals("xlsx")||format.equals("pptx"))result=DocumentReader.pageText(OfficeDocumentReader.read(s.file(path),args.optInt("page",1),args.optInt("page_count",8),format.equals("xlsx")),args.optInt("offset",0));
         else if(format.equals("opendocument"))result=DocumentReader.pageText(openDocument(s.file(path)),args.optInt("offset",0));
         else if(kind.equals("archive")||kind.equals("package"))result=archiveList(app,path,args.optInt("offset",0));
         else if(kind.equals("database"))result=database(app,path,args);
@@ -80,7 +80,7 @@ final class UniversalFiles {
     static JSONObject database(Context app,String path,JSONObject args)throws Exception{
         File source=new WorkspaceStore(app).file(path);JSONArray tables=new JSONArray(),rows=new JSONArray(),columns=new JSONArray();
         try(SQLiteDatabase db=SQLiteDatabase.openDatabase(source.getPath(),null,SQLiteDatabase.OPEN_READONLY|SQLiteDatabase.NO_LOCALIZED_COLLATORS,(broken)->{})){
-            try(Cursor c=db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name LIMIT 201",null)){while(c.moveToNext())tables.put(c.getString(0));}
+            try(Cursor c=db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'android_metadata' ORDER BY name LIMIT 201",null)){while(c.moveToNext())tables.put(c.getString(0));}
             if(tables.length()>200)throw new IOException("Base limitée à 200 tables pour cet aperçu");String table=args.optString("table","");if(table.isEmpty()&&tables.length()>0)table=tables.getString(0);boolean exists=false;for(int i=0;i<tables.length();i++)if(table.equals(tables.getString(i)))exists=true;
             int offset=args.optInt("offset",0);if(offset<0||offset>1000000)throw new IOException("Position de table invalide");boolean more=false;
             if(!table.isEmpty()){

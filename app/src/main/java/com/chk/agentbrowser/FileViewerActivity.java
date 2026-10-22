@@ -77,5 +77,5 @@ public final class FileViewerActivity extends Activity {
     @Override public void onBackPressed(){if(editing&&editor!=null&&!original.equals(editor.getText().toString())){new AgentDialog.Builder(this).setTitle("Modifications non enregistrées").setPositiveButton("Enregistrer une copie",(d,n)->save(false)).setNegativeButton("Quitter sans enregistrer",(d,n)->finish()).setNeutralButton("Continuer l’édition",null).show();}else super.onBackPressed();}
     private void stopPlayer(){if(player!=null){player.release();player=null;}}
     @Override public void onPause(){if(player!=null)player.pause();super.onPause();}
-    @Override public void onDestroy(){alive=false;generation++;stopPlayer();if(bitmap!=null)bitmap.recycle();super.onDestroy();}
+    @Override public void onDestroy(){alive=false;generation++;if(body!=null)body.removeAllViews();stopPlayer();if(bitmap!=null)bitmap.recycle();super.onDestroy();}
 }
