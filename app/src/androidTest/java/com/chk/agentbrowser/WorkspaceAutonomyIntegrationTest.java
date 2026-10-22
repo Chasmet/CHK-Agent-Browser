@@ -135,7 +135,7 @@ public final class WorkspaceAutonomyIntegrationTest {
         }
     }
     @Test public void capabilitySchemasAndVersionAreAvailableWithoutRender()throws Exception{
-        Set<String> actions=new HashSet<>();int offset=0;do{JSONObject page=call("files_capabilities",new JSONObject().put("offset",offset)).json();assertEquals(4,page.getInt("workspace_version"));JSONArray rows=page.getJSONArray("actions");for(int i=0;i<rows.length();i++){JSONObject item=rows.getJSONObject(i);assertTrue(actions.add(item.getString("action")));assertEquals("object",item.getJSONObject("inputSchema").getString("type"));}offset=page.getInt("next_offset");}while(offset>=0);
+        Set<String> actions=new HashSet<>();int offset=0;do{JSONObject page=call("files_capabilities",new JSONObject().put("offset",offset)).json();assertEquals(5,page.getInt("workspace_version"));JSONArray rows=page.getJSONArray("actions");for(int i=0;i<rows.length();i++){JSONObject item=rows.getJSONObject(i);assertTrue(actions.add(item.getString("action")));assertEquals("object",item.getJSONObject("inputSchema").getString("type"));}offset=page.getInt("next_offset");}while(offset>=0);
         assertTrue(actions.contains("files_transfer_commit"));assertTrue(actions.contains("document_create"));assertTrue(actions.contains("video_editor_wait"));
         JSONObject status=call("workspace_status",new JSONObject()).json();assertTrue(status.getBoolean("resumable_transfers"));assertFalse(status.getJSONObject("local2").getBoolean("render_enabled"));
     }

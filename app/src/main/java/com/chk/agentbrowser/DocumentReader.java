@@ -74,7 +74,7 @@ public final class DocumentReader {
         if(content.isEmpty())result.put("warning","Aucun texte identifié: image possiblement illisible, chiffrée ou résolution insuffisante.");
         return result;
     }
-    private static JSONObject readPdf(Context app,File f,int page,int count)throws Exception{
+    static JSONObject readPdf(Context app,File f,int page,int count)throws Exception{
         if(f.length()>MAX_PDF_BYTES)throw new IOException("PDF supérieur à 20 Mo: utilisez un fichier plus petit.");
         PDFBoxResourceLoader.init(app.getApplicationContext());
         try(PDDocument doc=PDDocument.load(f)){
@@ -157,7 +157,7 @@ public final class DocumentReader {
             }finally{bitmap.recycle();}
         }
     }
-    private static JSONObject readImage(File f)throws Exception{
+    static JSONObject readImage(File f)throws Exception{
         if(f.length()>MAX_PDF_BYTES)throw new IOException("Image trop volumineuse.");
         BitmapFactory.Options opts=new BitmapFactory.Options();
         opts.inJustDecodeBounds=true;
@@ -178,15 +178,15 @@ public final class DocumentReader {
             return Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap,0)),22,TimeUnit.SECONDS).getText();
         }finally{recognizer.close();}
     }
-    private static JSONObject readDocx(File file)throws Exception{
+    static JSONObject readDocx(File file)throws Exception{
         if(file.length()>MAX_PDF_BYTES)throw new IOException("DOCX trop volumineux.");
         StringBuilder out=new StringBuilder();
         try(ZipFile zip=new ZipFile(file)){
+            if(zip.size()>5000)throw new IOException("DOCX trop complexe");
             ZipEntry document=zip.getEntry("word/document.xml");
             if(document==null)throw new IOException("DOCX endommagé.");
             try(InputStream in=zip.getInputStream(document)){
-                XmlPullParser parser=Xml.newPullParser();
-                parser.setInput(in,"UTF-8");
+                XmlPullParser parser=OfficeDocumentReader.parser(OfficeDocumentReader.xml(zip,"word/document.xml"));
                 int event;
                 while((event=parser.next())!=XmlPullParser.END_DOCUMENT&&out.length()<80000){
                     if(event==XmlPullParser.TEXT&&"t".equals(parser.getName())){ /* text is handled in START_TAG below */ }

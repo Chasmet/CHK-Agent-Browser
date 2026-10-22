@@ -57,7 +57,7 @@ public final class WorkspaceStore {
     }
     public void mkdir(String path)throws IOException{File f=file(path);if(f.exists()||!f.getParentFile().isDirectory()||!f.mkdir())throw new IOException("Dossier existant ou parent absent");}
     public JSONObject writeText(String path,String text,boolean overwrite)throws Exception{
-        byte[] bytes=text.getBytes(StandardCharsets.UTF_8);if(bytes.length>65536)throw new IOException("Document limité à 64 Ko");
+        byte[] bytes=text.getBytes(StandardCharsets.UTF_8);if(bytes.length>1048576)throw new IOException("Document limité à 1 Mo");
         File f=file(path);if(f.isDirectory()||(!overwrite&&f.exists())||!f.getParentFile().isDirectory())throw new IOException("Fichier existant ou parent absent");
         AtomicFile a=new AtomicFile(f);FileOutputStream out=null;try{out=a.startWrite();out.write(bytes);a.finishWrite(out);}catch(Exception e){if(out!=null)a.failWrite(out);throw e;}
         String expected=WorkspaceTransfer.hash(new ByteArrayInputStream(bytes)),actual=WorkspaceTransfer.hash(f);
@@ -65,13 +65,10 @@ public final class WorkspaceStore {
         return new JSONObject().put("path",path).put("size",f.length()).put("sha256",actual).put("exists",true).put("verified",true);
     }
     public JSONObject readText(String path,int offset)throws Exception{
-        File f=file(path);if(!f.isFile()||f.length()>65536)throw new IOException("Lecture texte limitée à 64 Ko");
-        ByteArrayOutputStream b=new ByteArrayOutputStream();try(InputStream in=new FileInputStream(f)){byte[] buf=new byte[4096];int n;while((n=in.read(buf))!=-1)b.write(buf,0,n);}
-        String text=new String(b.toByteArray(),StandardCharsets.UTF_8);int start=Math.min(text.length(),Math.max(0,offset)),end=Math.min(text.length(),start+12000);
-        return new JSONObject().put("path",path).put("text",text.substring(start,end)).put("next_offset",end<text.length()?end:-1);
+        return FileContent.page(app,path,offset);
     }
     public JSONObject editText(String path,String text,String expected)throws Exception{
-        if(!expected.matches("[a-f0-9]{64}")||text.getBytes(StandardCharsets.UTF_8).length>65536)throw new IOException("SHA-256 attendu requis et texte limité à 64 Ko.");
+        if(!expected.matches("[a-f0-9]{64}")||text.getBytes(StandardCharsets.UTF_8).length>1048576)throw new IOException("SHA-256 attendu requis et texte limité à 1 Mo.");
         File source=file(path);if(!source.isFile()||!WorkspaceTransfer.stat(this,path,true).getString("sha256").equals(expected))throw new IOException("Fichier modifié depuis la lecture : recharger avant de modifier.");
         String backup=trash(path);
         try{return writeText(path,text,false).put("backup_trash_id",backup);}
