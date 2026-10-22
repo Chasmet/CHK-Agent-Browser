@@ -69,13 +69,14 @@ public final class OfflineStudioAudit {
                 int samples = 0;
                 MediaMetadataRetriever retriever = new MediaMetadataRetriever();
                 try {
-                    retriever.setDataSource(file.getAbsolutePath());
+                    if(!StudioImages.isImage(file))retriever.setDataSource(file.getAbsolutePath());
                     long startMs = clip.optLong("start_ms", 0);
                     for (int step = 1; step <= 3; step++) {
                         long timeMs = startMs + (requested * step / 4);
                         Bitmap bitmap = null;
                         try {
-                            if (android.os.Build.VERSION.SDK_INT >= 27)
+                            if(StudioImages.isImage(file))bitmap=StudioImages.thumbnail(file,64);
+                            else if (android.os.Build.VERSION.SDK_INT >= 27)
                                 bitmap = retriever.getScaledFrameAtTime(
                                     timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST, 64, 64);
                             else bitmap = retriever.getFrameAtTime(

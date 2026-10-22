@@ -21,7 +21,7 @@ public final class StudioImagesIntegrationTest {
         if(android.os.Build.VERSION.SDK_INT>=29)InstrumentationRegistry.getInstrumentation().runOnMainSync(()->HardwareRenderer.setDrawingEnabled(true));
         app=InstrumentationRegistry.getInstrumentation().getTargetContext();store=new WorkspaceStore(app);prefix="studio-image-"+UUID.randomUUID();
     }
-    @After public void cleanup()throws Exception{invoke("video_editor_queue_pause",new JSONObject());invoke("video_editor_cancel",new JSONObject());for(String path:files)store.file(path).delete();}
+    @After public void cleanup()throws Exception{invoke("video_editor_queue_pause",new JSONObject());invoke("video_editor_cancel",new JSONObject());invoke("video_editor_project_new",new JSONObject());for(String path:files)store.file(path).delete();}
     private JSONObject invoke(String action,JSONObject args)throws Exception{
         CountDownLatch done=new CountDownLatch(1);AtomicBoolean ok=new AtomicBoolean();AtomicReference<String> value=new AtomicReference<>();
         VideoEditorEngine.get().command(app,action,args,(success,res)->{ok.set(success);value.set(res);done.countDown();});
@@ -57,6 +57,20 @@ public final class StudioImagesIntegrationTest {
         JSONObject invalid=new JSONObject(redone.toString());invalid.getJSONArray("clips").getJSONObject(0).put("duration_ms",61000);
         try{VideoEditorEngine.get().validate(app,invalid);fail("A photo must stay below 60 seconds");}catch(IllegalArgumentException expected){}
         assertEquals(redone.getInt("revision"),invoke("video_editor_project_read",new JSONObject()).getInt("revision"));
+    }
+    @Test public void photoSequenceKeepsMusicAndFilters()throws Exception{
+        String path=image("png",Bitmap.CompressFormat.PNG),music=prefix+"-music.mp4";files.add(music);
+        try(InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("editor-fixture.mp4");OutputStream out=new FileOutputStream(store.file(music))){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}
+        JSONObject p=project(path,"-music");JSONArray cuts=new JSONArray();for(int i=0;i<3;i++)cuts.put(new JSONObject().put("path",path).put("duration_ms",1000).put("filter",i==1?"noir":"cinema").put("fade_ms",100));
+        p.put("clips",cuts).put("audio",new JSONArray().put(new JSONObject().put("path",music).put("duration_ms",3000)));
+        invoke("video_editor_export",new JSONObject().put("project",p));awaitRender();JSONObject verified=invoke("video_editor_verify_output",new JSONObject().put("project",p));assertTrue(verified.toString(),verified.getBoolean("valid"));assertTrue(verified.getBoolean("has_audio"));assertEquals(3,verified.getInt("verified_video_segments"));
+    }
+    @Test public void importsOneHundredPhotosAndRejectsInvalidJsonBeforeSwitching()throws Exception{
+        String path=image("png",Bitmap.CompressFormat.PNG);JSONObject p=project(path,"-hundred");JSONArray clips=new JSONArray();for(int i=0;i<100;i++)clips.put(new JSONObject().put("path",path).put("duration_ms",1000));p.put("clips",clips);
+        JSONObject saved=invoke("video_editor_project_import",new JSONObject().put("project",p)).getJSONObject("project");assertEquals(100,saved.getJSONArray("clips").length());
+        JSONObject invalid=new JSONObject(p.toString());invalid.getJSONArray("clips").getJSONObject(0).put("path","missing-photo.png");
+        CountDownLatch done=new CountDownLatch(1);AtomicBoolean accepted=new AtomicBoolean(true);VideoEditorEngine.get().command(app,"video_editor_project_import",new JSONObject().put("project",invalid),(ok,value)->{accepted.set(ok);done.countDown();});assertTrue(done.await(30,TimeUnit.SECONDS));assertFalse(accepted.get());assertEquals(saved.getString("project_id"),invoke("video_editor_project_read",new JSONObject()).getString("project_id"));
+        String json=prefix+".json";files.add(json);try(OutputStream out=new FileOutputStream(store.file(json))){out.write(p.toString().getBytes("UTF-8"));}assertEquals(100,invoke("video_editor_project_import",new JSONObject().put("path",json)).getJSONObject("project").getJSONArray("clips").length());
     }
     @Test public void queueExportsFourSnapshotsWithoutSwitchingVisibleProject()throws Exception{
         String path=image("png",Bitmap.CompressFormat.PNG);JSONObject visible=invoke("video_editor_project_read",new JSONObject());

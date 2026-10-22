@@ -17,6 +17,8 @@ final class StudioAutomation {
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private static JSONObject queue;
     private static boolean polling;
+    private static volatile boolean pending;
+    static boolean pendingExports(){return pending;}
     static boolean handles(String action){return action.equals("video_editor_capabilities")||action.equals("video_editor_project_import")
         ||action.equals("video_editor_timeline")||action.equals("video_editor_history")||action.startsWith("video_editor_queue_");}
     static void command(Context app,String action,JSONObject args,VideoEditorEngine.Done cb){IO.execute(()->{
@@ -111,10 +113,10 @@ final class StudioAutomation {
         for(int i=0;i<queue.getJSONArray("jobs").length();i++){JSONObject job=queue.getJSONArray("jobs").getJSONObject(i);if(job.optString("state").equals("running"))job.put("state","interrupted");}
         queue.put("paused",true);saveQueue(app);
     }
-    private static void saveQueue(Context app)throws Exception{write(queueFile(app),queue);}
+    private static void saveQueue(Context app)throws Exception{write(queueFile(app),queue);pending=false;if(!queue.optBoolean("paused",true)){JSONArray jobs=queue.getJSONArray("jobs");for(int i=0;i<jobs.length();i++)if(Arrays.asList("queued","running").contains(jobs.getJSONObject(i).optString("state")))pending=true;}}
     private static void pump(Context app)throws Exception{
         if(polling||queue.optBoolean("paused",true))return;
-        String engine=VideoEditorEngine.get().status().optString("state");if(engine.equals("running")||engine.equals("preparing"))return;
+        String engine=VideoEditorEngine.get().status().optString("state");if(engine.equals("running")||engine.equals("preparing")){MAIN.postDelayed(()->IO.execute(()->{try{pump(app);}catch(Exception ex){android.util.Log.e("ChkStudioQueue","Queue retry",ex);}}),1500);return;}
         JSONArray jobs=queue.getJSONArray("jobs");
         for(int i=0;i<jobs.length();i++){
             JSONObject job=jobs.getJSONObject(i);if(!job.optString("state").equals("queued"))continue;

@@ -1,3 +1,16 @@
+## Studio — photos, montage MCP et exports sur Android (22 octobre 2026)
+
+- PNG, JPG/JPEG et WEBP utilisent le mode image natif Media3, avec durée de 1 à 60 secondes et cadence 24/30/60 fps dans le projet. Le lecteur de pistes vidéo n’est plus appelé pour ces photographies.
+- Import multiple jusqu’à 100 médias ; les photos sont ajoutées avec une durée initiale de 5 secondes, réglable dans Découper. Miniatures et prévisualisation acceptent aussi les photos.
+- Ouverture des projets de montage JSON depuis Fichiers, validation avant changement du projet actif, résolution des chemins relatifs. Un JSON ordinaire conserve son ouverture habituelle.
+- Timeline visible : déplacement des plans par appui long, zoom/panoramique avec positions de début et fin. Historique annuler/rétablir conservé par projet après fermeture ; sauvegarde atomique et récupération du brouillon le plus récent.
+- MCP Local 2 : découverte Studio, import de projet, opérations atomiques sur la timeline avec révision, réglages, textes, filtres, durées, mouvements et historique. Les actions passent aussi par les 13 outils du relais Windows 1.3.0 existant.
+- File durable de 1 à 10 projets par demande, jusqu’à 40 entrées conservées. Les projets sont figés, leurs sources contrôlées par SHA-256, leurs destinations distinctes et sans écrasement. Un request_id rejoué n’ajoute pas une seconde série. Écran Exports dans Studio et commandes MCP pour consulter, suspendre et reprendre.
+- Après arrêt du processus, les exports actifs deviennent interrompus ; Reprendre vérifie le MP4 existant avant une nouvelle tentative. La notification de rendu protège la succession des exports ; Annuler suspend aussi la file.
+- Avant publication : contrôle de durée, présence de la musique demandée et décodage d’une image au milieu de chaque plan, comparaison avec la source pour détecter un plan noir inattendu. Un échec conserve la sortie précédente.
+- Relais Windows 1.4.1 : catalogue android_media étendu à Studio ; aucune réinstallation nécessaire pour utiliser les nouvelles actions avec android_action.
+- Ce lot n’ajoute pas encore de composition vidéo multipiste avec superpositions, transitions croisées, masques, LUT, transcription automatique, mixeur audio parallèle, proxies ni export 4K. Les pistes vidéo et audio restent séquentielles. Aucun générateur vidéo ni rendu sur PC.
+
 ## Local 2 — fichiers, documents et transferts vérifiés (21 octobre 2026)
 
 - Catalogue Android version 4 avec schémas paginés : `android_action` → `files_capabilities`. Compatible avec le serveur Windows 1.3.0 déjà installé.
