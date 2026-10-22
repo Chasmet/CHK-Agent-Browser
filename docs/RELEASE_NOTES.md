@@ -4,6 +4,7 @@
 - Lecture seule par défaut. Édition volontaire des textes jusqu’à 1 Mo ; nouvelle copie UTF-8 ou remplacement explicite protégé par SHA-256 avec sauvegarde en corbeille. Les gros textes sont lus progressivement.
 - Détection du contenu par signature, encodage et structure des paquets. Les extensions trompeuses et formats non pris en charge ont des avertissements ; le secours hexadécimal n’exécute rien.
 - Visionneuse locale PDF, extraction DOCX/XLSX/PPTX/OpenDocument, images et lecteur Media3 selon les codecs disponibles. ZIP consultables sans extraction, sélection d’entrées par MCP, protections de taille et de chemin ; SQLite en lecture seule.
+- Le lecteur audio intégré de Fichiers reste disponible. Les aperçus et conversions d’images respectent rotation et miroir EXIF, sans modifier la source.
 - Copies converties en PNG/JPG/WEBP ; conversions documentaires simples à partir de textes, JSON et CSV/TSV. Aucune sortie existante écrasée.
 - Catalogue natif v5 : files_open, files_detect_format, files_copy_content, files_search_content, files_convert, files_extract_archive, files_database, files_verify et files_batch. Les 13 outils Local 2 existants restent utilisables. files_open confirme seulement une visionneuse chargée et au premier plan.
 - Limites détaillées dans docs/UNIVERSAL_FILES.md : pas encore de lecture native de tous les formats propriétaires, éditeur Office fidèle, 3D/CAD, archives non ZIP ou PDF professionnel complet. Les mises à jour et la signature habituelles sont conservées.
