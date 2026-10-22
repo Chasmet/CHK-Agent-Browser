@@ -1,3 +1,10 @@
+## Local 2 — efficacité des requêtes et état du navigateur (22 octobre 2026)
+
+- Passerelle HTTPS 1.1.0 : diagnostic sans récursion Supabase, catalogue réel de 13/20 outils, identité vérifiée lorsqu'elle est disponible et connexion Android séparée de la preuve d'exécution/affichage.
+- `server_info` retourne aussi le canal Android ; conseils de lots persistants et de suivi sans renvoi d'une commande incertaine, délai de transport adapté à Windows.
+- Correction Android : `workspace_status` consulte la vraie WebView sur le fil principal, puis le stockage sur IO. Corrige l'erreur de fil WebView en commande individuelle et dans `browser_batch`.
+- Même serveur, même URL, mêmes permissions et signature APK ; aucune réinstallation du relais Windows requise.
+
 ## Fichiers — ouverture intégrée, métas copiables et lecteurs locaux (22 octobre 2026)
 
 - Un appui sur META_A_COPIER.txt ouvre le contenu directement dans CHK, avec sélection et Copier tout. Recherche, Markdown simple, validation JSON/JSONL stricte et tableaux CSV/TSV.

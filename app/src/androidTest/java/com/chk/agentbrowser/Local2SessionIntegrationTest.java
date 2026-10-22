@@ -90,6 +90,25 @@ public final class Local2SessionIntegrationTest {
         WebFixture.load(instrument,current(),"https://example.com/local2-fixture",
             "<html><body><h1>Real shared Android session</h1><button id='button' onclick=\"this.textContent='Clicked exactly once';this.disabled=true;\">Tap</button><input id='field'><input id='reset' oninput=\"this.value=''\"></body></html>","!!document.getElementById('button')");
     }
+    @Test public void workspaceStatusAndBatchReadTheVisibleWebViewOnItsOwnLooper()throws Exception{
+        openBrowser();
+        JSONObject status=nativeAction("workspace_status",new JSONObject()).json();
+        assertTrue(status.getJSONObject("local2").getBoolean("browser_available"));
+        assertEquals("https://example.com/local2-fixture",status.getJSONObject("local2").getString("url"));
+        JSONArray steps=new JSONArray()
+            .put(new JSONObject().put("action","android_action").put("args",new JSONObject().put("action","files_capabilities").put("args",new JSONObject().put("query","task"))))
+            .put(new JSONObject().put("action","android_action").put("args",new JSONObject().put("action","workspace_status").put("args",new JSONObject())));
+        Outcome batch=call("browser_batch",new JSONObject().put("steps",steps));
+        assertTrue(batch.message,batch.ok);
+        JSONArray results=new JSONArray(batch.message);assertEquals(2,results.length());
+        assertTrue(results.getJSONObject(0).getBoolean("success"));
+        assertTrue(results.getJSONObject(1).getBoolean("success"));
+        // Batch summaries deliberately cap each result at 2,000 characters.
+        // Individual status above verifies the full URL; both batch receipts
+        // must succeed while that same WebView remains attached.
+        assertTrue(results.getJSONObject(1).getString("result").contains("private_phone"));
+        assertFalse(render.getBoolean("enabled",true));
+    }
     @Test public void filesWorkWithoutRenderOrAnyBrowser()throws Exception{
         folder="Local2Test"+UUID.randomUUID().toString().replace("-","");
         JSONObject result=nativeAction("files_mkdir",new JSONObject().put("path",folder)).json();

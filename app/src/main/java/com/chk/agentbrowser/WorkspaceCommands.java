@@ -60,6 +60,18 @@ public final class WorkspaceCommands {
             });
             return;
         }
+        if(action.equals("workspace_status")){
+            // WebView methods (including getUrl/visibility) belong to the main
+            // looper. Snapshot the browser there, then read storage on IO.
+            UI.post(()->{
+                if(!cb.isActive())return;
+                try{runStorage(app,action,args,cb,AgentClient.get(app).local2BrowserStatus());}
+                catch(Exception e){finish(cb,false,e.getMessage()==null?"État du navigateur indisponible.":e.getMessage());}
+            });return;
+        }
+        runStorage(app,action,args,cb,null);
+    }
+    private static void runStorage(Context app,String action,JSONObject args,AgentClient.ResultCallback cb,JSONObject browserStatus){
         IO.execute(()->{try{
             if(!cb.isActive())return;
             WorkspaceStore s=new WorkspaceStore(app);String path=args.optString("path","");Object result;
@@ -91,7 +103,7 @@ public final class WorkspaceCommands {
                 case "publication_list":
                 case "publication_cancel":
                     result=PublicationJobs.command(app,action,args);break;
-                case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("video_editor",true).put("media_inspection",true).put("workspace_version",WorkspaceCapabilities.VERSION).put("capabilities_action","files_capabilities").put("health",WorkspaceHealth.cached(app)).put("resumable_transfers",true).put("sha256_verification",true).put("transfer_chunk_bytes",WorkspaceTransfer.UPLOAD_CHUNK).put("export_chunk_bytes",WorkspaceTransfer.CHUNK).put("archives",true).put("document_creation","pdf,docx,xlsx,pptx,json,csv,txt").put("external_roots",ExternalFiles.grants(app)).put("local2",AgentClient.get(app).local2BrowserStatus()).put("document_reader_version",2).put("pdf_text_extraction",true).put("scanned_pdf_ocr",true).put("docx_text_extraction",true).put("xlsx_value_extraction",true).put("pptx_text_extraction",true).put("image_ocr",true).put("speech_to_text",true).put("audio_languages","fr,en").put("audio_local_only",true).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;
+                case "workspace_status":result=new JSONObject().put("storage","private_phone").put("files",true).put("notes",true).put("video_editor",true).put("media_inspection",true).put("workspace_version",WorkspaceCapabilities.VERSION).put("capabilities_action","files_capabilities").put("health",WorkspaceHealth.cached(app)).put("resumable_transfers",true).put("sha256_verification",true).put("transfer_chunk_bytes",WorkspaceTransfer.UPLOAD_CHUNK).put("export_chunk_bytes",WorkspaceTransfer.CHUNK).put("archives",true).put("document_creation","pdf,docx,xlsx,pptx,json,csv,txt").put("external_roots",ExternalFiles.grants(app)).put("local2",browserStatus).put("document_reader_version",2).put("pdf_text_extraction",true).put("scanned_pdf_ocr",true).put("docx_text_extraction",true).put("xlsx_value_extraction",true).put("pptx_text_extraction",true).put("image_ocr",true).put("speech_to_text",true).put("audio_languages","fr,en").put("audio_local_only",true).put("trash",true).put("revision_guard",true).put("max_remote_file_bytes",12582912).put("max_local_file_bytes",WorkspaceStore.MAX_IMPORT);break;
                 case "document_read":result=DocumentReader.readFile(app,path,args.optInt("page",1),args.optInt("page_count",8),args.optInt("offset",0));break;
                 case "document_page":result=DocumentReader.pdfPreview(app,s.file(path),args.optInt("page",0));break;
                 case "media_model_status":result=MediaTranscriber.modelStatus(app);break;
