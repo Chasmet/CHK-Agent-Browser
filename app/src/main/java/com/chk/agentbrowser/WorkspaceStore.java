@@ -53,7 +53,19 @@ public final class WorkspaceStore {
             File f=rows.get(i);String p=WorkspacePaths.child(path,f.getName());JSONObject row=new JSONObject();
             row.put("name",f.getName()).put("path",p).put("directory",f.isDirectory()).put("size",f.length()).put("updated",f.lastModified()).put("mime_type",f.isDirectory()?"inode/directory":mime(p));items.put(row);
         }
-        return new JSONObject().put("path",path).put("items",items).put("total",rows.size()).put("next_offset",start+50<rows.size()?start+50:-1);
+        JSONObject answer=new JSONObject().put("path",path).put("items",items).put("total",rows.size()).put("next_offset",start+50<rows.size()?start+50:-1);
+        if(path==null||path.isEmpty()){
+            // Files' home screen is virtual, so expose its navigable aliases to
+            // MCP clients without changing the existing root listing contract.
+            JSONArray shortcuts=new JSONArray();
+            String[] names={"Documents","Images","Vidéos","Audio"};
+            String[] targets={"Categories/Documents","Categories/Images","Categories/Videos","Categories/Audio"};
+            for(int i=0;i<names.length;i++)if(WorkspacePaths.resolve(root,targets[i],false).isDirectory())
+                shortcuts.put(new JSONObject().put("name",names[i]).put("path",names[i])
+                    .put("canonical_path",targets[i]).put("directory",true));
+            answer.put("visible_categories",shortcuts);
+        }
+        return answer;
     }
     public void mkdir(String path)throws IOException{File f=file(path);if(f.exists()||!f.getParentFile().isDirectory()||!f.mkdir())throw new IOException("Dossier existant ou parent absent");}
     public JSONObject writeText(String path,String text,boolean overwrite)throws Exception{
