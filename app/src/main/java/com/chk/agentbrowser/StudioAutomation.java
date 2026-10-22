@@ -147,7 +147,24 @@ final class StudioAutomation {
         .put("image_formats",new JSONArray("[\"png\",\"jpg\",\"jpeg\",\"webp\"]")).put("image_duration_ms_min",1000).put("image_duration_ms_max",60000).put("max_clips",100)
         .put("timeline_operations",new JSONArray("[\"add\",\"update\",\"move\",\"delete\",\"settings\"]"))
         .put("tracks",new JSONArray("[\"clips\",\"audio\"]")).put("audio_layout","sequential").put("video_layout","sequential")
-        .put("queue_actions",new JSONArray("[\"add\",\"status\",\"pause\",\"resume\"]"));}
+        .put("queue_actions",new JSONArray("[\"add\",\"status\",\"pause\",\"resume\"]"))
+        .put("timeline_request",new JSONObject()
+            .put("expected_revision","integer obligatoire, obtenu par video_editor_project_read")
+            .put("operations",new JSONArray()
+                .put(new JSONObject().put("op","add").put("track","clips ou audio").put("index","entier facultatif ; insertion, sinon fin").put("clip",new JSONObject().put("path","chemin Android CHK").put("start_ms",0).put("duration_ms",8000)))
+                .put(new JSONObject().put("op","update").put("track","clips ou audio").put("index",0).put("values",new JSONObject().put("duration_ms",8000).put("filter","cinema").put("zoom",1).put("zoom_end",1.12)))
+                .put(new JSONObject().put("op","move").put("track","clips ou audio").put("index",0).put("to",1))
+                .put(new JSONObject().put("op","delete").put("track","clips ou audio").put("index",0))
+                .put(new JSONObject().put("op","settings").put("values",new JSONObject().put("aspect_ratio","16:9").put("aspect_mode","fit").put("resolution",1080).put("fps",30).put("mute_original",true)))))
+        .put("clip_parameters",new JSONObject().put("path","fichier Android existant").put("start_ms","entier >=0 ; 0 pour photo").put("duration_ms","photo 1000..60000 ; vidéo 500..1200000")
+            .put("filter","aucun,noir,vintage,chaud,froid,cinema,contraste,nuit,vibrant,doux,desature,sepia")
+            .put("fade_ms","0..min(1500,duration/3), passage par le noir")
+            .put("speed","0.25..4").put("rotation","-180..180").put("mute","boolean").put("text","500 caractères maximum")
+            .put("grade_exposure / grade_exposure_end","-0.5..0.5").put("grade_warmth / grade_warmth_end","-0.5..0.5").put("grade_saturation / grade_saturation_end","0..2")
+            .put("zoom / zoom_end","1..4").put("pan_x / pan_x_end / pan_y / pan_y_end","-1..1"))
+        .put("queue_request",new JSONObject().put("request_id","identifiant stable, lettres/chiffres/tirets/soulignés, 1..80 caractères").put("projects",new JSONArray().put(new JSONObject().put("path","dossier/montage.json")).put(new JSONObject().put("project","objet projet complet, alternative à path"))))
+        .put("verification","completed et verification.valid=true ; media_frame(path,time_ms) pour voir les images du MP4")
+        .put("preview","sources et textes ; effets calculés à l’export");}
     static JSONObject read(File file)throws Exception{
         try(FileInputStream in=new AtomicFile(file).openRead()){
             ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){if(out.size()+n>6000000)throw new IOException("Fichier Studio trop volumineux");out.write(b,0,n);}return new JSONObject(out.toString("UTF-8"));}
