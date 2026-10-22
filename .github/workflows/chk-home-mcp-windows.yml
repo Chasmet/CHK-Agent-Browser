@@ -2,6 +2,7 @@ name: CHK Home MCP Windows (sans Render)
 on:
   push:
     branches:
+      - feat/studio-android-photos-20261022
       - feat/local2-workspace-autonomy-20261021
       - main
       - fix/local2-verified-connection-20261021

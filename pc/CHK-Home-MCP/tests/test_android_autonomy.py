@@ -159,6 +159,12 @@ class AndroidAutonomyTest(unittest.TestCase):
         self.assertEqual(android_tools.route("android_transfer", dict(operation="commit", id="x")), ("files_transfer_commit", dict(id="x")))
         self.assertEqual(android_tools.route("android_files", dict(operation="external", external_operation="external_mkdir", name="Application")), ("files_external", dict(operation="external_mkdir", name="Application")))
         self.assertEqual(android_tools.route("android_document_create", dict(path="a.docx", format="docx"))[0], "document_create")
+        operations = [dict(op="update", index=0, values=dict(duration_ms=8000))]
+        self.assertEqual(android_tools.route("android_media", dict(operation="video_editor_timeline", expected_revision=4, operations=operations)),
+                         ("video_editor_timeline", dict(expected_revision=4, operations=operations)))
+        projects = [dict(path="Categories/Videos/dans la brume 2/01/montage.json")]
+        self.assertEqual(android_tools.route("android_media", dict(operation="video_editor_queue_add", request_id="brume2", projects=projects)),
+                         ("video_editor_queue_add", dict(request_id="brume2", projects=projects)))
         with self.assertRaises(ValueError):
             android_tools.route("android_media", dict(operation="run_shell"))
 

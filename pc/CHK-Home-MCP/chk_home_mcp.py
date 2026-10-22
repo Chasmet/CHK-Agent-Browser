@@ -33,7 +33,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 PORT = 8766
 MAX_POST = 96 * 1024
 MAX_TEXT = 64 * 1024

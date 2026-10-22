@@ -13,7 +13,11 @@ public final class MediaInspection {
     public static JSONObject info(Context context,String path)throws Exception{
         WorkspaceStore store=new WorkspaceStore(context);File file=store.file(path);
         if(!file.isFile())throw new IOException("Média absent");
-        JSONObject result=new JSONObject().put("path",path).put("size_bytes",file.length()).put("mime_type",store.mime(path));
+        if(StudioImages.isImage(file))return StudioImages.info(file).put("path",path).put("size_bytes",file.length()).put("tracks",new JSONArray());
+        return infoFile(file).put("path",path).put("mime_type",store.mime(path));
+    }
+    static JSONObject infoFile(File file)throws Exception{
+        JSONObject result=new JSONObject().put("size_bytes",file.length());
         JSONArray tracks=new JSONArray();MediaExtractor extractor=new MediaExtractor();
         try{extractor.setDataSource(file.getPath());for(int i=0;i<extractor.getTrackCount();i++){
             MediaFormat format=extractor.getTrackFormat(i);String mime=format.getString(MediaFormat.KEY_MIME);
@@ -25,6 +29,7 @@ public final class MediaInspection {
         result.put("tracks",tracks);
         MediaMetadataRetriever retriever=new MediaMetadataRetriever();
         try{retriever.setDataSource(file.getPath());String duration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            result.put("has_audio","yes".equals(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)));
             if(duration!=null)result.put("duration_ms",Long.parseLong(duration));
             String width=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH),height=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
             if(width!=null&&height!=null)result.put("width",Integer.parseInt(width)).put("height",Integer.parseInt(height));
@@ -39,6 +44,7 @@ public final class MediaInspection {
         }return new JSONObject().put("codecs",list).put("android_api",android.os.Build.VERSION.SDK_INT).put("export","MP4 H.264/AAC");
     }
     public static Bitmap thumbnail(File file,long timeMs,int maximum)throws Exception{
+        if(StudioImages.isImage(file))return StudioImages.thumbnail(file,maximum);
         MediaMetadataRetriever r=new MediaMetadataRetriever();Bitmap b=null;
         try{r.setDataSource(file.getPath());
             if(android.os.Build.VERSION.SDK_INT>=27)b=r.getScaledFrameAtTime(timeMs*1000,MediaMetadataRetriever.OPTION_CLOSEST_SYNC,maximum,maximum);
