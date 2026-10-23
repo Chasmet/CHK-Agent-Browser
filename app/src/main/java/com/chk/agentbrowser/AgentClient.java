@@ -41,6 +41,7 @@ public final class AgentClient {
     // It must never silently switch to the separate legacy Render WebView.
     private Activity local2Screen;
     private CommandHandler local2Handler;
+    private BackgroundBrowser retainedLocal2;
     private IncomingListener incoming;
     private volatile JSONObject pending;
     private long receivedAt;
@@ -93,7 +94,25 @@ public final class AgentClient {
     }
     private CommandHandler local2Browser() {
         return local2Screen != null && !local2Screen.isFinishing() && !local2Screen.isDestroyed()
-            ? local2Handler : null;
+            ? local2Handler : (isAutonomous() && Local2Client.get(app).enabled() ? retainedLocal2 : null);
+    }
+    // Retain the actual owner's WebViews, not a second browser loaded from a URL.
+    boolean retainBrowser(Activity activity, java.util.List<android.webkit.WebView> tabs,
+                          android.webkit.WebView selected) {
+        if(local2Screen!=activity || !isAutonomous() || !Local2Client.get(app).enabled()
+                || tabs.isEmpty())return false;
+        closeRetainedBrowser();
+        retainedLocal2=new BackgroundBrowser(app,new java.util.ArrayList<>(tabs),selected);
+        local2Screen=null;local2Handler=null;
+        return true;
+    }
+    BackgroundBrowser.SharedTabs takeRetainedBrowser(){
+        if(retainedLocal2==null)return null;
+        BackgroundBrowser.SharedTabs state=retainedLocal2.releaseSharedTabs();
+        retainedLocal2=null;return state;
+    }
+    void closeRetainedBrowser(){
+        if(retainedLocal2!=null){retainedLocal2.destroy();retainedLocal2=null;}
     }
     void releaseBrowser(Activity activity) {
         if(local2Screen == activity) { local2Screen = null; local2Handler = null; }
@@ -108,6 +127,9 @@ public final class AgentClient {
                 .put("browser_available", browser != null)
                 .put("visible", browser != null && browser.visible())
                 .put("session_source", "shared_android")
+                .put("retained", browser != null && browser == retainedLocal2)
+                .put("browser_protocol", BrowserAutomation.VERSION)
+                .put("browser_tools", BrowserAutomation.capabilities())
                 .put("url", browser == null ? "" : browser.pageUrl());
         } catch(org.json.JSONException ignored) {}
         return value;
@@ -195,6 +217,7 @@ public final class AgentClient {
     public void setEcoMode(boolean enabled){settings.edit().putBoolean("eco_mode",enabled).apply();}
     public void setAutonomous(boolean allow){
         settings.edit().putBoolean("autonomous_mode",allow).apply();
+        if(!allow)ui.post(this::closeRetainedBrowser);
         deliverPending();
     }
     public boolean isPreviewAllowed(){return settings.getBoolean("preview_allowed",false);}
@@ -403,7 +426,11 @@ public final class AgentClient {
                         .put("action", nativeAction).put("args", nativeArgs);
                     boolean allowed = WorkspaceCommands.handles(nativeAction)
                         || KeyboardCommands.nativeTarget(cmd)
-                        || DesktopCommands.nativeTarget(cmd)
+                        || DesktopCommands.handles(nativeAction,nativeArgs)
+                        || nativeAction.equals(PublicationJobs.ACTION_SUBMIT)
+                        || nativeAction.equals("upload_file") || nativeAction.equals("select_option")
+                        || nativeAction.equals("check") || nativeAction.equals("get_page_status")
+                        || nativeAction.equals("wait_for_element")
                         || nativeAction.equals("browser_task_submit")
                         || nativeAction.equals("browser_task_status")
                         || nativeAction.equals("click") || nativeAction.equals("scroll")

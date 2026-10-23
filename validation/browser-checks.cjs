@@ -19,11 +19,11 @@ const makeNode=(type,label)=>({tagName:'INPUT',nodeType:1,type,name:label,placeh
     getClientRects:()=>[{}],getAttribute:()=>null,parentElement:null,previousElementSibling:null});
 const read=fs.readFileSync(root+'/read.js','utf8');
 const nodes=[makeNode('password','secret'),makeNode('hidden','token'),makeNode('text','title')];
-const page=JSON.parse(vm.runInNewContext(read,{document:{body:{innerText:'Page'},querySelectorAll:()=>nodes}}));
+const page=JSON.parse(vm.runInNewContext(read,{document:{body:{innerText:'Page'},querySelectorAll:()=>nodes,querySelector:()=>nodes[2]}}));
 assert.equal(page.text,'Page');assert.equal(page.elements.length,1);
 assert.equal(page.elements[0].selector,'input:nth-of-type(1)');
 const many=Array.from({length:100},()=>makeNode('text','x'.repeat(500)));
-const bounded=vm.runInNewContext(read,{document:{body:{innerText:'a'.repeat(20000)},querySelectorAll:()=>many}});
+const bounded=vm.runInNewContext(read,{document:{body:{innerText:'a'.repeat(20000)},querySelectorAll:()=>many,querySelector:()=>many[0]}});
 assert.ok(bounded.length<9500);assert.equal(JSON.parse(bounded).text.length,5000);
 
 const Event=class {constructor(type){this.type=type;}};
@@ -78,7 +78,7 @@ function uploadFixture(labels) {
     ownerDocument:doc,parentElement:scope,labels:[],getAttribute:()=>null,
     getBoundingClientRect:()=>({left:0,top:0,width:0,height:0}),
     getClientRects:()=>[],closest:()=>null,getRootNode:()=>doc,
-    id:'media',hasAttribute:()=>false
+    id:'media',hasAttribute:()=>false,addEventListener(type,callback){this.changeListener=callback;}
   };
   doc.querySelector=s=>s==='#media'?input:null;
   doc.querySelectorAll=s=>s==='*'?[input,...buttons]:
@@ -104,3 +104,20 @@ assert.ok(dynamicForm.dynamic_controls.some(x=>x.label==='Upload APK'));
 assert.ok(dynamicForm.dynamic_controls.some(x=>x.type==='file'));
 
 console.log('PASS: retry bounds, native forms, dynamic controls, upload confirmation helpers and bounded page extraction and verified-click postconditions');
+
+// A website may clear/remove its file input immediately after consuming change.
+const receiptContext=uploadFixture(['Upload APK']);
+vm.runInNewContext(nativeTarget,receiptContext);
+receiptContext.input.files=[{name:'fixture.mp4',size:35651584}];
+receiptContext.input.changeListener();receiptContext.input.files=[];
+const receipt=JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/file-receipt.js','utf8'),receiptContext));
+assert.equal(receipt.event_observed,true);assert.equal(receipt.count,1);assert.equal(receipt.sizes[0],35651584);
+const field={tagName:'INPUT',type:'text',value:'old',isConnected:true,getAttribute:()=>null,dispatchEvent(){}};
+const formContext={document:{querySelector:()=>field,querySelectorAll:()=>[]},Event};
+assert.equal(JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/form-verify.js','utf8'),formContext)).ok,false);
+assert.equal(JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/form-fill.js','utf8'),formContext)).ok,true);
+assert.equal(field.value,'verified');
+assert.equal(JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/form-verify.js','utf8'),formContext)).verified,true);
+field.type='password';
+assert.equal(JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/form-fill.js','utf8'),formContext)).ok,false);
+console.log('PASS: form readback, sensitive-field rejection and file-change receipt survives input reset');

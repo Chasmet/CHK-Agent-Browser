@@ -34,6 +34,8 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
     private final Handler main=new Handler(Looper.getMainLooper());
     private final List<WebView> tabs=new ArrayList<>();
     private WebView current;
+    private boolean shared;
+    private final java.util.Map<WebView,String> failures=new java.util.WeakHashMap<>();
     private boolean loading;
     private boolean closed;
     private Runnable awaiting;
@@ -51,8 +53,32 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         tabs.add(current);
     }
 
+    static final class SharedTabs {
+        final List<WebView> tabs;final WebView current;
+        SharedTabs(List<WebView> pages,WebView selected){tabs=pages;current=selected;}
+    }
+    BackgroundBrowser(Context context,List<WebView> pages,WebView selected){
+        app=context.getApplicationContext();shared=true;tabs.addAll(pages);
+        current=tabs.contains(selected)?selected:tabs.get(0);
+        for(WebView web:tabs){
+            if(web.getParent() instanceof android.view.ViewGroup)
+                ((android.view.ViewGroup)web.getParent()).removeView(web);
+            web.setOnScrollChangeListener(null);web.setOnLongClickListener(null);
+            if(web.getContext() instanceof android.content.MutableContextWrapper)
+                ((android.content.MutableContextWrapper)web.getContext()).setBaseContext(app);
+            configureWebView(web);web.onResume();
+        }
+    }
+    SharedTabs releaseSharedTabs(){
+        closed=true;main.removeCallbacksAndMessages(null);
+        SharedTabs state=new SharedTabs(new ArrayList<>(tabs),current);
+        tabs.clear();current=null;return state;
+    }
     private WebView createWebView(){
-        WebView web=new WebView(app);
+        WebView web=new WebView(new android.content.MutableContextWrapper(app));
+        configureWebView(web);return web;
+    }
+    private void configureWebView(WebView web){
         WebSettings s=web.getSettings();
         s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);
         s.setAllowFileAccess(false);s.setAllowContentAccess(false);
@@ -64,12 +90,22 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebViewClient(new WebViewClient(){
+            @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                android.webkit.WebResourceResponse local=BrowserStreamUploader.intercept(view,request);
+                return local==null?super.shouldInterceptRequest(view,request):local;
+            }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
                 Uri link=request.getUrl();return link==null||!isPublicHttps(link);
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap favicon){
-                BrowserWebState.remember(view,url);applyCookiePolicy(view,url);
+                BrowserWebState.remember(view,url);failures.remove(view);applyCookiePolicy(view,url);
                 if(view==current)loading=true;
+            }
+            @Override public void onReceivedError(WebView web,WebResourceRequest request,android.webkit.WebResourceError error){
+                if(request.isForMainFrame())failures.put(web,"Page inaccessible : erreur réseau Android.");
+            }
+            @Override public void onReceivedHttpError(WebView web,WebResourceRequest request,android.webkit.WebResourceResponse response){
+                if(request.isForMainFrame())failures.put(web,"Page inaccessible : HTTP "+response.getStatusCode());
             }
             @Override public boolean onRenderProcessGone(WebView dead,android.webkit.RenderProcessGoneDetail detail){
                 String url=BrowserWebState.url(dead);int index=tabs.indexOf(dead);boolean active=current==dead;
@@ -80,6 +116,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             }
             @Override public void onPageFinished(WebView view,String url){
                 if(!BrowserWebState.alive(view))return;
+                BrowserWebState.finished(view,url);
                 applyCookiePolicy(view,url);
                 if(view==current){
                     loading=false;
@@ -116,10 +153,11 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             }
             downloadResolved(web,url,mime,cb);
         });
+        if(!shared || web.getWidth()<=0){
         web.measure(android.view.View.MeasureSpec.makeMeasureSpec(540,android.view.View.MeasureSpec.EXACTLY),
             android.view.View.MeasureSpec.makeMeasureSpec(960,android.view.View.MeasureSpec.EXACTLY));
         web.layout(0,0,540,960);
-        return web;
+        }
     }
 
     private void applyCookiePolicy(WebView web,String url){
@@ -136,13 +174,30 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
     }
 
     private void saveLast(String url){
+        saveSharedTabs();
         if(url!=null&&isPublicHttps(Uri.parse(url)))
             app.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit().putString("last_page",url).apply();
+    }
+    private void saveSharedTabs(){
+        if(!shared||tabs.isEmpty())return;
+        JSONArray urls=new JSONArray();for(WebView tab:tabs)urls.put(tab.getUrl()==null?BrowserWebState.url(tab):tab.getUrl());
+        app.getSharedPreferences("mobile_ui",0).edit().putString("tabs",urls.toString())
+            .putInt("active_tab",Math.max(0,tabs.indexOf(current))).apply();
+    }
+    private void confirmNavigation(WebView web,long before,long deadline,AgentClient.ResultCallback cb){
+        if(!cb.isActive())return;
+        if(!BrowserWebState.alive(web)){cb.finish(false,"Onglet fermé pendant la navigation.");return;}
+        if(failures.containsKey(web)){cb.finish(false,failures.get(web));return;}
+        if(BrowserWebState.documentVersion(web)>before&&BrowserWebState.loaded(web)){
+            cb.finish(true,"Navigation chargée dans l’onglet Android conservé : "+web.getUrl());return;
+        }
+        if(android.os.SystemClock.elapsedRealtime()>=deadline){cb.finish(false,"Navigation non confirmée avant le délai. Lire la page avant de recommencer.");return;}
+        main.postDelayed(()->confirmNavigation(web,before,deadline,cb),250L);
     }
     // The last visible URL is recorded by AgentService. Do not force a loadUrl
     // into this autonomous WebView: that could discard a pending form or upload.
     public void restore(){
-        if(closed)return;
+        if(closed || (shared && current!=null && current.getUrl()!=null))return;
         String url=app.getSharedPreferences(PREF,Context.MODE_PRIVATE).getString("last_page",DEFAULT_URL);
         if(!isPublicHttps(Uri.parse(url)))url=DEFAULT_URL;
         if(current==null){current=createWebView();tabs.add(current);}
@@ -173,6 +228,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         int index=tabs.indexOf(web);tabs.remove(web);try{BrowserWebState.close(web);web.destroy();}catch(Exception ignored){}
         if(current==web)current=tabs.isEmpty()?null:tabs.get(Math.max(0,Math.min(index-1,tabs.size()-1)));
         if(current==null&&!closed){current=createWebView();tabs.add(current);restore();}
+        saveSharedTabs();
     }
     private void afterLoad(Runnable task){
         if(loading){
@@ -192,7 +248,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             if(DesktopCommands.nativeTarget(command)){DesktopCommands.execute(app,null,action,args,callback);return;}
             restore();afterLoad(()->DesktopCommands.execute(app,current,action,parameters,callback));return;
         }
-        if(WorkspaceCommands.handles(action)){if(!AgentClient.get(app).isEnabled()){callback.finish(false,"MCP désactivé");return;}WorkspaceCommands.run(app,action,args,callback);return;}
+        if(WorkspaceCommands.handles(action)){if(!AgentClient.get(app).commandEnabled(callback)){callback.finish(false,"MCP désactivé");return;}WorkspaceCommands.run(app,action,args,callback);return;}
         if(PublicationJobs.ACTION_SUBMIT.equals(action)){
             PublicationBrowserCommands.submit(app,current,args,main,callback);return;
         }
@@ -210,7 +266,9 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 if(tabs.size()>=12){callback.finish(false,"Maximum 12 onglets.");return;}
                 current=createWebView();tabs.add(current);
             }else if(current==null){current=createWebView();tabs.add(current);}
+            long before=BrowserWebState.documentVersion(current);WebView navigated=current;
             loading=true;current.loadUrl(url);saveLast(url);
+            if(shared){confirmNavigation(navigated,before,android.os.SystemClock.elapsedRealtime()+20000L,callback);return;}
             callback.finish(true,(resume?"Adresse du navigateur visible reprise dans un nouvel onglet MCP (état des formulaires non transféré) : ":
                 create?"Nouvel onglet "+(tabs.size()-1)+" : ":"Navigation vers ")+url);return;
         }
@@ -223,7 +281,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
 
     private void execute(String action,JSONObject args,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
-        if(closed||current==null||!AgentClient.get(app).isEnabled()||!AgentClient.get(app).isAutonomous()){
+        if(closed||current==null||!AgentClient.get(app).commandEnabled(cb)||!AgentClient.get(app).isAutonomous()){
             cb.finish(false,"Session autonome arrêtée par le propriétaire.");return;
         }
         try{
@@ -239,9 +297,12 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                     cb.finish(true,out.toString());return;
                 }
                 case "read_page":{
+                    if(shared&&(!BrowserWebState.loaded(current)||failures.containsKey(current))){
+                        cb.finish(false,failures.containsKey(current)?failures.get(current):"Page encore en chargement ; lecture non confirmée.");return;
+                    }
                     WebView web=current;String page=pageUrl(),title=pageTitle();
                     web.evaluateJavascript(BrowserScripts.readPage(),raw->{
-                        try{JSONObject result=new JSONObject();result.put("url",page);result.put("title",title);JSONObject details=new JSONObject(jsResult(raw));result.put("text",details.optString("text"));result.put("elements",details.optJSONArray("elements"));result.put("media",details.optJSONArray("media"));result.put("document_url",details.optString("document_url"));result.put("session_source","background");result.put("visibility",details.optString("visibility"));result.put("forms",details.optInt("forms"));result.put("ready",details.optString("ready"));WebPdfReader.enrich(app,page,result,cb);}
+                        try{JSONObject result=new JSONObject();result.put("url",page);result.put("title",title);JSONObject details=new JSONObject(jsResult(raw));result.put("text",details.optString("text"));result.put("elements",details.optJSONArray("elements"));result.put("media",details.optJSONArray("media"));result.put("document_url",details.optString("document_url"));result.put("session_source",shared?"shared_android":"background");result.put("visibility",details.optString("visibility"));result.put("forms",details.optInt("forms"));result.put("ready",details.optString("ready"));WebPdfReader.enrich(app,page,result,cb);}
                         catch(Exception e){cb.finish(false,"Lecture de page impossible.");}
                     });return;
                 }
@@ -263,7 +324,9 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 case "type":{
                     String selector=args.optString("selector",""),value=args.optString("text","");
                     if(value.length()>8000){cb.finish(false,"Texte trop long.");return;}
-                    current.evaluateJavascript(BrowserScripts.type(JSONObject.quote(selector),JSONObject.quote(value)),raw->{String text=jsResult(raw);cb.finish("Saisie effectuée".equals(text),text);});return;
+                    current.evaluateJavascript(BrowserScripts.type(JSONObject.quote(selector),JSONObject.quote(value)),raw->{String text=jsResult(raw);if(!"Saisie effectuée".equals(text)){cb.finish(false,text);return;}
+                        current.evaluateJavascript(BrowserScripts.valueMatches(JSONObject.quote(selector),JSONObject.quote(value)),
+                            proof->cb.finish("true".equals(proof),"true".equals(proof)?"Saisie vérifiée dans le champ.":"La page a refusé la valeur saisie."));});return;
                 }
                 case "select_option":{
                     String selector=args.optString("selector",""),value=args.optString("value",""),label=args.optString("label","");
@@ -280,7 +343,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                     int index=args.optInt("index",-1);String contains=args.optString("url_contains","");WebView target=null;
                     if(index>=0&&index<tabs.size())target=tabs.get(index);
                     if(target==null&&!contains.isEmpty())for(WebView tab:tabs){String u=tab.getUrl();if(u!=null&&u.contains(contains)){target=tab;break;}}
-                    if(target==null){cb.finish(false,"Onglet introuvable.");return;}current=target;cb.finish(true,"Onglet actif : "+pageUrl());return;
+                    if(target==null){cb.finish(false,"Onglet introuvable.");return;}current=target;saveSharedTabs();cb.finish(true,"Onglet actif : "+pageUrl());return;
                 }
                 case "close_popup":{
                     if(tabs.size()<=1){cb.finish(false,"Aucune fenêtre secondaire à fermer.");return;}WebView closing=current;closeTab(closing);cb.finish(true,"Fenêtre secondaire fermée.");return;
@@ -324,22 +387,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         return true;
     }
     private void startMcpUpload(WebView web,JSONObject args,AgentClient.ResultCallback cb){
-        String selector=args.optString("selector","");
-        JSONArray files=args.optJSONArray("files");
-        if(selector.isEmpty()||selector.length()>=350){cb.finish(false,"Sélecteur fichier invalide.");return;}
-        String expected=args.optString("expected_host","");
-        String host=web.getUrl()==null?null:Uri.parse(web.getUrl()).getHost();
-        if(host==null||(!expected.isEmpty()&&!expected.equalsIgnoreCase(host))){
-            cb.finish(false,"Destination d'importation différente de celle autorisée.");return;
-        }
-        final String document=web.getUrl();
-        BrowserTransferManager.prepareUploads(app,files,AgentClient.get(app).deviceTokenForTransfers(),(ok,uris,message)->{
-            if(!cb.isActive())return;
-            if(!BrowserWebState.alive(web)||!document.equals(web.getUrl())){cb.finish(false,"La page a changé pendant la préparation du fichier.");return;}
-            if(!ok){cb.finish(false,message);return;}
-            // Pass the original CHK file directly to WebView's native chooser.
-            BrowserNativeUploader.upload(app,web,selector,uris,cb);
-        });
+        BrowserAutomation.upload(app,web,args,cb);
     }
     private void startMcpDownload(WebView web,JSONObject args,AgentClient.ResultCallback cb){
         String expected=args.optString("expected_host","");String host=web.getUrl()==null?null:Uri.parse(web.getUrl()).getHost();

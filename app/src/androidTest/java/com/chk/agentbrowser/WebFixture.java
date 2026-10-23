@@ -41,7 +41,9 @@ final class WebFixture {
         instrumentation.runOnMainSync(()->{
             // The fixture initiates a new request directly, outside the address
             // bar/agent path. Reset the previous request's error in the same way.
-            if(web.getContext() instanceof MainActivity)((MainActivity)web.getContext()).clearPageError(web);
+            android.content.Context base=web.getContext();
+            if(base instanceof android.content.MutableContextWrapper)base=((android.content.MutableContextWrapper)base).getBaseContext();
+            if(base instanceof MainActivity)((MainActivity)base).clearPageError(web);
             WebViewClient original=web.getWebViewClient();
             if(original instanceof Client)original=((Client)original).delegate;
             web.stopLoading();web.setWebViewClient(new Client(original,url,page));web.loadUrl(url);

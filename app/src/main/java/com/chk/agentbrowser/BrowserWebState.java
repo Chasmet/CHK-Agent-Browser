@@ -16,6 +16,7 @@ final class BrowserWebState {
     private BrowserWebState(){}
     /** Called on each main-frame page start, including reloads of the same URL. */
     static void remember(WebView web,String url){
+        BrowserStreamUploader.revoke(web);
         DOCUMENTS.put(web,documentVersion(web)+1);
         if(url!=null&&url.startsWith("https://"))URLS.put(web,url);
     }
@@ -29,5 +30,5 @@ final class BrowserWebState {
     static long loadedAt(WebView web){Long at=FINISHED_AT.get(web);return at==null?0:at;}
     static String url(WebView web){String url=URLS.get(web);return url==null?"https://www.google.com":url;}
     static boolean alive(WebView web){return web!=null&&!CLOSED.contains(web);}
-    static void close(WebView web){CLOSED.add(web);URLS.remove(web);DOCUMENTS.remove(web);FINISHED.remove(web);FINISHED_AT.remove(web);}
+    static void close(WebView web){BrowserStreamUploader.revoke(web);CLOSED.add(web);URLS.remove(web);DOCUMENTS.remove(web);FINISHED.remove(web);FINISHED_AT.remove(web);}
 }

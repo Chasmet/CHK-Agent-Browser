@@ -99,10 +99,10 @@ public final class BrowserJsUploader {
                 String finish="(function(){try{"+stage+"if(!s.input||!s.input.isConnected)return JSON.stringify({ok:false,error:'Champ fichier remplacé'});"
                     +"var w=s.input.ownerDocument.defaultView,dt=new w.DataTransfer();"
                     +"s.files.forEach(function(m){dt.items.add(new w.File(m.chunks,m.name,{type:m.mime}));});"
-                    +"s.input.files=dt.files;"
+                    +"s.input.files=dt.files;var f=Array.from(s.input.files);"
                     +"s.input.dispatchEvent(new w.Event('input',{bubbles:true}));"
                     +"s.input.dispatchEvent(new w.Event('change',{bubbles:true}));"
-                    +"var f=s.input.files;"
+
                     +"var r=JSON.stringify({ok:f.length===s.files.length,count:f.length,names:Array.from(f).map(function(x){return x.name;})});"
                     +"delete window.__chkStage;return r;}catch(e){delete window.__chkStage;return JSON.stringify({ok:false,error:e.message});}})()";
                 JSONObject finalResult=new JSONObject(eval(web,finish,result,documentVersion));

@@ -17,6 +17,11 @@ public final class WorkspaceCommands {
     public static void run(Context context,String action,JSONObject args,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
         Context app=context.getApplicationContext();
+        if(action.equals("files_browser_capabilities")){finish(cb,true,BrowserAutomation.capabilities().toString());return;}
+        if(action.equals("files_browser_upload_status")){
+            try{finish(cb,true,BrowserAutomation.uploadStatus(app,args.getString("id")).toString());}
+            catch(Exception e){finish(cb,false,e.getMessage());}return;
+        }
         if(action.equals("files_task")&&args.optString("operation").equals("cancel"))AgentTasks.requestCancel(args.optString("id"));
         if(action.equals("video_editor_wait")){
             final long deadline=android.os.SystemClock.elapsedRealtime()+Math.max(1000,Math.min(120000,args.optLong("timeout_ms",120000)));

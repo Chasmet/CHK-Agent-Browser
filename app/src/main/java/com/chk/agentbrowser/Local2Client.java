@@ -135,7 +135,8 @@ public final class Local2Client {
             else scheduleNext(generation,0);
         });
     }
-    public void disable(){preferences.edit().putBoolean("enabled",false).apply();stop();}
+    public void disable(){preferences.edit().putBoolean("enabled",false).apply();stop();
+        main.post(()->AgentClient.get(app).closeRetainedBrowser());}
     private void scheduleNext(int session,long delay){
         main.post(()->{if(session==generation&&running&&enabled()){
             main.removeCallbacks(loop);main.postDelayed(loop,delay);

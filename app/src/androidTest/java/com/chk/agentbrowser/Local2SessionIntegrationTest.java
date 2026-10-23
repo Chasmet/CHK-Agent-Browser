@@ -55,6 +55,7 @@ public final class Local2SessionIntegrationTest {
         if(settings!=null)instrument.runOnMainSync(settings::finish);
         if(browser!=null)instrument.runOnMainSync(browser::finish);
         instrument.waitForIdleSync();
+        instrument.runOnMainSync(()->AgentClient.get(app).closeRetainedBrowser());
         app.stopService(new Intent(app,AgentService.class));
         instrument.runOnMainSync(()->Local2Client.get(app).stop());
         if(folder!=null)new WorkspaceStore(app).file(folder).delete();
@@ -86,7 +87,7 @@ public final class Local2SessionIntegrationTest {
         catch(Exception error){throw new RuntimeException(error);}
     }
     private void openBrowser()throws Exception{
-        browser=(MainActivity)instrument.startActivitySync(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        browser=(MainActivity)instrument.startActivitySync(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         WebFixture.load(instrument,current(),"https://example.com/local2-fixture",
             "<html><body><h1>Real shared Android session</h1><button id='button' onclick=\"this.textContent='Clicked exactly once';this.disabled=true;\">Tap</button><input id='field'><input id='reset' oninput=\"this.value=''\"></body></html>","!!document.getElementById('button')");
     }
@@ -185,9 +186,19 @@ public final class Local2SessionIntegrationTest {
         assertFalse(disabled.ok);assertTrue(disabled.message,disabled.message.startsWith("Local 2 désactivé"));
     }
     @Test public void closedBrowserHasNoInvisibleFallbackButFilesRemainAvailable()throws Exception{
-        openBrowser();instrument.runOnMainSync(browser::finish);instrument.waitForIdleSync();browser=null;
+        openBrowser();instrument.runOnMainSync(()->AgentClient.get(app).setAutonomous(false));
+        MainActivity closing=browser;instrument.runOnMainSync(closing::finish);
+        java.util.concurrent.atomic.AtomicBoolean destroyed=new java.util.concurrent.atomic.AtomicBoolean();
+        for(int i=0;i<60;i++){
+            instrument.runOnMainSync(()->destroyed.set(closing.isDestroyed()));
+            if(destroyed.get())break;Thread.sleep(100);
+        }
+        assertTrue("Browser destruction did not complete",destroyed.get());
+        instrument.waitForIdleSync();browser=null;
+        instrument.runOnMainSync(()->AgentClient.get(app).setAutonomous(true));
         Outcome tabs=call("browser_tabs",new JSONObject());
         assertFalse(tabs.message,tabs.ok);assertTrue(tabs.message,tabs.message.startsWith("Navigateur Android fermé"));
+        instrument.runOnMainSync(()->AgentClient.get(app).setAutonomous(true));
         assertTrue(nativeAction("workspace_status",new JSONObject()).ok);
     }
     @Test public void durableLocal2FileTaskUsesItsOwnTransport()throws Exception{
