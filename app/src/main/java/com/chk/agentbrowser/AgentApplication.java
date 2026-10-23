@@ -8,8 +8,9 @@ import android.os.Bundle;
 public final class AgentApplication extends Application {
     @Override public void onCreate(){
         super.onCreate();
+        WorkspaceCommands.IO.execute(()->ServiceDiagnostics.captureProcessExit(this));
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks(){
-            public void onActivityResumed(Activity a){NativeKeyboard.resumed(a);AgentClient.get(a).nativeScreenChanged();}
+            public void onActivityResumed(Activity a){NativeKeyboard.resumed(a);AgentClient.get(a).nativeScreenChanged();AgentService.ensureRunning(a);}
             public void onActivityPaused(Activity a){NativeKeyboard.paused(a);}
             public void onActivityDestroyed(Activity a){NativeKeyboard.destroyed(a);}
             public void onActivityCreated(Activity a,Bundle s){}
