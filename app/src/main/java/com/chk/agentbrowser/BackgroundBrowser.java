@@ -35,6 +35,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
     private final List<WebView> tabs=new ArrayList<>();
     private WebView current;
     private boolean shared;
+    private final java.util.Map<WebView,String> failures=new java.util.WeakHashMap<>();
     private boolean loading;
     private boolean closed;
     private Runnable awaiting;
@@ -93,8 +94,14 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 Uri link=request.getUrl();return link==null||!isPublicHttps(link);
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap favicon){
-                BrowserWebState.remember(view,url);applyCookiePolicy(view,url);
+                BrowserWebState.remember(view,url);failures.remove(view);applyCookiePolicy(view,url);
                 if(view==current)loading=true;
+            }
+            @Override public void onReceivedError(WebView web,WebResourceRequest request,android.webkit.WebResourceError error){
+                if(request.isForMainFrame())failures.put(web,"Page inaccessible : erreur réseau Android.");
+            }
+            @Override public void onReceivedHttpError(WebView web,WebResourceRequest request,android.webkit.WebResourceResponse response){
+                if(request.isForMainFrame())failures.put(web,"Page inaccessible : HTTP "+response.getStatusCode());
             }
             @Override public boolean onRenderProcessGone(WebView dead,android.webkit.RenderProcessGoneDetail detail){
                 String url=BrowserWebState.url(dead);int index=tabs.indexOf(dead);boolean active=current==dead;
@@ -163,8 +170,25 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
     }
 
     private void saveLast(String url){
+        saveSharedTabs();
         if(url!=null&&isPublicHttps(Uri.parse(url)))
             app.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit().putString("last_page",url).apply();
+    }
+    private void saveSharedTabs(){
+        if(!shared||tabs.isEmpty())return;
+        JSONArray urls=new JSONArray();for(WebView tab:tabs)urls.put(tab.getUrl()==null?BrowserWebState.url(tab):tab.getUrl());
+        app.getSharedPreferences("mobile_ui",0).edit().putString("tabs",urls.toString())
+            .putInt("active_tab",Math.max(0,tabs.indexOf(current))).apply();
+    }
+    private void confirmNavigation(WebView web,long before,long deadline,AgentClient.ResultCallback cb){
+        if(!cb.isActive())return;
+        if(!BrowserWebState.alive(web)){cb.finish(false,"Onglet fermé pendant la navigation.");return;}
+        if(failures.containsKey(web)){cb.finish(false,failures.get(web));return;}
+        if(BrowserWebState.documentVersion(web)>before&&BrowserWebState.loaded(web)){
+            cb.finish(true,"Navigation chargée dans l’onglet Android conservé : "+web.getUrl());return;
+        }
+        if(android.os.SystemClock.elapsedRealtime()>=deadline){cb.finish(false,"Navigation non confirmée avant le délai. Lire la page avant de recommencer.");return;}
+        main.postDelayed(()->confirmNavigation(web,before,deadline,cb),250L);
     }
     // The last visible URL is recorded by AgentService. Do not force a loadUrl
     // into this autonomous WebView: that could discard a pending form or upload.
@@ -200,6 +224,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         int index=tabs.indexOf(web);tabs.remove(web);try{BrowserWebState.close(web);web.destroy();}catch(Exception ignored){}
         if(current==web)current=tabs.isEmpty()?null:tabs.get(Math.max(0,Math.min(index-1,tabs.size()-1)));
         if(current==null&&!closed){current=createWebView();tabs.add(current);restore();}
+        saveSharedTabs();
     }
     private void afterLoad(Runnable task){
         if(loading){
@@ -237,7 +262,9 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 if(tabs.size()>=12){callback.finish(false,"Maximum 12 onglets.");return;}
                 current=createWebView();tabs.add(current);
             }else if(current==null){current=createWebView();tabs.add(current);}
+            long before=BrowserWebState.documentVersion(current);WebView navigated=current;
             loading=true;current.loadUrl(url);saveLast(url);
+            if(shared){confirmNavigation(navigated,before,android.os.SystemClock.elapsedRealtime()+20000L,callback);return;}
             callback.finish(true,(resume?"Adresse du navigateur visible reprise dans un nouvel onglet MCP (état des formulaires non transféré) : ":
                 create?"Nouvel onglet "+(tabs.size()-1)+" : ":"Navigation vers ")+url);return;
         }
@@ -266,6 +293,9 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                     cb.finish(true,out.toString());return;
                 }
                 case "read_page":{
+                    if(shared&&(!BrowserWebState.loaded(current)||failures.containsKey(current))){
+                        cb.finish(false,failures.containsKey(current)?failures.get(current):"Page encore en chargement ; lecture non confirmée.");return;
+                    }
                     WebView web=current;String page=pageUrl(),title=pageTitle();
                     web.evaluateJavascript(BrowserScripts.readPage(),raw->{
                         try{JSONObject result=new JSONObject();result.put("url",page);result.put("title",title);JSONObject details=new JSONObject(jsResult(raw));result.put("text",details.optString("text"));result.put("elements",details.optJSONArray("elements"));result.put("media",details.optJSONArray("media"));result.put("document_url",details.optString("document_url"));result.put("session_source",shared?"shared_android":"background");result.put("visibility",details.optString("visibility"));result.put("forms",details.optInt("forms"));result.put("ready",details.optString("ready"));WebPdfReader.enrich(app,page,result,cb);}
@@ -309,7 +339,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                     int index=args.optInt("index",-1);String contains=args.optString("url_contains","");WebView target=null;
                     if(index>=0&&index<tabs.size())target=tabs.get(index);
                     if(target==null&&!contains.isEmpty())for(WebView tab:tabs){String u=tab.getUrl();if(u!=null&&u.contains(contains)){target=tab;break;}}
-                    if(target==null){cb.finish(false,"Onglet introuvable.");return;}current=target;cb.finish(true,"Onglet actif : "+pageUrl());return;
+                    if(target==null){cb.finish(false,"Onglet introuvable.");return;}current=target;saveSharedTabs();cb.finish(true,"Onglet actif : "+pageUrl());return;
                 }
                 case "close_popup":{
                     if(tabs.size()<=1){cb.finish(false,"Aucune fenêtre secondaire à fermer.");return;}WebView closing=current;closeTab(closing);cb.finish(true,"Fenêtre secondaire fermée.");return;
