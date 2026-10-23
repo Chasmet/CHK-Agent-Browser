@@ -90,6 +90,10 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebViewClient(new WebViewClient(){
+            @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                android.webkit.WebResourceResponse local=BrowserStreamUploader.intercept(view,request);
+                return local==null?super.shouldInterceptRequest(view,request):local;
+            }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
                 Uri link=request.getUrl();return link==null||!isPublicHttps(link);
             }

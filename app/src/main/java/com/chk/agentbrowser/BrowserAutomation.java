@@ -184,7 +184,7 @@ final class BrowserAutomation {
                 if(!receipt.isActive()){receipt.finish(false,"Canal arrêté pendant la préparation. Aucun nouvel envoi.");return;}
                 if(!same(web,page,version)){receipt.finish(false,"Page modifiée pendant la préparation. Aucun fichier envoyé.");return;}
                 if(!ok){receipt.finish(false,message);return;}
-                BrowserNativeUploader.upload(app,web,selector,uris,receipt);
+                BrowserStreamUploader.upload(app,web,selector,uris,receipt);
             });
         }catch(Exception e){cb.finish(false,e.getMessage()==null?"Importation refusée.":e.getMessage());}
     }

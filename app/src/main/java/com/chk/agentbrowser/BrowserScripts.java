@@ -17,6 +17,8 @@ public final class BrowserScripts {
             +"var sel=parts.join('>');return deepFind(sel)===el?sel:'';}";
     }
 
+    static String finderForUpload(){return finder();}
+
     private static String highlight(){return "function mark(el){try{var r=el.getBoundingClientRect(),dot=document.createElement('div');dot.setAttribute('data-chk-pointer','true');dot.style.cssText='position:fixed;pointer-events:none!important;z-index:2147483647;border:3px solid #21d4c6;border-radius:50%;width:34px;height:34px;box-shadow:0 0 0 7px #21d4c633;';dot.style.left=(Math.max(20,Math.min(innerWidth-20,r.left+r.width/2))-17)+'px';dot.style.top=(Math.max(20,Math.min(innerHeight-20,r.top+r.height/2))-17)+'px';document.documentElement.appendChild(dot);setTimeout(function(){dot.remove();},900);}catch(ignore){}}";}
 
     public static String readPage() {

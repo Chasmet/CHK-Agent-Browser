@@ -178,6 +178,10 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebViewClient(new WebViewClient(){
+            @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                android.webkit.WebResourceResponse local=BrowserStreamUploader.intercept(view,request);
+                return local==null?super.shouldInterceptRequest(view,request):local;
+            }
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
                 String scheme=request.getUrl().getScheme();
                 if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme))return false;

@@ -1,7 +1,7 @@
 ## Importation web Local 2, session Android et formulaires vérifiés
 
 - Importer les fichiers CHK dans les sites depuis le MCP Windows existant, y compris 1.3.0, via `desktop` / `tool:browser`. Découverte par `files_browser_capabilities`.
-- Transfert natif des gros MP4 par URI locale, reçu contrôlé et journal anti-doublon. La sélection du fichier et la fin du téléversement sur le site restent distinctes.
+- Transfert local des gros MP4 par flux vers la WebView, y compris en arrière-plan ; reçu contrôlé et journal anti-doublon. La sélection du fichier et la fin du téléversement sur le site restent distinctes.
 - Conservation des mêmes onglets et du DOM lorsque l'écran navigateur est détruit en mode autonome ; réattachement au retour dans CHK.
 - Remplissage et relecture des champs dynamiques, dates, heures, options et descriptions. Programmation avec contrôle des champs, du compte et de la preuve finale via le journal de publication existant.
 - Aucun changement de serveur, de lien MCP, de permissions Android, de signature APK ou de données utilisateur. Android peut toujours interrompre le processus ; les sites peuvent imposer une vérification humaine.

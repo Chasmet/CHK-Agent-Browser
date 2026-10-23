@@ -35,10 +35,16 @@ Le porteur `desktop` est accepté par le serveur Windows 1.3.0 déjà installé 
 Inspecter d'abord le DOM avec `browser_read_page` / `get_form` et utiliser le
 sélecteur exact du champ demandé. `expected_host` doit correspondre exactement
 au domaine HTTPS de l'onglet. 1..8 fichiers, 512 Mio locaux au total ; le site et
-le téléphone peuvent imposer des limites supplémentaires. Le sélecteur Android
-natif reçoit une URI locale en lecture seule. Si le site refuse de l'ouvrir, les
-fichiers de 32 Mio au plus ont le repli JS historique ; les gros fichiers sont
-refusés explicitement, sans fausse confirmation ni copie entière en mémoire.
+le téléphone peuvent imposer des limites supplémentaires.
+
+La sélection MCP utilise un flux local consommé par la WebView : chaque fichier
+est accessible une fois, uniquement dans l'onglet et l'origine autorisés, par
+une réponse interceptée qui ne quitte pas Android. Il n'y a ni serveur HTTP
+supplémentaire ni octets du MP4 dans MCP. Chromium construit le File/Blob et le
+remet au champ HTML, sans dépendre d'un lancement de sélecteur Android depuis
+l'arrière-plan. Les quotas mémoire/disque du moteur et la politique CSP du site
+restent applicables. Le sélecteur Android natif reste présent pour les sélections
+manuelles et les intégrations existantes. Une navigation révoque les flux locaux.
 
 `id` est stable par sélection. Rejouer le même id retourne le journal existant,
 sans sélectionner à nouveau. Un contenu différent sous le même id est refusé.
@@ -51,7 +57,7 @@ Lire le journal même sans navigateur :
 `selected` signifie que les fichiers sont entrés dans le champ du site. Le
 journal indique toujours `server_upload_verified:false` : il faut ensuite
 observer la progression et la fin du téléversement sur le site. Le reçu capture
-l'événement de sélection avant qu'un site ne vide son input. Les noms et tailles
+la sélection avant qu'un site ne vide son input. Les noms et tailles
 sont contrôlés. Une interruption est `unconfirmed` / `interrupted`, jamais une
 invitation à renvoyer le fichier aveuglément. Les 32 derniers journaux terminés
 sont conservés ; les sélections encore actives ne sont pas évincées.

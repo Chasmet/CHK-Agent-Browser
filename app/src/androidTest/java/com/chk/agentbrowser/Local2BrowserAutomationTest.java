@@ -123,7 +123,7 @@ public final class Local2BrowserAutomationTest {
     @Test public void destroyedActivityRetainsExactTabsFormAndJsStateThenReattaches()throws Exception{
         WebView original=open("example.com","<html><body><input id='draft' value='keep'><input type='file' id='media'><script>window.sessionMarker='original-dom';</script></body></html>");
         eval(original,"document.querySelector('#draft').value='unsaved';var dt=new DataTransfer();dt.items.add(new File(['abc'],'retained.txt'));document.querySelector('#media').files=dt.files;true");
-        instrument.runOnMainSync(browser::finish);instrument.waitForIdleSync();browser=null;
+        finishBrowser();browser=null;
         JSONObject status=call("browser_status",new JSONObject()).json();assertTrue(status.getBoolean("retained"));assertFalse(status.getBoolean("visible"));
         assertTrue(browserCall("verify_form",new JSONObject().put("expected_host","example.com")
             .put("fields",new JSONArray().put(field("#draft","text","unsaved")))).ok);
@@ -156,11 +156,21 @@ public final class Local2BrowserAutomationTest {
     }
     @Test public void ownerStopDestroysRetainedBrowserAndPreventsFurtherCommands()throws Exception{
         WebView page=open("example.com","<html><body>retained owner session</body></html>");
-        instrument.runOnMainSync(browser::finish);instrument.waitForIdleSync();browser=null;
+        finishBrowser();browser=null;
         instrument.runOnMainSync(()->AgentClient.get(app).setAutonomous(false));instrument.waitForIdleSync();
         assertFalse(call("browser_status",new JSONObject()).json().getBoolean("browser_available"));
         instrument.runOnMainSync(()->assertFalse(BrowserWebState.alive(page)));
         assertFalse(call("browser_read_page",new JSONObject()).ok);
+    }
+    private void finishBrowser()throws Exception{
+        MainActivity closing=browser;instrument.runOnMainSync(closing::finish);
+        boolean destroyed=false;
+        for(int i=0;i<60;i++){
+            java.util.concurrent.atomic.AtomicBoolean done=new java.util.concurrent.atomic.AtomicBoolean();
+            instrument.runOnMainSync(()->done.set(closing.isDestroyed()));
+            if(done.get()){destroyed=true;break;}Thread.sleep(100);
+        }
+        assertTrue("Activity destruction did not complete",destroyed);instrument.waitForIdleSync();
     }
     private static JSONObject field(String selector,String kind,Object value)throws Exception{
         return new JSONObject().put("selector",selector).put("kind",kind).put("value",value);
