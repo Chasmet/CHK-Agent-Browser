@@ -55,6 +55,7 @@ public final class Local2SessionIntegrationTest {
         if(settings!=null)instrument.runOnMainSync(settings::finish);
         if(browser!=null)instrument.runOnMainSync(browser::finish);
         instrument.waitForIdleSync();
+        instrument.runOnMainSync(()->AgentClient.get(app).closeRetainedBrowser());
         app.stopService(new Intent(app,AgentService.class));
         instrument.runOnMainSync(()->Local2Client.get(app).stop());
         if(folder!=null)new WorkspaceStore(app).file(folder).delete();
@@ -185,9 +186,10 @@ public final class Local2SessionIntegrationTest {
         assertFalse(disabled.ok);assertTrue(disabled.message,disabled.message.startsWith("Local 2 désactivé"));
     }
     @Test public void closedBrowserHasNoInvisibleFallbackButFilesRemainAvailable()throws Exception{
-        openBrowser();instrument.runOnMainSync(browser::finish);instrument.waitForIdleSync();browser=null;
+        openBrowser();instrument.runOnMainSync(()->AgentClient.get(app).setAutonomous(false));instrument.runOnMainSync(browser::finish);instrument.waitForIdleSync();browser=null;
         Outcome tabs=call("browser_tabs",new JSONObject());
         assertFalse(tabs.message,tabs.ok);assertTrue(tabs.message,tabs.message.startsWith("Navigateur Android fermé"));
+        instrument.runOnMainSync(()->AgentClient.get(app).setAutonomous(true));
         assertTrue(nativeAction("workspace_status",new JSONObject()).ok);
     }
     @Test public void durableLocal2FileTaskUsesItsOwnTransport()throws Exception{

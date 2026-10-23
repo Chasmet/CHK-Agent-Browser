@@ -43,15 +43,16 @@ public final class BrowserNativeUploader {
         final long documentVersion;
         final Uri[] files;
         final long totalBytes;
+        final JSONArray manifest;
         final AgentClient.ResultCallback cb;
 
         Pending(Context context, WebView web, String selector, Uri[] files,
-                long totalBytes, AgentClient.ResultCallback cb) {
+                long totalBytes, JSONArray manifest, AgentClient.ResultCallback cb) {
             this.context=context.getApplicationContext();
             this.web=web;
             this.selector=selector;
             this.files=files;
-            this.totalBytes=totalBytes;
+            this.totalBytes=totalBytes;this.manifest=manifest;
             this.cb=cb;
             this.document=web.getUrl();
             this.documentVersion=BrowserWebState.documentVersion(web);
@@ -82,7 +83,7 @@ public final class BrowserNativeUploader {
         if (ACTIVE.containsKey(web)) {
             cb.finish(false,"Un autre fichier est déjà en cours de sélection.");return;
         }
-        long total=0;
+        long total=0;JSONArray manifest=new JSONArray();
         try {
             String ownAuthority=context.getPackageName()+".browserfiles";
             for (Uri uri:uris) {
@@ -98,13 +99,16 @@ public final class BrowserNativeUploader {
                     long size=c.getLong(ix);
                     if(size>WorkspaceStore.MAX_IMPORT-total)
                         throw new Exception("La sélection dépasse 512 Mo.");
+                    int ni=c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                    if(ni<0||c.isNull(ni))throw new Exception("Nom du fichier absent.");
+                    manifest.put(new JSONObject().put("name",c.getString(ni)).put("size",size));
                     total+=size;
                 }
             }
         } catch(Exception e) {
             cb.finish(false,"Sélection CHK refusée : "+e.getMessage());return;
         }
-        final Pending pending=new Pending(context,web,selector,uris,total,cb);
+        final Pending pending=new Pending(context,web,selector,uris,total,manifest,cb);
         web.evaluateJavascript(BrowserScripts.nativeFileTarget(JSONObject.quote(selector)),raw->{
             if(!pending.valid()){
                 if(cb.isActive())cb.finish(false,"Page modifiée pendant la sélection.");return;
@@ -176,11 +180,16 @@ public final class BrowserNativeUploader {
             MAIN.postDelayed(()->{
                 if(!p.cb.isActive())return;
                 if(!p.valid()){p.cb.finish(false,"Le document a changé après la sélection.");return;}
-                web.evaluateJavascript(BrowserScripts.fileInfo(JSONObject.quote(p.selector)),raw->{
+                web.evaluateJavascript(BrowserScripts.fileReceipt(JSONObject.quote(p.selector)),raw->{
                     if(!p.cb.isActive())return;
                     try {
                         JSONObject info=new JSONObject(new JSONArray("["+raw+"]").getString(0));
                         boolean ok=info.optBoolean("ok")&&info.optInt("count")==p.files.length;
+                        JSONArray names=info.optJSONArray("names"),sizes=info.optJSONArray("sizes");
+                        ok=ok&&names!=null&&sizes!=null&&names.length()==p.files.length&&sizes.length()==p.files.length;
+                        if(ok)for(int i=0;i<p.files.length;i++)
+                            ok=ok&&p.manifest.getJSONObject(i).getString("name").equals(names.optString(i))
+                                &&p.manifest.getJSONObject(i).getLong("size")==sizes.optLong(i,-1);
                         p.cb.finish(ok,ok?"Fichiers sélectionnés dans le champ HTML (transfert serveur encore à vérifier) : "+info
                             :"Sélection transmise au WebView, mais champ non confirmé : "+info);
                     }catch(Exception e){

@@ -98,7 +98,16 @@ public class MainActivity extends Activity {
         findViewById(R.id.tab_count).setOnClickListener(v->tabOverview());
         findViewById(R.id.tab_count).setOnLongClickListener(v->{newTab(HOME);return true;});
         findViewById(R.id.connection_badge).setOnClickListener(v->startActivity(new Intent(this,SettingsActivity.class)));
-        restoreTabs(state);
+        BackgroundBrowser.SharedTabs retained=agentClient.takeRetainedBrowser();
+        if(retained!=null&&!retained.tabs.isEmpty()){
+            tabs.addAll(retained.tabs);
+            for(WebView web:tabs){
+                if(web.getContext() instanceof android.content.MutableContextWrapper)
+                    ((android.content.MutableContextWrapper)web.getContext()).setBaseContext(this);
+                configure(web);
+            }
+            select(tabs.contains(retained.current)?retained.current:tabs.get(0));
+        }else restoreTabs(state);
         showSpace(state==null?"browser":state.getString("space","browser"));
         if(state==null)openIntent(getIntent());
         autoUpdate();
@@ -152,7 +161,7 @@ public class MainActivity extends Activity {
     private void newTab(String url){
         if(tabs.size()>=12){toast("Maximum 12 onglets : ferme un onglet pour en ouvrir un autre");return;}
         if(home!=null&&HOME.equals(url))home.newStart();
-        WebView web=new WebView(this);web.setBackgroundColor(Color.WHITE);configure(web);
+        WebView web=new WebView(new android.content.MutableContextWrapper(this));web.setBackgroundColor(Color.WHITE);configure(web);
         BrowserWebState.remember(web,url);
         tabs.add(web);select(web);
     }
@@ -236,7 +245,7 @@ public class MainActivity extends Activity {
             @Override public void onReceivedTitle(WebView v,String title){if(v==current)refreshTabs();}
             @Override public boolean onCreateWindow(WebView view,boolean isDialog,boolean isUserGesture,android.os.Message resultMsg){
                 if(tabs.size()>=12){toast("Maximum 12 onglets");return false;}
-                WebView popup=new WebView(MainActivity.this);popup.setBackgroundColor(Color.WHITE);configure(popup);
+                WebView popup=new WebView(new android.content.MutableContextWrapper(MainActivity.this));popup.setBackgroundColor(Color.WHITE);configure(popup);
                 tabs.add(popup);select(popup);
                 WebView.WebViewTransport transport=(WebView.WebViewTransport)resultMsg.obj;
                 transport.setWebView(popup);resultMsg.sendToTarget();
@@ -317,7 +326,7 @@ public class MainActivity extends Activity {
         if(pendingUploadWeb==dead){pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;}
         if(dead.getParent() instanceof ViewGroup)((ViewGroup)dead.getParent()).removeView(dead);
         beginNavigation(dead);BrowserWebState.close(dead);dead.destroy();pageErrors.remove(dead);pageErrorUrls.remove(dead);
-        WebView replacement=new WebView(this);configure(replacement);BrowserWebState.remember(replacement,url);
+        WebView replacement=new WebView(new android.content.MutableContextWrapper(this));configure(replacement);BrowserWebState.remember(replacement,url);
         tabs.set(index,replacement);if(selected){current=null;select(replacement);}
         pageError(replacement,"Page interrompue par Android. Toucher pour la rouvrir.");
         refreshTabs();saveTabs();
@@ -775,23 +784,7 @@ public class MainActivity extends Activity {
         return true;
     }
     private void startMcpUpload(WebView web,JSONObject args,AgentClient.ResultCallback callback){
-        String selector=args.optString("selector","");
-        JSONArray files=args.optJSONArray("files");
-        if(selector.isEmpty()||selector.length()>=350){callback.finish(false,"Sélecteur fichier invalide.");return;}
-        String expected=args.optString("expected_host","");
-        String host=web.getUrl()==null?null:Uri.parse(web.getUrl()).getHost();
-        if(host==null||(!expected.isEmpty()&&!expected.equalsIgnoreCase(host))){
-            callback.finish(false,"Destination d'importation différente de celle autorisée.");return;
-        }
-        final String document=web.getUrl();
-        BrowserTransferManager.prepareUploads(this,files,agentClient.deviceTokenForTransfers(),(ok,uris,message)->{
-            if(!callback.isActive())return;
-            if(!BrowserWebState.alive(web)||!document.equals(web.getUrl())){callback.finish(false,"La page a changé pendant la préparation. Relance l’importation sur la bonne page.");return;}
-            if(!ok){callback.finish(false,message);return;}
-            // Select the locally stored URI through the WebView's native file chooser.
-            // This avoids base64 relay buffers and supports original large videos.
-            BrowserNativeUploader.upload(this,web,selector,uris,callback);
-        });
+        BrowserAutomation.upload(this,web,args,callback);
     }
     private void startMcpDownload(WebView web,JSONObject args,AgentClient.ResultCallback callback){
         String expected=args.optString("expected_host","");
@@ -1040,7 +1033,7 @@ public class MainActivity extends Activity {
             for(int i=0;i<Math.min(12,urls.length());i++){
                 String url=urls.optString(i,HOME);
                 if(!url.startsWith("https://"))url=HOME;
-                WebView restored=new WebView(this);
+                WebView restored=new WebView(new android.content.MutableContextWrapper(this));
                 restored.setBackgroundColor(Color.WHITE);
                 configure(restored);
                 BrowserWebState.remember(restored,url);
@@ -1073,10 +1066,11 @@ public class MainActivity extends Activity {
     }
     @Override protected void onDestroy(){
         for(Runnable cancel:new ArrayList<>(navigationCancels.values()))cancel.run();navigationCancels.clear();
+        boolean retained=agentClient!=null&&agentClient.retainBrowser(this,tabs,current);
         if(agentClient!=null)agentClient.releaseBrowser(this);
         super.onDestroy();
         if(home!=null)home.destroy();if(workspace!=null)workspace.destroy();hideFullScreenVideo();
-        for(WebView v:tabs){if(v.getParent() instanceof ViewGroup)((ViewGroup)v.getParent()).removeView(v);BrowserWebState.close(v);v.destroy();}
+        for(WebView v:tabs){if(v.getParent() instanceof ViewGroup)((ViewGroup)v.getParent()).removeView(v);if(!retained){BrowserWebState.close(v);v.destroy();}}
         tabs.clear();
         if(fileCallback!=null)fileCallback.onReceiveValue(null);
         if(pendingUploadCallback!=null)pendingUploadCallback.finish(false,"Navigateur fermé pendant l'importation.");

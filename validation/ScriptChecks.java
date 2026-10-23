@@ -34,6 +34,10 @@ public final class ScriptChecks {
             BrowserScripts.nativeFileTarget("\"#media\"").getBytes("UTF-8"));
         java.nio.file.Files.write(root.resolve("form-dynamic.js"),
             BrowserScripts.getForm().getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("file-receipt.js"),BrowserScripts.fileReceipt("\"#media\"").getBytes("UTF-8"));
+        String fields="[{\"selector\":\"#target\",\"kind\":\"text\",\"value\":\"verified\"}]";
+        java.nio.file.Files.write(root.resolve("form-fill.js"),BrowserScripts.formFields(fields,true).getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("form-verify.js"),BrowserScripts.formFields(fields,false).getBytes("UTF-8"));
         java.nio.file.Files.write(root.resolve("condition.js"),
             BrowserScripts.condition("\"#done\"","\"Saved successfully\"","\"/done\"").getBytes("UTF-8"));
     }

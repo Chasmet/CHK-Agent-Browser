@@ -10,6 +10,8 @@ final class WorkspaceCapabilities {
     private WorkspaceCapabilities(){}
     static JSONObject catalog(JSONObject args)throws Exception{
         List<JSONObject> all=new ArrayList<>();
+        add(all,"files_browser_capabilities","Importation et formulaires web depuis Local 2 Windows 1.3 ou supérieur, via desktop tool browser.");
+        add(all,"files_browser_upload_status","Journal persistant des sélections web : selected ne prouve pas le téléversement distant.","id:string");
         add(all,"files_open","Ouvre la visionneuse CHK ; succès seulement après chargement et fenêtre au premier plan.","path:string");
         add(all,"files_detect_format","Extension, MIME et signature ; capacités et avertissements réels.","path:string");
         add(all,"files_copy_content","Prépare le texte complet jusqu’à 200000 caractères, sans toucher au presse-papiers Android.","path:string");
@@ -80,7 +82,7 @@ final class WorkspaceCapabilities {
         add(all,"workspace_status","États Android et version du protocole ; fichiers privés et autorisations externes séparés.");
         String query=args.optString("query","").toLowerCase(Locale.ROOT);List<JSONObject> selected=new ArrayList<>();for(JSONObject item:all)if(item.getString("action").contains(query))selected.add(item);
         int offset=args.optInt("offset",0);if(offset<0||offset>selected.size())throw new Exception("Pagination du catalogue invalide.");JSONArray page=new JSONArray();for(int i=offset;i<Math.min(offset+8,selected.size());i++)page.put(selected.get(i));
-        return new JSONObject().put("workspace_version",VERSION).put("scope","workspace_and_studio").put("transport","android_action").put("actions",page).put("total",selected.size()).put("next_offset",offset+8<selected.size()?offset+8:-1);
+        return new JSONObject().put("workspace_version",VERSION).put("browser",BrowserAutomation.capabilities()).put("scope","workspace_and_studio").put("transport","android_action").put("actions",page).put("total",selected.size()).put("next_offset",offset+8<selected.size()?offset+8:-1);
     }
     private static void add(List<JSONObject> rows,String name,String description,String... fields)throws Exception{
         JSONObject properties=new JSONObject();JSONArray required=new JSONArray();
