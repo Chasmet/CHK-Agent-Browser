@@ -123,8 +123,12 @@ final class BrowserAutomation {
         String raw=jobs(c).getString(jobKey(id),"");
         if(raw.isEmpty())throw new Exception("Importation inconnue.");
         JSONObject state=new JSONObject(raw);
-        if(!PROCESS.equals(state.optString("process"))&&"preparing".equals(state.optString("state")))
-            state.put("state","interrupted").put("message","Processus Android relancé : réception inconnue. Inspecter le site avant une nouvelle sélection.");
+        if("preparing".equals(state.optString("state"))&&(!PROCESS.equals(state.optString("process"))
+                ||state.optBoolean("local2")&&(!AgentClient.get(c).isAutonomous()
+                    ||!Local2Client.get(c).enabled()||state.optInt("generation",-1)!=Local2Client.get(c).sessionGeneration()))){
+            state.put("state","interrupted").put("message","Session Android interrompue : réception inconnue. Inspecter le site avant une nouvelle sélection.");
+            save(c,id,state);
+        }
         state.remove("process");state.remove("fingerprint");return state;
     }
     private static void save(Context c,String id,JSONObject state)throws Exception{
@@ -160,7 +164,8 @@ final class BrowserAutomation {
                 cb.finish(receipt.optString("state").equals("selected"),receipt.toString());return;
             }
             JSONObject state=new JSONObject().put("id",id).put("state","preparing").put("host",host(web))
-                .put("fingerprint",fingerprint).put("process",PROCESS).put("server_upload_verified",false);
+                .put("fingerprint",fingerprint).put("process",PROCESS).put("local2",cb.isLocal2())
+                .put("generation",Local2Client.get(app).sessionGeneration()).put("server_upload_verified",false);
             save(app,id,state);
             String page=web.getUrl();long version=BrowserWebState.documentVersion(web);
             AgentClient.ResultCallback receipt=new AgentClient.ResultCallback(){

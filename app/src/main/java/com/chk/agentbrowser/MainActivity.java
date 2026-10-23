@@ -557,7 +557,7 @@ public class MainActivity extends Activity {
         };
         if(!agentClient.commandEnabled(callback)){callback.finish(false,callback.isLocal2()?"Local 2 désactivé.":"MCP Render désactivé par le propriétaire.");return;}
         if(DesktopCommands.handles(action,args)){
-            if(args.optString("target","native").equals("web")){showSpace("browser");if(home!=null)home.revealWeb();}
+            if(args.optString("tool").equals("browser")||args.optString("target","native").equals("web")){showSpace("browser");if(home!=null)home.revealWeb();}
             DesktopCommands.execute(this,current,action,args,callback);return;
         }
         if(KeyboardCommands.handles(action,args)){
