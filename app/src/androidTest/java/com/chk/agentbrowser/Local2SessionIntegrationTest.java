@@ -186,7 +186,16 @@ public final class Local2SessionIntegrationTest {
         assertFalse(disabled.ok);assertTrue(disabled.message,disabled.message.startsWith("Local 2 désactivé"));
     }
     @Test public void closedBrowserHasNoInvisibleFallbackButFilesRemainAvailable()throws Exception{
-        openBrowser();instrument.runOnMainSync(()->AgentClient.get(app).setAutonomous(false));instrument.runOnMainSync(browser::finish);instrument.waitForIdleSync();browser=null;
+        openBrowser();instrument.runOnMainSync(()->AgentClient.get(app).setAutonomous(false));
+        MainActivity closing=browser;instrument.runOnMainSync(closing::finish);
+        java.util.concurrent.atomic.AtomicBoolean destroyed=new java.util.concurrent.atomic.AtomicBoolean();
+        for(int i=0;i<60;i++){
+            instrument.runOnMainSync(()->destroyed.set(closing.isDestroyed()));
+            if(destroyed.get())break;Thread.sleep(100);
+        }
+        assertTrue("Browser destruction did not complete",destroyed.get());
+        instrument.waitForIdleSync();browser=null;
+        instrument.runOnMainSync(()->AgentClient.get(app).setAutonomous(true));
         Outcome tabs=call("browser_tabs",new JSONObject());
         assertFalse(tabs.message,tabs.ok);assertTrue(tabs.message,tabs.message.startsWith("Navigateur Android fermé"));
         instrument.runOnMainSync(()->AgentClient.get(app).setAutonomous(true));
