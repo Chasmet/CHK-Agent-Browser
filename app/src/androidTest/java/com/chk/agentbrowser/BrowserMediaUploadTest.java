@@ -32,7 +32,7 @@ public final class BrowserMediaUploadTest {
         byte[] png=new byte[]{(byte)137,80,78,71,13,10,26,10,1,2,3,4};
         try(FileOutputStream out=new FileOutputStream(store.file(path))){out.write(png);}
         MainActivity activity=(MainActivity)instrumentation.startActivitySync(
-            new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         try {
             Field f=MainActivity.class.getDeclaredField("current");f.setAccessible(true);
             WebView web=(WebView)f.get(activity);
@@ -84,7 +84,7 @@ public final class BrowserMediaUploadTest {
             file.setLength(length);
         }
         MainActivity activity=(MainActivity)instrumentation.startActivitySync(
-            new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         try{
             Field current=MainActivity.class.getDeclaredField("current");current.setAccessible(true);
             WebView web=(WebView)current.get(activity);
@@ -126,7 +126,7 @@ public final class BrowserMediaUploadTest {
         String path="test-reload-"+UUID.randomUUID()+".txt";
         try(FileOutputStream out=new FileOutputStream(store.file(path))){out.write(new byte[]{1,2,3});}
         MainActivity activity=(MainActivity)instrumentation.startActivitySync(
-            new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         CountDownLatch release=new CountDownLatch(1),blocked=new CountDownLatch(1);
         try{
             Field current=MainActivity.class.getDeclaredField("current");current.setAccessible(true);

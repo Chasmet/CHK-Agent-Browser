@@ -46,7 +46,7 @@ public final class Local2BrowserAutomationTest {
     @After public void cleanup()throws Exception{
         if(settings!=null)instrument.runOnMainSync(settings::finish);
         local.edit().putBoolean("enabled",false).commit();
-        if(browser!=null)instrument.runOnMainSync(browser::finish);
+        if(browser!=null)finishBrowser();
         instrument.waitForIdleSync();instrument.runOnMainSync(()->AgentClient.get(app).closeRetainedBrowser());
         app.stopService(new Intent(app,AgentService.class));instrument.runOnMainSync(()->Local2Client.get(app).stop());
         if(path!=null)new WorkspaceStore(app).file(path).delete();
@@ -76,7 +76,7 @@ public final class Local2BrowserAutomationTest {
         java.lang.reflect.Field f=MainActivity.class.getDeclaredField("current");f.setAccessible(true);return (WebView)f.get(browser);
     }
     private WebView open(String host,String html)throws Exception{
-        browser=(MainActivity)instrument.startActivitySync(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        browser=(MainActivity)instrument.startActivitySync(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         WebView web=web();WebFixture.load(instrument,web,"https://"+host+"/fixture",html,"!!document.body");return web;
     }
     private String eval(WebView web,String script)throws Exception{
@@ -129,7 +129,7 @@ public final class Local2BrowserAutomationTest {
             .put("fields",new JSONArray().put(field("#draft","text","unsaved")))).ok);
         assertEquals("\"original-dom\"",eval(original,"window.sessionMarker"));
         assertEquals("1",eval(original,"document.querySelector('#media').files.length"));
-        browser=(MainActivity)instrument.startActivitySync(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        browser=(MainActivity)instrument.startActivitySync(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         assertSame(original,web());assertEquals("\"unsaved\"",eval(web(),"document.querySelector('#draft').value"));
         assertEquals("\"original-dom\"",eval(web(),"window.sessionMarker"));
     }

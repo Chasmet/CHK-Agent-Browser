@@ -87,7 +87,7 @@ public final class Local2SessionIntegrationTest {
         catch(Exception error){throw new RuntimeException(error);}
     }
     private void openBrowser()throws Exception{
-        browser=(MainActivity)instrument.startActivitySync(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        browser=(MainActivity)instrument.startActivitySync(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         WebFixture.load(instrument,current(),"https://example.com/local2-fixture",
             "<html><body><h1>Real shared Android session</h1><button id='button' onclick=\"this.textContent='Clicked exactly once';this.disabled=true;\">Tap</button><input id='field'><input id='reset' oninput=\"this.value=''\"></body></html>","!!document.getElementById('button')");
     }

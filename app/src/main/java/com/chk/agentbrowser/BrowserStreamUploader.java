@@ -51,7 +51,7 @@ final class BrowserStreamUploader {
             InputStream bounded=new FilterInputStream(source){
                 long left=ticket.size;
                 @Override public int read()throws java.io.IOException{if(left<=0)return -1;int b=super.read();if(b>=0)left--;return b;}
-                @Override public int read(byte[] b,int off,int len)throws java.io.IOException{if(left<=0)return -1;int n=in.read(b,off,(int)Math.min(len,left));if(n>0)left-=n;return n;}
+                @Override public int read(byte[] b,int off,int len)throws java.io.IOException{if(len==0)return 0;if(left<=0)return -1;int n=in.read(b,off,(int)Math.min(len,left));if(n>0)left-=n;return n;}
             };
             Map<String,String> headers=new HashMap<>();headers.put("Cache-Control","no-store");
             headers.put("Content-Length",String.valueOf(ticket.size));headers.put("X-Content-Type-Options","nosniff");
@@ -110,7 +110,7 @@ final class BrowserStreamUploader {
                     void finish(boolean ok,String message){if(finished.compareAndSet(false,true)){revoke(web);cb.finish(ok,message);}}
                     @Override public void run(){
                         if(finished.get())return;
-                        if(!BrowserWebState.alive(web)||!page.equals(web.getUrl())||version!=BrowserWebState.documentVersion(web)){
+                        if(!BrowserWebState.alive(web)||web.getUrl()==null||!Uri.parse(page).getEncodedAuthority().equals(Uri.parse(web.getUrl()).getEncodedAuthority())||version!=BrowserWebState.documentVersion(web)){
                             finish(false,"Document remplacé pendant la sélection. Vérifier le site avant de recommencer.");return;
                         }
                         if(!cb.isActive()||SystemClock.elapsedRealtime()>=deadline){

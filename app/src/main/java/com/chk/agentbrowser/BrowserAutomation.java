@@ -55,7 +55,7 @@ final class BrowserAutomation {
             if(operation.equals("upload_status")){cb.finish(true,uploadStatus(context,args.getString("id")).toString());return;}
             destination(web,args);
             switch(operation){
-                case "upload_file":upload(context,web,args,cb);return;
+                case "upload_file":if(!args.has("id"))throw new Exception("id stable obligatoire pour une importation MCP.");upload(context,web,args,cb);return;
                 case "get_form":web.evaluateJavascript(BrowserScripts.getForm(),raw->cb.finish(true,decode(raw)));return;
                 case "get_page_status":web.evaluateJavascript(BrowserScripts.pageStatus(),raw->cb.finish(true,decode(raw)));return;
                 case "fill_form":case "verify_form":form(web,args,operation.equals("fill_form"),cb);return;
