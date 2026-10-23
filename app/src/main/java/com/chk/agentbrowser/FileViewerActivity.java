@@ -21,7 +21,15 @@ public final class FileViewerActivity extends Activity {
     private LinearLayout root,body,toolbar,pages;private TextView status,text;private EditText editor;private ScrollView scroll;
     private boolean alive,loaded,editing;private int offset,page=1,generation;private long byteOffset;private boolean hexMode;private String table="";private final ArrayDeque<Integer> previous=new ArrayDeque<>();
     private androidx.media3.exoplayer.ExoPlayer player;private Bitmap bitmap;
-    @Override public void onCreate(Bundle state){super.onCreate(state);alive=true;path=getIntent().getStringExtra("path");root=MobileUi.column(this);root.setBackgroundColor(0xfffafbff);setContentView(root);
+    @Override public void onCreate(Bundle state){super.onCreate(state);alive=true;path=getIntent().getStringExtra("path");
+        // A video is not a text document: bypass the generic reader and its raw JSON.
+        // Keep request_id for remote open-file acknowledgement in the portrait player.
+        if(path!=null&&new WorkspaceStore(this).mime(path).startsWith("video/")){
+            Intent watch=new Intent(this,MediaPreviewActivity.class).putExtra("path",path);
+            watch.putExtra("request_id",getIntent().getStringExtra("request_id"));
+            startActivity(watch);finish();return;
+        }
+        root=MobileUi.column(this);root.setBackgroundColor(0xfffafbff);setContentView(root);
         TextView back=label("‹ "+(path==null?"Fichier":new File(path).getName()),19);back.setTypeface(null,Typeface.BOLD);root.addView(back);back.setOnClickListener(v->onBackPressed());
         HorizontalScrollView tools=new HorizontalScrollView(this);toolbar=new LinearLayout(this);tools.addView(toolbar);root.addView(tools);button(toolbar,"Copier tout",()->copyAll());button(toolbar,"Rechercher",()->search());button(toolbar,"Modifier",()->edit());button(toolbar,"⋮",()->menu());
         status=label("Ouverture locale…",12);root.addView(status);scroll=new ScrollView(this);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));body=MobileUi.column(this);scroll.addView(body);
