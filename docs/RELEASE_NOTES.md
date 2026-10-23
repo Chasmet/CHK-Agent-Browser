@@ -1,3 +1,11 @@
+## Local 2 — reconnexion, service Android et diagnostics (23 octobre 2026)
+
+- Reconnexion agit aussi sur Local 2 ; réveil après changement de réseau et retour dans CHK, sans répéter une commande en cours.
+- Maintien du service idempotent, reprises espacées après arrêts rapprochés et arrêt de notification respecté pour les deux canaux.
+- Erreurs HTTP/DNS/TLS/délai distinctes, compteurs Local 2 séparés de Render, historique des commandes identifié par canal.
+- État du service, refus de démarrage et dernier motif de fin de processus signalé par Android, sans attribuer arbitrairement chaque destruction à Android.
+- La disponibilité du service MCP Windows derrière Funnel reste distincte de la présence Tailscale ; un HTTP 502 côté PC nécessite toujours un diagnostic PC.
+
 ## Render MCP — dossiers visibles et renommage de fiches (22 octobre 2026)
 
 - Corrige l’écart entre le chemin affiché « Documents » et le chemin de stockage « Categories/Documents ». Les commandes MCP existantes acceptent désormais `Documents/...`, `Images/...`, `Vidéos/...` et `Audio/...` en plus des chemins réels ; les anciens chemins et le contenu des dossiers sont conservés.

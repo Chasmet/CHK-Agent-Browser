@@ -87,6 +87,7 @@ public final class AgentClient {
         return instance;
     }
     public boolean isEnabled() { return settings.getBoolean("enabled", false); }
+    boolean serviceModeRunning(){return running;}
     boolean commandEnabled(ResultCallback callback) {
         return callback.isLocal2() ? Local2Client.get(app).enabled() : isEnabled();
     }

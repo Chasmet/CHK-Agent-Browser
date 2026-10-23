@@ -1,0 +1,47 @@
+name: Local 2 recovery on Android 15
+on:
+  push:
+    branches: [fix/local2-service-recovery-20261023]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK 36
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build and lint
+        run: |
+          gradle wrapper --gradle-version 8.11.1
+          ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest lintDebug
+      - name: KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Real foreground service, Local 2 and shared browser regression tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.Local2RecoveryIntegrationTest,com.chk.agentbrowser.Local2ProtocolTest,com.chk.agentbrowser.Local2SessionIntegrationTest
+      - name: Save test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local2-recovery-android15
+          path: app/build/reports/androidTests/
+          if-no-files-found: ignore
+          retention-days: 3

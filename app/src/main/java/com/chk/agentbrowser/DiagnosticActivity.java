@@ -30,8 +30,7 @@ public final class DiagnosticActivity extends Activity {
         report=findViewById(R.id.diagnostic_report);
         logView=findViewById(R.id.diagnostic_log);
         findViewById(R.id.diagnostic_reconnect).setOnClickListener(v->{
-            AgentService.ensureRunning(this);
-            agent.reconnect();
+            AgentService.reconnect(this);
             Toast.makeText(this,"Reconnexion demandée",Toast.LENGTH_SHORT).show();
             render();
         });
@@ -62,15 +61,17 @@ public final class DiagnosticActivity extends Activity {
             "\nMCP Render : "+(agent.isEnabled()?"activé":"désactivé")+
             "\nConnexion Render : "+agent.connectionStatus()+
             "\n\n"+Local2Client.get(this).diagnostic()+"\n"+
+            "\n"+ServiceDiagnostics.summary(this)+"\n"+
             "\nRéseau : "+network+
             "\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+
             "\nStockage Android : "+WorkspaceHealth.summary(this)+
             "\nAperçus : "+(agent.isPreviewAllowed()?"autorisés":"désactivés")+
             "\nBatterie : "+battery+
-            "\nDernière commande : "+agent.lastCommandStatus()+
-            "\n"+agent.telemetrySummary()+
-            "\nDernière erreur réseau : "+agent.lastErrorSummary()+
-            "\nRelais : Render /agentbrowser/* · protocole 2.1"+
+            "\nDernière commande Render (historique) : "+agent.lastCommandStatus()+
+            (agent.isEnabled()?"\nMesures Render :\n"+agent.telemetrySummary():"\nMesures Render : canal désactivé")+
+            "\nDernière erreur Render : "+agent.lastErrorSummary()+
+            "\nTrajet Local 2 : Android ↔ PC ; ChatGPT ↔ passerelle HTTPS ↔ PC"+
+            "\nTrajet Render : "+(agent.isEnabled()?"activé · /agentbrowser/* · protocole 2.1":"désactivé")+
             "\nSécurité : mots de passe, cookies, jetons et URL MCP privée masqués.";
     }
 
