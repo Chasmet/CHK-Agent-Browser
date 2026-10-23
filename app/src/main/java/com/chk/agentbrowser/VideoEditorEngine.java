@@ -222,12 +222,18 @@ public final class VideoEditorEngine {
             boolean correctAspect=ratio==0 || (displayWidth!=null&&displayHeight!=null&&Math.abs(Float.parseFloat(displayWidth)/Float.parseFloat(displayHeight)-ratio)<0.015f);
             JSONObject frames=inspectRenderedClips(context,file,project);
             boolean noBlackCuts=frames.getJSONArray("black_video_segments").length()==0;
-            boolean valid=picture&&(!(audioCount>0)||sound)&&correctDuration&&sourcesPresent&&correctAspect&&noBlackCuts&&frames.getInt("unverified_video_segments")==0;
+            // A rotated 1920x1080 stream is visually portrait but must not be
+            // reported as a native 1080x1920 export.
+            boolean requireNativePortrait=ratio>0f&&ratio<1f&&project.optBoolean("native_portrait",true);
+            boolean nativePortraitMatches=!requireNativePortrait||(width!=null&&height!=null
+                &&Integer.parseInt(width)<Integer.parseInt(height)&&Math.abs(rotation)%180==0);
+            boolean valid=picture&&(!(audioCount>0)||sound)&&correctDuration&&sourcesPresent&&correctAspect&&nativePortraitMatches&&noBlackCuts&&frames.getInt("unverified_video_segments")==0;
             result.put("duration_ms",durationMs).put("has_video",picture)
                 .put("has_audio",sound).put("width_px",displayWidth).put("height_px",displayHeight)
                 .put("encoded_width_px",width).put("encoded_height_px",height).put("rotation_degrees",rotation)
                 .put("duration_matches_project",correctDuration)
                 .put("aspect_ratio_matches_project",correctAspect)
+                .put("native_portrait_matches_project",nativePortraitMatches)
                 .put("verified_video_segments",frames.getInt("verified_video_segments"))
                 .put("unverified_video_segments",frames.getInt("unverified_video_segments"))
                 .put("black_video_segments",frames.getJSONArray("black_video_segments"))
@@ -619,7 +625,13 @@ public final class VideoEditorEngine {
             // Render beside the destination and preserve the previous completed file on failure.
             File partial=new File(destination.getParentFile(),".render-"+java.util.UUID.randomUUID()+".mp4");
             app=context;activeOutput=partial;finalOutput=destination;lastOutput=output;error="";percent=0;state="running";
-            transformer=new Transformer.Builder(context).setMuxerFactory(new androidx.media3.transformer.InAppMp4Muxer.Factory()).setMaxDelayBetweenMuxerSamplesMs(60000).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
+            // Encode portrait frames physically upright (1080x1920), not landscape
+            // H.264 with a 90-degree display matrix. The previous default confused
+            // clients that inspect raw track dimensions instead of rotation tags.
+            final float requestedAspect=ratio(project.optString("aspect_ratio","source"));
+            final boolean nativePortrait=requestedAspect>0f&&requestedAspect<1f
+                &&project.optBoolean("native_portrait",true);
+            transformer=new Transformer.Builder(context).setPortraitEncodingEnabled(nativePortrait).setMuxerFactory(new androidx.media3.transformer.InAppMp4Muxer.Factory()).setMaxDelayBetweenMuxerSamplesMs(60000).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                .addListener(new Transformer.Listener(){
                  @Override public void onCompleted(Composition c,ExportResult result){
                     if(ticket!=exportGeneration||!"running".equals(state))return;
@@ -630,6 +642,17 @@ public final class VideoEditorEngine {
                             if(!partial.isFile()||partial.length()<1000)
                                 throw new IllegalStateException("Rendu MP4 absent ou incomplet");
                             JSONObject renderedInfo=MediaInspection.infoFile(partial);
+                            if(nativePortrait){
+                                int encodedWidth=renderedInfo.optInt("width",-1);
+                                int encodedHeight=renderedInfo.optInt("height",-1);
+                                int rotationDegrees=0;
+                                try{rotationDegrees=Integer.parseInt(renderedInfo.optString("rotation","0"));}
+                                catch(NumberFormatException ignored){}
+                                if(encodedWidth<1||encodedHeight<=encodedWidth||Math.abs(rotationDegrees)%180!=0)
+                                    throw new IllegalStateException("Export 9:16 non natif : "
+                                        +encodedWidth+"x"+encodedHeight+", rotation "+rotationDegrees
+                                        +". Ancien MP4 conservé; vérifier le codec portrait Android.");
+                            }
                             long expected=0;JSONArray cuts=project.getJSONArray("clips");for(int k=0;k<cuts.length();k++){JSONObject cut=cuts.getJSONObject(k);expected+=Math.round(cut.optLong("duration_ms",10000)/cut.optDouble("speed",1));}
                             if(Math.abs(renderedInfo.optLong("duration_ms",-1)-expected)>500)throw new IllegalStateException("Durée MP4 incorrecte");
                             if(project.optJSONArray("audio")!=null&&project.getJSONArray("audio").length()>0&&!renderedInfo.optBoolean("has_audio"))throw new IllegalStateException("Piste audio absente du MP4");
