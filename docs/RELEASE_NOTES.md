@@ -1,3 +1,11 @@
+## Vidéos 9:16 — lecteur CHK en plein écran (23 octobre 2026)
+
+- Depuis Fichiers, un MP4 ouvre directement le lecteur vidéo dédié, et non plus l'afficheur texte de documents.
+- Vidéo verticale affichée sur toute la largeur en mode ajusté, sur fond noir, sans bandes latérales grises générées par l'ancien conteneur 260 dp.
+- Bouton « Remplir l’écran » / « Afficher toute la vidéo » pour choisir entre plein écran recadré et image complète.
+- Le JSON technique n'apparaît plus sous la vidéo ; les métas TXT restent consultables et copiables séparément.
+- Les commandes MCP `files_open` conservent la confirmation de visibilité du lecteur.
+
 ## Local 2 — reconnexion, service Android et diagnostics (23 octobre 2026)
 
 - Reconnexion agit aussi sur Local 2 ; réveil après changement de réseau et retour dans CHK, sans répéter une commande en cours.
