@@ -15,10 +15,42 @@ public final class MediaPreviewActivity extends Activity {
     private androidx.media3.exoplayer.ExoPlayer video;
     private Bitmap bitmap;
     private boolean closed;
-    @Override public void onCreate(Bundle state){super.onCreate(state);String path=getIntent().getStringExtra("path");LinearLayout root=MobileUi.column(this);root.setBackgroundColor(0xFF0D1423);setContentView(root);
-        TextView back=MobileUi.action(this,"‹ "+(path==null?"Fichier":path.substring(path.lastIndexOf('/')+1)));root.addView(back);back.setOnClickListener(v->finish());
+    private String openedPath;
+    @Override public void onCreate(Bundle state){super.onCreate(state);String path=getIntent().getStringExtra("path");openedPath=path;LinearLayout root=MobileUi.column(this);root.setBackgroundColor(0xFF0D1423);setContentView(root);
+        TextView back=MobileUi.action(this,"‹ "+(path==null?"Fichier":path.substring(path.lastIndexOf('/')+1)));back.setTextColor(Color.WHITE);root.addView(back);back.setOnClickListener(v->finish());
         try{WorkspaceStore s=new WorkspaceStore(this);String mime=s.mime(path);
-            if(mime.startsWith("video/")||mime.startsWith("audio/")){video=new androidx.media3.exoplayer.ExoPlayer.Builder(this).build();androidx.media3.ui.PlayerView view=new androidx.media3.ui.PlayerView(this);view.setPlayer(video);view.setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_WHEN_PLAYING);root.addView(view,new LinearLayout.LayoutParams(-1,0,1));video.setMediaItem(androidx.media3.common.MediaItem.fromUri(s.uri(path)));if(state!=null)video.seekTo(state.getInt("position",0));video.addListener(new androidx.media3.common.Player.Listener(){@Override public void onPlayerError(androidx.media3.common.PlaybackException error){new AgentDialog.Builder(MediaPreviewActivity.this).setTitle("Format indisponible").setMessage("Ce codec ne peut pas être lu sur ce téléphone. Tu peux ouvrir le fichier dans une autre application.").setNegativeButton("Fermer",null).setPositiveButton("Ouvrir ailleurs",(d,n)->{try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_VIEW).setDataAndType(s.uri(path),mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"Ouvrir le média"));}catch(Exception e){Toast.makeText(MediaPreviewActivity.this,"Aucune application compatible",Toast.LENGTH_LONG).show();}}).show();}});video.prepare();video.play();}
+            if(mime.startsWith("video/")||mime.startsWith("audio/")){
+                final boolean movingPicture=mime.startsWith("video/");
+                if(movingPicture){
+                    getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                    getWindow().setNavigationBarColor(Color.BLACK);
+                    root.setBackgroundColor(Color.BLACK);
+                }
+                video=new androidx.media3.exoplayer.ExoPlayer.Builder(this).build();
+                androidx.media3.ui.PlayerView view=new androidx.media3.ui.PlayerView(this);
+                view.setBackgroundColor(Color.BLACK);
+                view.setShutterBackgroundColor(Color.BLACK);
+                view.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
+                view.setKeepScreenOn(true);
+                view.setPlayer(video);
+                view.setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
+                root.addView(view,new LinearLayout.LayoutParams(-1,0,1));
+                if(movingPicture){
+                    TextView framing=MobileUi.action(this,"Remplir l’écran");
+                    framing.setTextColor(Color.WHITE);
+                    framing.setGravity(Gravity.CENTER);
+                    framing.setMinHeight(MobileUi.dp(this,44));
+                    root.addView(framing);
+                    final boolean[] fill={false};
+                    framing.setOnClickListener(v->{
+                        fill[0]=!fill[0];
+                        view.setResizeMode(fill[0]
+                            ?androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                            :androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
+                        framing.setText(fill[0]?"Afficher toute la vidéo":"Remplir l’écran");
+                    });
+                }
+                video.setMediaItem(androidx.media3.common.MediaItem.fromUri(s.uri(path)));if(state!=null)video.seekTo(state.getInt("position",0));video.addListener(new androidx.media3.common.Player.Listener(){@Override public void onPlayerError(androidx.media3.common.PlaybackException error){new AgentDialog.Builder(MediaPreviewActivity.this).setTitle("Format indisponible").setMessage("Ce codec ne peut pas être lu sur ce téléphone. Tu peux ouvrir le fichier dans une autre application.").setNegativeButton("Fermer",null).setPositiveButton("Ouvrir ailleurs",(d,n)->{try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_VIEW).setDataAndType(s.uri(path),mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"Ouvrir le média"));}catch(Exception e){Toast.makeText(MediaPreviewActivity.this,"Aucune application compatible",Toast.LENGTH_LONG).show();}}).show();}});video.prepare();video.play();}
             else{image=new ImageView(this);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setContentDescription("Aperçu de "+path);root.addView(image,new LinearLayout.LayoutParams(-1,0,1));TextView hint=MobileUi.text(this,"Pince l’image pour zoomer · Double touche pour réinitialiser",14,MobileUi.MUTED);root.addView(hint);
                 ScaleGestureDetector pinch=new ScaleGestureDetector(this,new ScaleGestureDetector.SimpleOnScaleGestureListener(){@Override public boolean onScale(ScaleGestureDetector d){float scale=Math.max(1f,Math.min(4f,image.getScaleX()*d.getScaleFactor()));image.setScaleX(scale);image.setScaleY(scale);return true;}});
                 GestureDetector gestures=new GestureDetector(this,new GestureDetector.SimpleOnGestureListener(){@Override public boolean onDown(MotionEvent e){return true;}@Override public boolean onDoubleTap(MotionEvent e){image.setScaleX(1);image.setScaleY(1);image.setTranslationX(0);image.setTranslationY(0);return true;}@Override public boolean onScroll(MotionEvent e1,MotionEvent e2,float x,float y){if(image.getScaleX()>1){image.setTranslationX(image.getTranslationX()-x);image.setTranslationY(image.getTranslationY()-y);}return true;}});
@@ -30,6 +62,7 @@ public final class MediaPreviewActivity extends Activity {
             }
         }catch(Exception e){root.addView(MobileUi.text(this,"Fichier inaccessible",18,MobileUi.TEXT));}
     }
+    @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus&&openedPath!=null)FileOpenRequests.visible(getIntent().getStringExtra("request_id"),openedPath);}
     @Override protected void onPause(){if(video!=null)video.pause();super.onPause();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(video!=null)out.putInt("position",(int)video.getCurrentPosition());}
     @Override protected void onDestroy(){closed=true;if(video!=null)video.release();if(image!=null)image.setImageDrawable(null);if(bitmap!=null)bitmap.recycle();super.onDestroy();}
