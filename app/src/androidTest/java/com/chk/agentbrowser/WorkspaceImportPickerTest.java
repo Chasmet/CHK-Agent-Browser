@@ -89,6 +89,11 @@ public final class WorkspaceImportPickerTest {
         fail("Expected "+text+" in "+actual.get());
     }
     private void search(String text)throws Exception {instrument.runOnMainSync(()->{try{((EditText)find("import_search")).setText(text);}catch(Exception e){throw new AssertionError(e);}});}
+    private void screenshot(String name)throws Exception {
+        instrument.waitForIdleSync();android.graphics.Bitmap image=instrument.getUiAutomation().takeScreenshot();
+        assertNotNull(image);File dir=new File(app.getExternalFilesDir(null),"picker-screens");assertTrue(dir.isDirectory()||dir.mkdirs());
+        try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}finally{image.recycle();}
+    }
     private void waitCallbacks(int value)throws Exception {long deadline=System.currentTimeMillis()+10000;while(callbacks.get()!=value&&System.currentTimeMillis()<deadline)Thread.sleep(50);assertEquals(value,callbacks.get());}
     private boolean contains(JSONArray rows,String path){for(int i=0;i<rows.length();i++)if(path.equals(rows.optJSONObject(i).optString("path")))return true;return false;}
 
@@ -127,9 +132,11 @@ public final class WorkspaceImportPickerTest {
         setup();try{
             String first=png("Premier.png"),second=png("Second.png");
             show(new String[]{"image/*"},true);click("import_file:"+fixture);
+            screenshot("01-folders-and-grid");
             click("import_file:"+first);assertEquals(0,callbacks.get());
             search("Second");click("import_file:"+second);waitText("import_selection","2 sélectionné(s)");
-            click("import_view");click("import_confirm");waitCallbacks(1);
+            screenshot("02-selection-and-search");
+            click("import_view");screenshot("03-list-selection");click("import_confirm");waitCallbacks(1);
             assertEquals(2,result.get().length);
             assertEquals(store.uri(first),result.get()[0]);assertEquals(store.uri(second),result.get()[1]);
             for(Uri uri:result.get())try(java.io.InputStream input=app.getContentResolver().openInputStream(uri)){assertEquals(137,input.read());}

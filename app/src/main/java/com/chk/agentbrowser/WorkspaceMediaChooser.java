@@ -112,6 +112,11 @@ public final class WorkspaceMediaChooser {
         importButton=button("Importer","import_confirm");importButton.setTextColor(0xffffffff);
         importButton.setBackground(MobileUi.bg(activity,0xff176cce));footer.addView(importButton,new LinearLayout.LayoutParams(0,dp(50),1));
         importButton.setOnClickListener(v->complete());updateSelection();
+        // Keep results and confirmation reachable when the search keyboard reduces the window.
+        root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+            boolean compact=b-t<dp(500);int visibility=compact?View.GONE:View.VISIBLE;
+            if(categories.getVisibility()!=visibility){categories.setVisibility(visibility);options.setVisibility(visibility);requested.setVisibility(visibility);}
+        });
         dialog.setOnCancelListener(d->cancel());
         dialog.setOnKeyListener((d,key,event)->{if(key==KeyEvent.KEYCODE_BACK&&event.getAction()==KeyEvent.ACTION_UP){back();return true;}return key==KeyEvent.KEYCODE_BACK;});
         search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}
