@@ -1,0 +1,51 @@
+name: Studio calques et aperçu rendu - Android 15
+on:
+  push:
+    branches: [feat/studio-layers-20261024]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  studio-touch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build and lint
+        run: |
+          gradle wrapper --gradle-version 8.11.1
+          ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest lintDebug
+      - name: KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Real Studio gestures, preview, audio and export
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: |
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.StudioLayersIntegrationTest,com.chk.agentbrowser.StudioTouchIntegrationTest,com.chk.agentbrowser.StudioImagesIntegrationTest
+            adb pull /data/local/tmp/chk-studio-layers app/build/studio-layers
+      - name: Save reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-layers-android15
+          path: |
+            app/build/reports/androidTests/
+            app/build/studio-layers/
+          if-no-files-found: ignore
+          retention-days: 3

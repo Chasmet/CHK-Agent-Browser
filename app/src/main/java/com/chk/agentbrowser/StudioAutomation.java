@@ -77,7 +77,7 @@ final class StudioAutomation {
     static JSONObject readProject(Context app,String path)throws Exception{
         WorkspaceStore store=new WorkspaceStore(app);JSONObject p=read(store.file(path));
         String parent=path.contains("/")?path.substring(0,path.lastIndexOf('/')+1):"";
-        for(String track:new String[]{"clips","audio"}){JSONArray items=p.optJSONArray(track);if(items!=null)for(int i=0;i<items.length();i++){
+        for(String track:new String[]{"clips","audio","layers"}){JSONArray items=p.optJSONArray(track);if(items!=null)for(int i=0;i<items.length();i++){
             JSONObject item=items.getJSONObject(i);String source=item.getString("path");
             if(!store.file(source).isFile()&&!parent.isEmpty())item.put("path",parent+source);
         }}
@@ -89,14 +89,14 @@ final class StudioAutomation {
             JSONObject values=op.getJSONObject("values");for(Iterator<String> it=values.keys();it.hasNext();){String key=it.next();
                 if(!Arrays.asList("name","output","aspect_ratio","aspect_mode","resolution","fps","mute_original").contains(key))throw new IOException("Réglage inconnu : "+key);p.put(key,values.get(key));}return;
         }
-        String track=op.optString("track","clips");if(!track.equals("clips")&&!track.equals("audio"))throw new IOException("Piste inconnue");
+        String track=op.optString("track","clips");if(!track.equals("clips")&&!track.equals("audio")&&!track.equals("layers"))throw new IOException("Piste inconnue");
         JSONArray items=p.optJSONArray(track);if(items==null){items=new JSONArray();p.put(track,items);}
         int index=op.optInt("index",items.length());
         if(type.equals("add")){if(index<0||index>items.length())throw new IOException("Index invalide");JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==index)out.put(new JSONObject(op.getJSONObject("clip").toString()));if(i<items.length())out.put(items.get(i));}p.put(track,out);}
         else{
             if(index<0||index>=items.length())throw new IOException("Plan absent");
             if(type.equals("update")){JSONObject c=items.getJSONObject(index),values=op.getJSONObject("values");for(Iterator<String> it=values.keys();it.hasNext();){String key=it.next();
-                if(!Arrays.asList("path","start_ms","duration_ms","volume","speed","mute","filter","fade_ms","rotation","text","grade_exposure","grade_exposure_end","grade_warmth","grade_warmth_end","grade_saturation","grade_saturation_end","zoom","zoom_end","pan_x","pan_x_end","pan_y","pan_y_end").contains(key))throw new IOException("Paramètre inconnu : "+key);c.put(key,values.get(key));}}
+                if(!Arrays.asList("offset_ms","x","y","scale","opacity","path","start_ms","duration_ms","volume","speed","mute","filter","fade_ms","rotation","text","grade_exposure","grade_exposure_end","grade_warmth","grade_warmth_end","grade_saturation","grade_saturation_end","zoom","zoom_end","pan_x","pan_x_end","pan_y","pan_y_end").contains(key))throw new IOException("Paramètre inconnu : "+key);c.put(key,values.get(key));}}
             else if(type.equals("delete"))items.remove(index);
             else if(type.equals("move")){int to=op.getInt("to");if(to<0||to>=items.length())throw new IOException("Destination invalide");Object moved=items.remove(index);JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==to)out.put(moved);if(i<items.length())out.put(items.get(i));}p.put(track,out);}
             else throw new IOException("Opération inconnue : "+type);
@@ -104,7 +104,7 @@ final class StudioAutomation {
     }
     private static JSONObject fingerprints(Context app,JSONObject p)throws Exception{
         JSONObject out=new JSONObject();WorkspaceStore store=new WorkspaceStore(app);
-        for(String track:new String[]{"clips","audio"}){JSONArray items=p.optJSONArray(track);if(items!=null)for(int i=0;i<items.length();i++){String path=items.getJSONObject(i).getString("path");if(!out.has(path))out.put(path,WorkspaceTransfer.hash(store.file(path)));}}return out;
+        for(String track:new String[]{"clips","audio","layers"}){JSONArray items=p.optJSONArray(track);if(items!=null)for(int i=0;i<items.length();i++){String path=items.getJSONObject(i).getString("path");if(!out.has(path))out.put(path,WorkspaceTransfer.hash(store.file(path)));}}return out;
     }
     private static File queueFile(Context app){return new File(app.getFilesDir(),"studio_export_queue.json");}
     private static void loadQueue(Context app)throws Exception{
@@ -146,15 +146,15 @@ final class StudioAutomation {
     static JSONObject capabilities()throws Exception{return new JSONObject().put("studio_protocol",2).put("engine","android").put("generative_video",false)
         .put("image_formats",new JSONArray("[\"png\",\"jpg\",\"jpeg\",\"webp\"]")).put("image_duration_ms_min",1000).put("image_duration_ms_max",60000).put("max_clips",100)
         .put("timeline_operations",new JSONArray("[\"add\",\"update\",\"move\",\"delete\",\"settings\"]"))
-        .put("tracks",new JSONArray("[\"clips\",\"audio\"]")).put("audio_layout","sequential").put("video_layout","sequential")
+        .put("tracks",new JSONArray("[\"clips\",\"audio\",\"layers\"]")).put("audio_layout","sequential").put("video_layout","sequential + 3 timed image/video PiP layers").put("max_layers",3).put("layer_parameters",new JSONObject().put("offset_ms","position dans le montage").put("scale","0.1..1, largeur relative").put("x / y","-1..1, centre=0").put("opacity","0..1").put("audio","muet"))
         .put("queue_actions",new JSONArray("[\"add\",\"status\",\"pause\",\"resume\"]"))
         .put("timeline_request",new JSONObject()
             .put("expected_revision","integer obligatoire, obtenu par video_editor_project_read")
             .put("operations",new JSONArray()
-                .put(new JSONObject().put("op","add").put("track","clips ou audio").put("index","entier facultatif ; insertion, sinon fin").put("clip",new JSONObject().put("path","chemin Android CHK").put("start_ms",0).put("duration_ms",8000)))
-                .put(new JSONObject().put("op","update").put("track","clips ou audio").put("index",0).put("values",new JSONObject().put("duration_ms",8000).put("filter","cinema").put("zoom",1).put("zoom_end",1.12)))
-                .put(new JSONObject().put("op","move").put("track","clips ou audio").put("index",0).put("to",1))
-                .put(new JSONObject().put("op","delete").put("track","clips ou audio").put("index",0))
+                .put(new JSONObject().put("op","add").put("track","clips, audio ou layers").put("index","entier facultatif ; insertion, sinon fin").put("clip",new JSONObject().put("path","chemin Android CHK").put("start_ms",0).put("duration_ms",8000)))
+                .put(new JSONObject().put("op","update").put("track","clips, audio ou layers").put("index",0).put("values",new JSONObject().put("duration_ms",8000).put("filter","cinema").put("zoom",1).put("zoom_end",1.12)))
+                .put(new JSONObject().put("op","move").put("track","clips, audio ou layers").put("index",0).put("to",1))
+                .put(new JSONObject().put("op","delete").put("track","clips, audio ou layers").put("index",0))
                 .put(new JSONObject().put("op","settings").put("values",new JSONObject().put("aspect_ratio","16:9").put("aspect_mode","fit").put("resolution",1080).put("fps",30).put("mute_original",true)))))
         .put("clip_parameters",new JSONObject().put("path","fichier Android existant").put("start_ms","entier >=0 ; 0 pour photo").put("duration_ms","photo 1000..60000 ; vidéo 500..1200000")
             .put("filter","aucun,noir,vintage,chaud,froid,cinema,contraste,nuit,vibrant,doux,desature,sepia")

@@ -1,3 +1,11 @@
+## Studio — calques et aperçu rendu sur Android (24 octobre 2026)
+
+- Jusqu’à trois incrustations image/vidéo au-dessus de la piste principale, avec début, durée, position, largeur relative et opacité. Sons des incrustations coupés. Les plans et sources restent intacts.
+- Piste Calques visible dans la timeline et réglages accessibles depuis la barre Outils. Import depuis les catégories CHK ou le téléphone. Ordre de superposition modifiable.
+- Aperçu rendu à la demande en 480p : utilise la même composition Media3 que l’export final pour montrer les calques et les effets. Progression, annulation, cache privé supprimable, retour au mode source après modification. Aucun export final n’est créé par ce bouton.
+- Le mode source est identifié clairement ; l’aperçu rendu nécessite un calcul local et n’est pas un effet instantané. Le contrôle MCP accepte la piste layers et ses réglages.
+- Validation des bornes des calques, protection de leurs sources contre l’écrasement, empreintes incluses dans les instantanés de file d’export et chemins relatifs inclus à l’import des projets JSON.
+
 ## Studio tactile — montage direct sur téléphone (24 octobre 2026)
 
 - Timeline avec curseur central fixe, défilement au doigt, zoom par pincement/boutons et double appui sur la règle pour cadrer le projet. Miniatures vidéo échantillonnées dans le plan, pas une image répétée unique.
