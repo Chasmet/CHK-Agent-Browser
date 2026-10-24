@@ -96,7 +96,7 @@ final class StudioAutomation {
         else{
             if(index<0||index>=items.length())throw new IOException("Plan absent");
             if(type.equals("update")){JSONObject c=items.getJSONObject(index),values=op.getJSONObject("values");for(Iterator<String> it=values.keys();it.hasNext();){String key=it.next();
-                if(!Arrays.asList("offset_ms","x","y","scale","opacity","path","start_ms","duration_ms","volume","speed","mute","filter","fade_ms","rotation","text","grade_exposure","grade_exposure_end","grade_warmth","grade_warmth_end","grade_saturation","grade_saturation_end","zoom","zoom_end","pan_x","pan_x_end","pan_y","pan_y_end").contains(key))throw new IOException("Paramètre inconnu : "+key);c.put(key,values.get(key));}}
+                if(!(track.equals("layers")?Arrays.asList("path","start_ms","duration_ms","offset_ms","x","y","scale","opacity"):Arrays.asList("path","start_ms","duration_ms","volume","speed","mute","filter","fade_ms","rotation","text","grade_exposure","grade_exposure_end","grade_warmth","grade_warmth_end","grade_saturation","grade_saturation_end","zoom","zoom_end","pan_x","pan_x_end","pan_y","pan_y_end")).contains(key))throw new IOException("Paramètre inconnu : "+key);c.put(key,values.get(key));}}
             else if(type.equals("delete"))items.remove(index);
             else if(type.equals("move")){int to=op.getInt("to");if(to<0||to>=items.length())throw new IOException("Destination invalide");Object moved=items.remove(index);JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==to)out.put(moved);if(i<items.length())out.put(items.get(i));}p.put(track,out);}
             else throw new IOException("Opération inconnue : "+type);
@@ -164,7 +164,7 @@ final class StudioAutomation {
             .put("zoom / zoom_end","1..4").put("pan_x / pan_x_end / pan_y / pan_y_end","-1..1"))
         .put("queue_request",new JSONObject().put("request_id","identifiant stable, lettres/chiffres/tirets/soulignés, 1..80 caractères").put("projects",new JSONArray().put(new JSONObject().put("path","dossier/montage.json")).put(new JSONObject().put("project","objet projet complet, alternative à path"))))
         .put("verification","completed et verification.valid=true ; media_frame(path,time_ms) pour voir les images du MP4")
-        .put("preview","sources et textes ; effets calculés à l’export");}
+        .put("preview","mode source ; aperçu rendu 480p à la demande dans Studio, même composition que l’export");}
     static JSONObject read(File file)throws Exception{
         try(FileInputStream in=new AtomicFile(file).openRead()){
             ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){if(out.size()+n>6000000)throw new IOException("Fichier Studio trop volumineux");out.write(b,0,n);}return new JSONObject(out.toString("UTF-8"));}

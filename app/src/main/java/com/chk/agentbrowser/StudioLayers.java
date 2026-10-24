@@ -23,7 +23,7 @@ final class StudioLayers {
         JSONArray layers=items(project);if(layers.length()>MAX)throw new IllegalArgumentException("3 calques maximum");
         WorkspaceStore store=new WorkspaceStore(context);File output=store.file(project.getString("output"));
         for(int i=0;i<layers.length();i++){
-            JSONObject layer=layers.getJSONObject(i);String path=layer.getString("path");File source=store.file(path);
+            JSONObject layer=layers.getJSONObject(i);for(Iterator<String> keys=layer.keys();keys.hasNext();){String key=keys.next();if(!Arrays.asList("path","start_ms","duration_ms","offset_ms","x","y","scale","opacity").contains(key))throw new IllegalArgumentException("Paramètre de calque non pris en charge : "+key);}String path=layer.getString("path");File source=store.file(path);
             if(!source.isFile()||source.length()==0)throw new IllegalArgumentException("Calque introuvable : "+path);
             if(source.equals(output))throw new IllegalArgumentException("La sortie écraserait un calque source");
             JSONObject info=MediaInspection.info(context,path);boolean image=info.optBoolean("image");
