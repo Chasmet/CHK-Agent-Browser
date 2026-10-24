@@ -162,8 +162,19 @@ public final class WorkspaceImportPickerTest {
     @Test public void selectedPrivatePhotoActuallyReachesWebsiteInput()throws Exception {
         setup();try{
             String path=png("Import_reel.png");launch();Field current=MainActivity.class.getDeclaredField("current");current.setAccessible(true);WebView web=(WebView)current.get(activity);
-            WebFixture.load(instrument,web,"https://example.com/picker-test","<input id='media' type='file' accept='image/png'><output id='proof'></output><script>media.onchange=async()=>{const f=media.files[0];const b=new Uint8Array(await f.arrayBuffer());proof.textContent=f.name+':'+b[0]+':'+b.length;};</script>","!!document.querySelector('#media')");
-            instrument.runOnMainSync(()->web.evaluateJavascript("document.querySelector('#media').click()",null));
+            WebFixture.load(instrument,web,"https://example.com/picker-test","<meta name='viewport' content='width=device-width,initial-scale=1'><input id='media' type='file' accept='image/png' style='display:block;width:240px;height:80px;margin:30px'><output id='proof'></output><script>media.onchange=async()=>{const f=media.files[0];const b=new Uint8Array(await f.arrayBuffer());proof.textContent=f.name+':'+b[0]+':'+b.length;};</script>","!!document.querySelector('#media')");
+            CountDownLatch positionDone=new CountDownLatch(1);AtomicReference<String> position=new AtomicReference<>();
+            instrument.runOnMainSync(()->web.evaluateJavascript("JSON.stringify((()=>{const r=document.querySelector('#media').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:innerWidth,height:innerHeight};})())",raw->{position.set(raw);positionDone.countDown();}));
+            assertTrue(positionDone.await(5,TimeUnit.SECONDS));JSONObject target=new JSONObject(new JSONArray("["+position.get()+"]").getString(0));
+            instrument.runOnMainSync(()->{try{
+                float x=(float)(target.getDouble("x")*web.getWidth()/target.getDouble("width"));
+                float y=(float)(target.getDouble("y")*web.getHeight()/target.getDouble("height"));
+                long now=android.os.SystemClock.uptimeMillis();
+                android.view.MotionEvent down=android.view.MotionEvent.obtain(now,now,android.view.MotionEvent.ACTION_DOWN,x,y,0);
+                android.view.MotionEvent up=android.view.MotionEvent.obtain(now,now+80,android.view.MotionEvent.ACTION_UP,x,y,0);
+                down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+                try{web.dispatchTouchEvent(down);web.dispatchTouchEvent(up);}finally{down.recycle();up.recycle();}
+            }catch(Exception e){throw new AssertionError(e);}});
             Field active=MainActivity.class.getDeclaredField("mediaChooser");active.setAccessible(true);
             long deadline=System.currentTimeMillis()+12000;
             while(picker==null&&System.currentTimeMillis()<deadline){picker=(WorkspaceMediaChooser)active.get(activity);Thread.sleep(50);}

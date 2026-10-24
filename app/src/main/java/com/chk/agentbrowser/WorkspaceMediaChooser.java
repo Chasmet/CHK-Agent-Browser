@@ -146,7 +146,8 @@ public final class WorkspaceMediaChooser {
         history.push(new String[]{category,folder,search.getText().toString()});category=key;folder=path;search.setText("");refresh();}
     private void back(){if(busy)return;if(history.isEmpty()){cancel();return;}String[] previous=history.pop();category=previous[0];folder=previous[1];search.setText(previous[2]);refresh();}
     private void refresh(){
-        if(!alive())return;final int ticket=++generation;final String key=category,path=folder,q=search.getText().toString(),sort=order;
+        if(!alive()||busy)return;if(pendingSearch!=null){main.removeCallbacks(pendingSearch);pendingSearch=null;}
+        status.setOnClickListener(null);final int ticket=++generation;final String key=category,path=folder,q=search.getText().toString(),sort=order;
         final boolean all=showAll.isChecked();status.setText("Chargement…");adapter.rows.clear();adapter.notifyDataSetChanged();
         breadcrumb.setText("Accueil"+(key.equals("all")?"":" › "+WorkspaceImportIndex.label(key))+(path.isEmpty()?"":" › "+WorkspaceImportIndex.visiblePath(path)));
         IO.execute(()->{try{
@@ -179,7 +180,8 @@ public final class WorkspaceMediaChooser {
         selectionText.setContentDescription("Sélection : "+TextUtils.join(", ",selected));
     }
     private void complete(){
-        if(busy||finished||selected.isEmpty())return;busy=true;updateSelection();
+        if(busy||finished||selected.isEmpty())return;busy=true;generation++;
+        if(pendingSearch!=null){main.removeCallbacks(pendingSearch);pendingSearch=null;}updateSelection();
         List<String> paths=new ArrayList<>(selected);
         IO.execute(()->{try{
             WorkspaceStore store=new WorkspaceStore(activity.getApplicationContext());Uri[] uris=new Uri[paths.size()];
