@@ -53,6 +53,7 @@ public final class StudioTouchIntegrationTest {
         invoke("video_editor_project_save",new JSONObject().put("project",project()));
         activity=(VideoEditorActivity)inst.startActivitySync(new Intent(app,VideoEditorActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         await(()->field("project")!=null&&activity.getWindow().getDecorView().findViewWithTag("studio_tool_Vitesse")!=null);
+        await(()->((androidx.media3.exoplayer.ExoPlayer)field("player")).getPlaybackState()==androidx.media3.common.Player.STATE_READY);
     }
     private Object field(String name)throws Exception {Field f=VideoEditorActivity.class.getDeclaredField(name);f.setAccessible(true);return f.get(activity);}
     private interface Check {boolean get()throws Exception;}
@@ -89,10 +90,17 @@ public final class StudioTouchIntegrationTest {
         JSONObject saved=invoke("video_editor_project_read",new JSONObject());assertTrue(saved.getJSONArray("clips").getJSONObject(0).getLong("duration_ms")<3500);
         int revision=saved.getInt("revision");JSONObject undo=invoke("video_editor_history",new JSONObject().put("expected_revision",revision));assertEquals(3,undo.getJSONObject("project").getJSONArray("clips").length());
     }
+    @Test public void longPressReordersTheActualProject()throws Exception {
+        launch();call("seekPreview",new Class<?>[]{long.class},4000L);StudioTimeline t=timeline();float d=app.getResources().getDisplayMetrics().density;float center=t.getWidth()/2f;long now=SystemClock.uptimeMillis();
+        inst.runOnMainSync(()->{MotionEvent e=MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,center-85*d,65*d,0);t.onTouchEvent(e);e.recycle();});Thread.sleep(550);
+        inst.runOnMainSync(()->{long at=SystemClock.uptimeMillis();MotionEvent move=MotionEvent.obtain(now,at,MotionEvent.ACTION_MOVE,center+80*d,65*d,0);MotionEvent up=MotionEvent.obtain(now,at+30,MotionEvent.ACTION_UP,center+80*d,65*d,0);t.onTouchEvent(move);t.onTouchEvent(up);move.recycle();up.recycle();});
+        await(()->!((Boolean)field("saving"))&&"Titre du plan".equals(((JSONObject)field("project")).getJSONArray("clips").getJSONObject(0).optString("text")));
+        JSONObject saved=invoke("video_editor_project_read",new JSONObject());assertEquals("Titre du plan",saved.getJSONArray("clips").getJSONObject(0).getString("text"));
+    }
     @Test public void boundsUseSourceTimeAndPhotoLimitsAndDuplicationIsAdjacent()throws Exception {
-        JSONObject c=new JSONObject().put("path",video).put("start_ms",1000).put("duration_ms",2000).put("speed",2);
+        JSONObject c=new JSONObject().put("path",video).put("start_ms",1000).put("duration_ms",2000).put("speed",2).put("fade_ms",500);
         JSONObject left=StudioEdits.trimmed(c,true,250,5000);assertEquals(1500,left.getLong("start_ms"));assertEquals(1500,left.getLong("duration_ms"));
-        assertEquals(500,StudioEdits.trimmed(c,false,-99999,5000).getLong("duration_ms"));assertEquals(4000,StudioEdits.trimmed(c,false,99999,5000).getLong("duration_ms"));
+        assertEquals(500,StudioEdits.trimmed(c,false,-99999,5000).getLong("duration_ms"));assertEquals(166,StudioEdits.trimmed(c,false,-99999,5000).getLong("fade_ms"));assertEquals(4000,StudioEdits.trimmed(c,false,99999,5000).getLong("duration_ms"));
         JSONObject p=new JSONObject().put("path",photo).put("duration_ms",4000);assertEquals(60000,StudioEdits.trimmed(p,false,999999,60000).getLong("duration_ms"));assertEquals(1000,StudioEdits.trimmed(p,true,999999,60000).getLong("duration_ms"));
         JSONObject project=project();project.getJSONArray("clips").getJSONObject(0).put("text","Original");StudioEdits.duplicate(project,0);
         assertEquals("Original",project.getJSONArray("clips").getJSONObject(1).getString("text"));project.getJSONArray("clips").getJSONObject(1).put("text","Copie");assertEquals("Original",project.getJSONArray("clips").getJSONObject(0).getString("text"));
@@ -116,11 +124,25 @@ public final class StudioTouchIntegrationTest {
         android.view.accessibility.AccessibilityNodeInfo root=inst.getUiAutomation().getRootInActiveWindow();assertNotNull(root);List<android.view.accessibility.AccessibilityNodeInfo> cancel=root.findAccessibilityNodeInfosByText("Annuler");assertFalse(cancel.isEmpty());cancel.get(0).performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK);Thread.sleep(200);
         assertEquals(before.getInt("revision"),invoke("video_editor_project_read",new JSONObject()).getInt("revision"));
     }
+    private double rms(String path)throws Exception {
+        android.media.MediaExtractor extractor=new android.media.MediaExtractor();android.media.MediaCodec decoder=null;
+        try{extractor.setDataSource(store.file(path).getAbsolutePath());int track=-1;android.media.MediaFormat format=null;
+            for(int i=0;i<extractor.getTrackCount();i++)if(extractor.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME).startsWith("audio/")){track=i;format=extractor.getTrackFormat(i);break;}
+            assertTrue("Audio track required",track>=0);extractor.selectTrack(track);decoder=android.media.MediaCodec.createDecoderByType(format.getString(android.media.MediaFormat.KEY_MIME));decoder.configure(format,null,null,0);decoder.start();
+            boolean inputEnded=false,ended=false;double energy=0;long samples=0;android.media.MediaCodec.BufferInfo info=new android.media.MediaCodec.BufferInfo();long until=SystemClock.elapsedRealtime()+15000;
+            while(!ended&&SystemClock.elapsedRealtime()<until){
+                if(!inputEnded){int n=decoder.dequeueInputBuffer(1000);if(n>=0){ByteBuffer buffer=decoder.getInputBuffer(n);int count=extractor.readSampleData(buffer,0);long time=extractor.getSampleTime();if(count<0||time>=1000000){decoder.queueInputBuffer(n,0,0,0,android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM);inputEnded=true;}else{decoder.queueInputBuffer(n,0,count,time,0);extractor.advance();}}}
+                int n=decoder.dequeueOutputBuffer(info,1000);if(n>=0){ByteBuffer buffer=decoder.getOutputBuffer(n).order(ByteOrder.nativeOrder());buffer.position(info.offset);buffer.limit(info.offset+info.size);while(buffer.remaining()>=2){double v=buffer.getShort()/32768.0;energy+=v*v;samples++;}ended=(info.flags&android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0;decoder.releaseOutputBuffer(n,false);}
+            }
+            assertTrue("Decoded PCM required",samples>1000);return Math.sqrt(energy/samples);
+        }finally{if(decoder!=null){decoder.stop();decoder.release();}extractor.release();}
+    }
     @Test public void reducedVolumeCompositionProducesARealMp4()throws Exception {
         JSONObject p=project();p.put("clips",new JSONArray().put(new JSONObject().put("path",video).put("duration_ms",1000).put("volume",.25))).put("audio",new JSONArray()).put("mute_original",false);
         invoke("video_editor_project_save",new JSONObject().put("project",p));invoke("video_editor_export",new JSONObject());
         long until=SystemClock.elapsedRealtime()+120000;JSONObject state;
         do{Thread.sleep(200);state=invoke("video_editor_status",new JSONObject());if(state.getString("state").equals("failed"))fail(state.toString());}while(!state.getString("state").equals("completed")&&SystemClock.elapsedRealtime()<until);
         assertEquals(state.toString(),"completed",state.getString("state"));JSONObject proof=invoke("video_editor_verify_output",new JSONObject());assertTrue(proof.toString(),proof.getBoolean("valid"));assertTrue(proof.getBoolean("has_audio"));
+        double source=rms(video),rendered=rms(p.getString("output"));assertTrue("Source must contain sound",source>.001);assertTrue("Actual MP4 amplitude must be attenuated: "+rendered/source,rendered/source>.12&&rendered/source<.40);
     }
 }

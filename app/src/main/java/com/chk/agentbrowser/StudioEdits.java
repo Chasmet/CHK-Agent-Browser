@@ -15,7 +15,7 @@ final class StudioEdits {
         if(photo){length=Math.max(minimum,Math.min(60000,length+(left?-delta:delta)));begin=0;}
         else if(left){long change=Math.max(-begin,Math.min(length-minimum,delta));begin+=change;length-=change;}
         else length=Math.max(minimum,Math.min(Math.max(minimum,sourceLength-begin),length+delta));
-        out.put("start_ms",begin).put("duration_ms",length);return out;
+        out.put("start_ms",begin).put("duration_ms",length);clampFade(out);return out;
     }
     /** Sequential soundtrack follows project end, without changing or deleting any source. */
     static void fitAudio(JSONObject project)throws Exception {
@@ -27,6 +27,8 @@ final class StudioEdits {
         }
         project.put("audio",out);
     }
+    static void clampFade(JSONObject clip)throws Exception {if(clip.has("fade_ms"))clip.put("fade_ms",Math.min(clip.optLong("fade_ms"),Math.min(1500,clip.optLong("duration_ms")/3)));}
+    static void conform(JSONObject project)throws Exception {fitAudio(project);JSONArray clips=project.optJSONArray("clips");if(clips!=null)for(int i=0;i<clips.length();i++)clampFade(clips.getJSONObject(i));}
     static void duplicate(JSONObject project,int index)throws Exception {
         JSONArray clips=project.getJSONArray("clips"),out=new JSONArray();
         for(int i=0;i<clips.length();i++){out.put(clips.get(i));if(i==index)out.put(new JSONObject(clips.getJSONObject(i).toString()));}

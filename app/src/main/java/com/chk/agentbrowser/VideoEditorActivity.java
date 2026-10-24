@@ -130,7 +130,7 @@ public final class VideoEditorActivity extends Activity {
         timeline.zoomBy(restoredZoom);
         timeline.setListener(new StudioTimeline.Listener(){
             public void move(int from,int to){if(saving||importing)return;try{remember();JSONArray items=clips();Object item=items.remove(from);JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==to)out.put(item);if(i<items.length())out.put(items.get(i));}project.put("clips",out);selected=to;editSeek=start(to);save();}catch(Exception ex){toast(ex.getMessage());}}
-            public void seek(long position,int index){selected=index;selectedAudio=-1;pausePreview();seekPreview(position);timeline.audioSelection(-1);updateSelectionTools();clock.setText(time(position)+" / "+time(total()));}
+            public void seek(long position,int index){selected=index;if(selectedAudio>=0)toolPage="Éditer";selectedAudio=-1;pausePreview();seekPreview(position);timeline.audioSelection(-1);updateSelectionTools();clock.setText(time(position)+" / "+time(total()));}
             public void scrubbing(boolean active){scrubbing=active;if(active)pausePreview();}
             public void trim(int index,JSONObject value){if(!editable())return;try{remember();clips().put(index,value);selected=index;save();}catch(Exception e){toast(e.getMessage());}}
             public void audio(int index){selectedAudio=index;pausePreview();toolPage="Audio";updateSelectionTools();}
@@ -230,7 +230,7 @@ public final class VideoEditorActivity extends Activity {
         if(saving){saveQueued=true;return;}
         String fallback=undo.peekLast();JSONObject snapshot;
         try{snapshot=new JSONObject(project.toString());}catch(Exception e){toast("Projet illisible");return;}
-        try{StudioEdits.fitAudio(project);snapshot=new JSONObject(project.toString());}catch(Exception e){toast(e.getMessage());return;}
+        try{StudioEdits.conform(project);snapshot=new JSONObject(project.toString());}catch(Exception e){toast(e.getMessage());return;}
         saving=true;saveQueued=false;
         engine.command(this,"video_editor_project_save",new JSONObjectSafe("project",snapshot).withRevision(revision),(ok,res)->ui.post(()->{
             saving=false;if(!alive)return;
