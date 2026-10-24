@@ -60,6 +60,8 @@ public class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback fullScreenCallback;
     private final Runnable connectionTick=new Runnable(){public void run(){if(!isFinishing()&&!isDestroyed()){TextView badge=findViewById(R.id.connection_badge);badge.setText(agentClient.shortConnectionStatus());badge.setVisibility(agentClient.isEnabled()||Local2Client.get(MainActivity.this).enabled()?View.VISIBLE:View.GONE);transferHandler.postDelayed(this,3000);}}};
     private ValueCallback<Uri[]> fileCallback;
+    private WorkspaceMediaChooser mediaChooser;
+    private WebView mediaChooserWeb;
     private AgentClient agentClient;
     private Uri[] pendingUploadUris;
     private AgentClient.ResultCallback pendingUploadCallback;
@@ -193,6 +195,7 @@ public class MainActivity extends Activity {
                 toast("Lien non autorisé");return true;
             }
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap favicon){
+                if(mediaChooserWeb==v)cancelMediaChooser();
                 BrowserWebState.remember(v,url);
                 // Chromium can deliver a main-frame HTTP error before page-start.
                 // Keep that error for this URL; clear old errors before loadUrl.
@@ -259,6 +262,7 @@ public class MainActivity extends Activity {
             @Override public boolean onShowFileChooser(WebView v,ValueCallback<Uri[]> callback,FileChooserParams params){
                 if(BrowserNativeUploader.offer(v,callback,params))return true;
                 if(deliverPendingUpload(v,callback))return true;
+                cancelMediaChooser();
                 if(fileCallback!=null)fileCallback.onReceiveValue(null);
                 fileCallback=callback;
                 Runnable androidPicker=()->{
@@ -269,7 +273,8 @@ public class MainActivity extends Activity {
                     }
                 };
                 try{
-                    WorkspaceMediaChooser.show(MainActivity.this,params,uris->{
+                    mediaChooserWeb=v;
+                    mediaChooser=WorkspaceMediaChooser.show(MainActivity.this,params,uris->{
                         if(fileCallback==callback){fileCallback=null;callback.onReceiveValue(uris);}
                     },androidPicker);
                     return true;
@@ -310,7 +315,12 @@ public class MainActivity extends Activity {
         pageErrorUrls.put(web,url);
         if(web==current){progress.setVisibility(View.GONE);if(home!=null)home.revealWeb();updatePageError();}
     }
+    private void cancelMediaChooser(){
+        WorkspaceMediaChooser old=mediaChooser;mediaChooser=null;mediaChooserWeb=null;
+        if(old!=null)old.cancel();
+    }
     private void beginNavigation(WebView web){
+        if(mediaChooserWeb==web)cancelMediaChooser();
         Runnable pending=navigationCancels.remove(web);if(pending!=null)pending.run();
         clearPageError(web);
     }
@@ -1076,7 +1086,8 @@ public class MainActivity extends Activity {
         if(home!=null)home.destroy();if(workspace!=null)workspace.destroy();hideFullScreenVideo();
         for(WebView v:tabs){if(v.getParent() instanceof ViewGroup)((ViewGroup)v.getParent()).removeView(v);if(!retained){BrowserWebState.close(v);v.destroy();}}
         tabs.clear();
-        if(fileCallback!=null)fileCallback.onReceiveValue(null);
+        cancelMediaChooser();
+        if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}
         if(pendingUploadCallback!=null)pendingUploadCallback.finish(false,"Navigateur fermé pendant l'importation.");
         pendingUploadUris=null;pendingUploadCallback=null;pendingUploadWeb=null;
         transferHandler.removeCallbacksAndMessages(null);

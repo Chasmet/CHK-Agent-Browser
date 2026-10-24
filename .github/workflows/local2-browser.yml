@@ -1,7 +1,7 @@
 name: Local 2 browser uploads on Android 15
 on:
   push:
-    branches: [feat/local2-web-upload-20261023]
+    branches: [feat/local2-web-upload-20261023, feat/import-picker-20261024]
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,12 +36,16 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.Local2BrowserAutomationTest,com.chk.agentbrowser.BrowserMediaUploadTest,com.chk.agentbrowser.Local2SessionIntegrationTest
+          script: |
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.WorkspaceImportPickerTest,com.chk.agentbrowser.Local2BrowserAutomationTest,com.chk.agentbrowser.BrowserMediaUploadTest,com.chk.agentbrowser.Local2SessionIntegrationTest
+            adb pull /data/local/tmp/chk-picker-screens app/build/picker-screens
       - name: Save test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: local2-browser-upload-android15
-          path: app/build/reports/androidTests/
+          path: |
+            app/build/reports/androidTests/
+            app/build/picker-screens/
           if-no-files-found: ignore
           retention-days: 3

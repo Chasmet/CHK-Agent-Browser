@@ -1,3 +1,11 @@
+## Importation — mêmes dossiers que Fichiers (24 octobre 2026)
+
+- Nouveau sélecteur CHK plein écran : Images, Vidéos, Audio, Documents et Récents utilisent les catégories et dossiers du gestionnaire Fichiers, sans déplacement des médias.
+- Miniatures, grille/liste, recherche dans les sous-dossiers, tri et sélection multiple conservée entre dossiers. Bouton Importer explicite et liste de sélection consultable.
+- Les formats refusés par le site restent visibles et expliqués ; filtre optionnel. Formats acceptés MIME/extensions/valeurs séparées par virgules corrigés. Les fichiers au-delà de la première page sont accessibles.
+- Lecture du catalogue et vérification des fichiers en arrière-plan. Fichiers déplacés, annulation et changement de page n’annoncent aucun succès.
+- Fichiers Android reste disponible pour Photos, Téléchargements et les fournisseurs autorisés. Aucun changement de serveur MCP, de signature ou de données utilisateur.
+
 ## Importation web Local 2, session Android et formulaires vérifiés
 
 - Importer les fichiers CHK dans les sites depuis le MCP Windows existant, y compris 1.3.0, via `desktop` / `tool:browser`. Découverte par `files_browser_capabilities`.
