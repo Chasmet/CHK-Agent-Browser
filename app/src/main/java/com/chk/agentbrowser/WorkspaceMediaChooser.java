@@ -66,18 +66,20 @@ public final class WorkspaceMediaChooser {
                                   Selection completion,Runnable openAndroid){
         this.activity=activity;this.params=params;this.completion=completion;this.openAndroid=openAndroid;
         types=WorkspaceImportIndex.types(params.getAcceptTypes());
-        dialog=AgentDialog.watch(new Dialog(activity));dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog=AgentDialog.watch(new Dialog(activity,android.R.style.Theme_Material_Light_NoActionBar));dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         root=MobileUi.column(activity);root.setPadding(dp(10),dp(8),dp(10),dp(8));
         root.setBackgroundColor(0xfff7f9fc);root.setTag("import_picker");
         dialog.setContentView(root);
         LinearLayout title=row();root.addView(title);
         TextView back=button("‹ Retour","import_back");title.addView(back);back.setOnClickListener(v->back());
-        TextView heading=text("Importer un fichier",19,0xff18243a);title.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        TextView heading=text("Importer",20,0xff18243a);title.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
         TextView close=button("Fermer","import_cancel");title.addView(close);close.setOnClickListener(v->cancel());
         String format=types.isEmpty()||types.contains("*/*")?"Tous les formats":TextUtils.join(", ",types);
         TextView requested=text((multiple()?"Sélection multiple":"Un fichier")+" · Formats du site : "+format,12,0xff566274);
         requested.setMaxLines(2);root.addView(requested);
         search=new EditText(activity);search.setSingleLine(true);search.setTextSize(15);
+        search.setTextColor(0xff202d42);search.setHintTextColor(0xff68768a);
+        search.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xff8b9bb1));
         search.setHint("Rechercher un fichier ou un dossier");search.setTag("import_search");
         search.setContentDescription("Rechercher dans les fichiers CHK");root.addView(search,new LinearLayout.LayoutParams(-1,dp(48)));
         HorizontalScrollView categories=new HorizontalScrollView(activity);categories.setHorizontalScrollBarEnabled(false);
@@ -128,7 +130,8 @@ public final class WorkspaceMediaChooser {
                             Selection selection,Runnable openAndroid)throws IOException{
         WorkspaceMediaChooser picker=new WorkspaceMediaChooser(activity,params,selection,openAndroid);
         picker.dialog.show();
-        Window window=picker.dialog.getWindow();if(window!=null){window.setLayout(-1,-1);
+        Window window=picker.dialog.getWindow();if(window!=null){
+            window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0xfff7f9fc));window.setLayout(-1,-1);
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE|WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);}
         IO.execute(()->{String first="all";try{first=WorkspaceImportIndex.initialCategory(new WorkspaceStore(activity),picker.types);}catch(Exception ignored){}
             String initial=first;picker.main.post(()->{if(!picker.finished){picker.category=initial;picker.refresh();}});});
