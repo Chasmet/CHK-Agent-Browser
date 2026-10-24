@@ -13,6 +13,29 @@ Découvrir les possibilités avec `android_command` :
 {"action":"android_action","args":{"action":"files_browser_capabilities","args":{}}}
 ```
 
+## Mise à jour APK — commandes Local 2 directes (24 octobre 2026)
+
+Une fois l'APK contenant le correctif installé, Local 2 peut importer une vidéo avec la commande native ci-dessous, sans nouveau connecteur Windows. Le champ doit être observé sur YouTube Studio avant d'envoyer cette commande :
+
+```json
+{
+  "action": "android_action",
+  "args": {
+    "action": "browser_upload_workspace_file",
+    "args": {
+      "id": "chk-dlb-20261024-short01-upload-v1",
+      "expected_host": "studio.youtube.com",
+      "selector": "input[type=file]",
+      "files": [
+        {"workspace_path": "Categories/Videos/dans la brume/Video_01/Video_01.mp4"}
+      ]
+    }
+  }
+}
+```
+
+Les aliases `browser_upload_status` (avec `id`), `browser_fill_fields` et `browser_verify_fields` passent également par `android_action`. Une sélection `selected` ne prouve **jamais** que YouTube a terminé l'envoi ou programmé la publication. Vérifier l'avancement du téléversement, la chaîne, les dates et la confirmation de YouTube avant de marquer la fiche comme programmée. La version APK installée **avant** cette mise à jour peut encore répondre « Action Android non autorisée ».
+
 Le porteur `desktop` est accepté par le serveur Windows 1.3.0 déjà installé :
 
 ```json
