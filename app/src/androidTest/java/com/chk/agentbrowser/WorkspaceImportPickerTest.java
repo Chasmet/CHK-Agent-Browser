@@ -97,6 +97,20 @@ public final class WorkspaceImportPickerTest {
     private void waitCallbacks(int value)throws Exception {long deadline=System.currentTimeMillis()+10000;while(callbacks.get()!=value&&System.currentTimeMillis()<deadline)Thread.sleep(50);assertEquals(value,callbacks.get());}
     private boolean contains(JSONArray rows,String path){for(int i=0;i<rows.length();i++)if(path.equals(rows.optJSONObject(i).optString("path")))return true;return false;}
 
+    private void tapFileInput(WebView web)throws Exception {
+            CountDownLatch positionDone=new CountDownLatch(1);AtomicReference<String> position=new AtomicReference<>();
+            instrument.runOnMainSync(()->web.evaluateJavascript("JSON.stringify((()=>{const r=document.querySelector('#media').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:innerWidth,height:innerHeight};})())",raw->{position.set(raw);positionDone.countDown();}));
+            assertTrue(positionDone.await(5,TimeUnit.SECONDS));JSONObject target=new JSONObject(new JSONArray("["+position.get()+"]").getString(0));
+            instrument.runOnMainSync(()->{try{
+                float x=(float)(target.getDouble("x")*web.getWidth()/target.getDouble("width"));
+                float y=(float)(target.getDouble("y")*web.getHeight()/target.getDouble("height"));
+                long now=android.os.SystemClock.uptimeMillis();
+                android.view.MotionEvent down=android.view.MotionEvent.obtain(now,now,android.view.MotionEvent.ACTION_DOWN,x,y,0);
+                android.view.MotionEvent up=android.view.MotionEvent.obtain(now,now+80,android.view.MotionEvent.ACTION_UP,x,y,0);
+                down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+                try{web.dispatchTouchEvent(down);web.dispatchTouchEvent(up);}finally{down.recycle();up.recycle();}
+            }catch(Exception e){throw new AssertionError(e);}});
+    }
     @Test public void categoryMatchesFilesAndDoesNotLoseEntriesAfterFirstPage()throws Exception {
         setup();try{
             for(int i=0;i<76;i++)png(String.format(java.util.Locale.ROOT,"photo_%03d.png",i));
@@ -163,18 +177,7 @@ public final class WorkspaceImportPickerTest {
         setup();try{
             String path=png("Import_reel.png");launch();Field current=MainActivity.class.getDeclaredField("current");current.setAccessible(true);WebView web=(WebView)current.get(activity);
             WebFixture.load(instrument,web,"https://example.com/picker-test","<meta name='viewport' content='width=device-width,initial-scale=1'><input id='media' type='file' accept='image/png' style='display:block;width:240px;height:80px;margin:30px'><output id='proof'></output><script>media.onchange=async()=>{const f=media.files[0];const b=new Uint8Array(await f.arrayBuffer());proof.textContent=f.name+':'+b[0]+':'+b.length;};</script>","!!document.querySelector('#media')");
-            CountDownLatch positionDone=new CountDownLatch(1);AtomicReference<String> position=new AtomicReference<>();
-            instrument.runOnMainSync(()->web.evaluateJavascript("JSON.stringify((()=>{const r=document.querySelector('#media').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:innerWidth,height:innerHeight};})())",raw->{position.set(raw);positionDone.countDown();}));
-            assertTrue(positionDone.await(5,TimeUnit.SECONDS));JSONObject target=new JSONObject(new JSONArray("["+position.get()+"]").getString(0));
-            instrument.runOnMainSync(()->{try{
-                float x=(float)(target.getDouble("x")*web.getWidth()/target.getDouble("width"));
-                float y=(float)(target.getDouble("y")*web.getHeight()/target.getDouble("height"));
-                long now=android.os.SystemClock.uptimeMillis();
-                android.view.MotionEvent down=android.view.MotionEvent.obtain(now,now,android.view.MotionEvent.ACTION_DOWN,x,y,0);
-                android.view.MotionEvent up=android.view.MotionEvent.obtain(now,now+80,android.view.MotionEvent.ACTION_UP,x,y,0);
-                down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
-                try{web.dispatchTouchEvent(down);web.dispatchTouchEvent(up);}finally{down.recycle();up.recycle();}
-            }catch(Exception e){throw new AssertionError(e);}});
+            tapFileInput(web);
             Field active=MainActivity.class.getDeclaredField("mediaChooser");active.setAccessible(true);
             long deadline=System.currentTimeMillis()+12000;
             while(picker==null&&System.currentTimeMillis()<deadline){picker=(WorkspaceMediaChooser)active.get(activity);Thread.sleep(50);}
@@ -182,6 +185,13 @@ public final class WorkspaceImportPickerTest {
             AtomicReference<String> proof=new AtomicReference<>("");deadline=System.currentTimeMillis()+15000;
             while(System.currentTimeMillis()<deadline){CountDownLatch done=new CountDownLatch(1);instrument.runOnMainSync(()->web.evaluateJavascript("document.querySelector('#proof').textContent",raw->{proof.set(raw);done.countDown();}));assertTrue(done.await(5,TimeUnit.SECONDS));if(proof.get().contains("Import_reel.png:137:"))break;Thread.sleep(80);}
             assertTrue(proof.get(),proof.get().contains("Import_reel.png:137:"));
+            WorkspaceMediaChooser completed=picker;tapFileInput(web);deadline=System.currentTimeMillis()+10000;
+            while(System.currentTimeMillis()<deadline){WorkspaceMediaChooser next=(WorkspaceMediaChooser)active.get(activity);if(next!=completed&&next!=null){picker=next;break;}Thread.sleep(50);}
+            assertNotSame("A new chooser must be opened",completed,picker);
+            WebFixture.load(instrument,web,"https://example.com/new-document","<body id='new-page'>Other page</body>","!!document.querySelector('#new-page')");
+            AtomicReference<Boolean> showing=new AtomicReference<>(true);
+            instrument.runOnMainSync(()->{try{showing.set(dialog().isShowing());}catch(Exception e){throw new AssertionError(e);}});
+            assertFalse("Navigation cancels the stale chooser",showing.get());
         }finally{cleanup();}
     }
 }

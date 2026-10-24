@@ -195,6 +195,7 @@ public class MainActivity extends Activity {
                 toast("Lien non autorisé");return true;
             }
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap favicon){
+                if(mediaChooserWeb==v)cancelMediaChooser();
                 BrowserWebState.remember(v,url);
                 // Chromium can deliver a main-frame HTTP error before page-start.
                 // Keep that error for this URL; clear old errors before loadUrl.

@@ -101,7 +101,7 @@ public final class WorkspaceMediaChooser {
         list=new RecyclerView(activity);list.setTag("import_list");list.setAdapter(adapter);layoutList();
         root.addView(list,new LinearLayout.LayoutParams(-1,0,1));
         selectionText=text("Aucun fichier sélectionné",12,0xff28384d);selectionText.setTag("import_selection");selectionText.setMaxLines(2);root.addView(selectionText);
-        selectionText.setOnClickListener(v->{if(!selected.isEmpty())new AgentDialog.Builder(activity)
+        selectionText.setOnClickListener(v->{if(!busy&&!selected.isEmpty())new AgentDialog.Builder(activity)
             .setTitle("Sélection · toucher pour retirer")
             .setItems(selected.toArray(new String[0]),(d,n)->{selected.remove(new ArrayList<>(selected).get(n));updateSelection();adapter.notifyDataSetChanged();}).show();});
         LinearLayout footer=row();root.addView(footer);
@@ -149,7 +149,9 @@ public final class WorkspaceMediaChooser {
         if(!alive()||busy)return;if(pendingSearch!=null){main.removeCallbacks(pendingSearch);pendingSearch=null;}
         status.setOnClickListener(null);final int ticket=++generation;final String key=category,path=folder,q=search.getText().toString(),sort=order;
         final boolean all=showAll.isChecked();status.setText("Chargement…");adapter.rows.clear();adapter.notifyDataSetChanged();
-        breadcrumb.setText("Accueil"+(key.equals("all")?"":" › "+WorkspaceImportIndex.label(key))+(path.isEmpty()?"":" › "+WorkspaceImportIndex.visiblePath(path)));
+        String visible=WorkspaceImportIndex.visiblePath(path),label=WorkspaceImportIndex.label(key);
+        if(visible.startsWith(label+"/"))visible=visible.substring(label.length()+1);
+        breadcrumb.setText("Accueil"+(key.equals("all")?"":" › "+label)+(path.isEmpty()?"":" › "+visible));
         IO.execute(()->{try{
             JSONObject page=WorkspaceImportIndex.query(activity.getApplicationContext(),key,path,q,sort,types,all);
             main.post(()->{if(!alive()||ticket!=generation)return;
