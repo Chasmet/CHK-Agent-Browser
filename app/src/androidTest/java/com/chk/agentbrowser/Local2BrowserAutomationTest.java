@@ -94,8 +94,8 @@ public final class Local2BrowserAutomationTest {
             .put(field("#audience","check",true)).put(field("#visibility","select","schedule"))
             .put(field("#date","text","2027-01-24")).put(field("#time","text","18:00"));
         JSONObject args=new JSONObject().put("expected_host","example.com").put("fields",fields);
-        assertEquals(6,browserCall("fill_form",args).json().getInt("count"));
-        assertTrue(browserCall("verify_form",args).json().getBoolean("verified"));
+        assertEquals(6,nativeCall("browser_fill_fields",args).json().getInt("count"));
+        assertTrue(nativeCall("browser_verify_fields",args).json().getBoolean("verified"));
         assertTrue(browserCall("fill_form",args).ok);assertEquals("true",eval(web,"document.querySelector('#audience').checked"));
         assertFalse(browserCall("fill_form",new JSONObject(args.toString()).put("expected_host","other.example")).ok);
         assertFalse(browserCall("fill_form",new JSONObject().put("expected_host","example.com")
@@ -111,14 +111,14 @@ public final class Local2BrowserAutomationTest {
         settings=(SettingsActivity)instrument.startActivitySync(new Intent(app,SettingsActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         JSONObject args=new JSONObject().put("id",job).put("expected_host","example.com").put("selector","#media")
             .put("files",new JSONArray().put(new JSONObject().put("workspace_path",path)));
-        JSONObject selected=browserCall("upload_file",args).json();
+        JSONObject selected=nativeCall("browser_upload_workspace_file",args).json();
         assertEquals(selected.toString(),"selected",selected.getString("state"));assertFalse(selected.getBoolean("server_upload_verified"));
         String bytes="";for(int i=0;i<30;i++){bytes=eval(web,"document.querySelector('#bytes').textContent");if(bytes.contains("1,2,3,4"))break;Thread.sleep(100);}
         assertEquals("\"1,2,3,4\"",bytes);assertEquals("0",eval(web,"document.querySelector('#media').files.length"));
-        assertTrue(browserCall("upload_file",args).json().getBoolean("replayed"));
+        assertTrue(nativeCall("browser_upload_workspace_file",args).json().getBoolean("replayed"));
         assertEquals("1",eval(web,"window.changes"));
         assertEquals("selected",nativeCall("files_browser_upload_status",new JSONObject().put("id",job)).json().getString("state"));
-        assertFalse(browserCall("upload_file",new JSONObject(args.toString()).put("selector","#other")).ok);
+        assertFalse(nativeCall("browser_upload_workspace_file",new JSONObject(args.toString()).put("selector","#other")).ok);
     }
     @Test public void destroyedActivityRetainsExactTabsFormAndJsStateThenReattaches()throws Exception{
         WebView original=open("example.com","<html><body><input id='draft' value='keep'><input type='file' id='media'><script>window.sessionMarker='original-dom';</script></body></html>");
