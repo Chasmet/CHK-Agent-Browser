@@ -28,7 +28,7 @@ final class StudioEdits {
         project.put("audio",out);
     }
     static void clampFade(JSONObject clip)throws Exception {if(clip.has("fade_ms"))clip.put("fade_ms",Math.min(clip.optLong("fade_ms"),Math.min(1500,clip.optLong("duration_ms")/3)));}
-    static void conform(JSONObject project)throws Exception {fitAudio(project);JSONArray clips=project.optJSONArray("clips");if(clips!=null)for(int i=0;i<clips.length();i++)clampFade(clips.getJSONObject(i));}
+    static void conform(JSONObject project)throws Exception {fitAudio(project);JSONArray layers=StudioLayers.items(project),kept=new JSONArray();long total=total(project);for(int i=0;i<layers.length();i++){JSONObject layer=new JSONObject(layers.getJSONObject(i).toString());long duration=Math.min(layer.optLong("duration_ms"),total-layer.optLong("offset_ms"));if(duration>=(StudioImages.isImage(new java.io.File(layer.optString("path")))?1000:500)){layer.put("duration_ms",duration);kept.put(layer);}}if(project.has("layers"))project.put("layers",kept);JSONArray clips=project.optJSONArray("clips");if(clips!=null)for(int i=0;i<clips.length();i++)clampFade(clips.getJSONObject(i));}
     static long framePosition(long position,int direction,int fps,long total){long frame=Math.max(0,Math.round(position*fps/1000.0)+direction);return Math.max(0,Math.min(Math.max(0,total-1),Math.round(frame*1000.0/fps)));}
     static void clipVolume(JSONObject project,JSONObject target,double volume)throws Exception {
         JSONArray clips=project.getJSONArray("clips");JSONArray audio=project.optJSONArray("audio");

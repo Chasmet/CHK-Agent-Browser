@@ -17,6 +17,7 @@ final class StudioTimeline extends View {
         default void audio(int index){}
         default void text(int index){}
         default void add(String kind){}
+        default void layer(int index){}
     }
     private final Paint paint=new Paint(3);
     private final RectF rect=new RectF();
@@ -102,7 +103,8 @@ final class StudioTimeline extends View {
         for(int i=0;i<clips.length();i++){JSONObject c=clips.optJSONObject(i);long len=StudioEdits.duration(c);
             if(!c.optString("text").isEmpty()){captions=true;segment(canvas,x(textAt),x(textAt+len),154,184,0xff53457b,"T  "+c.optString("text"));}textAt+=len;}
         if(!captions)segment(canvas,dp(12),getWidth()-dp(12),154,184,0xff302d40,"＋ Ajouter un texte");
-        paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff1f6ff);paint.setStrokeWidth(dp(2));canvas.drawLine(getWidth()/2f,dp(27),getWidth()/2f,dp(190),paint);canvas.drawRoundRect(getWidth()/2f-dp(4),dp(27),getWidth()/2f+dp(4),dp(34),dp(2),dp(2),paint);
+        JSONArray layers=StudioLayers.items(project);for(int i=layers.length()-1;i>=0;i--){JSONObject layer=layers.optJSONObject(i);segment(canvas,x(layer.optLong("offset_ms")),x(layer.optLong("offset_ms")+layer.optLong("duration_ms")),194+i*2,224+i*2,0xff925a2d,"▣ "+(i+1)+" · "+filename(layer.optString("path")));}
+        paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff1f6ff);paint.setStrokeWidth(dp(2));canvas.drawLine(getWidth()/2f,dp(27),getWidth()/2f,dp(StudioLayers.items(project).length()>0?230:190),paint);canvas.drawRoundRect(getWidth()/2f-dp(4),dp(27),getWidth()/2f+dp(4),dp(34),dp(2),dp(2),paint);
         if(pendingTrim!=null)text(canvas,"Durée : "+String.format(java.util.Locale.ROOT,"%.2f s",StudioEdits.duration(pendingTrim)/1000f),dp(12),dp(109),10,0xff55e2ca);
 
     }
@@ -149,7 +151,8 @@ final class StudioTimeline extends View {
                 if(dragging){dragging=false;if(listener!=null&&dragFrom!=dragTo)listener.move(dragFrom,dragTo);}
                 else if(trimEdge!=0&&pendingTrim!=null&&moving){if(listener!=null)listener.trim(selected,pendingTrim);}
                 else if(!moving){long at=timeAt(event.getX());
-                    if(downY>=dp(111)&&downY<dp(146)){
+                    if(downY>=dp(194)){int hit=-1;JSONArray layers=StudioLayers.items(project);for(int i=0;i<layers.length();i++){JSONObject layer=layers.optJSONObject(i);if(at>=layer.optLong("offset_ms")&&at<layer.optLong("offset_ms")+layer.optLong("duration_ms")){hit=i;break;}}if(listener!=null)listener.layer(hit);
+                    }else if(downY>=dp(111)&&downY<dp(146)){
                         JSONArray a=project.optJSONArray("audio");int hit=-1;long n=0;if(a!=null)for(int i=0;i<a.length();i++){n+=a.optJSONObject(i).optLong("duration_ms");if(at<n){hit=i;break;}}
                         selectedAudio=hit;if(listener!=null){if(hit>=0)listener.audio(hit);else listener.add("audio");}
                     }else if(downY>=dp(154)&&downY<dp(185)){int index=indexAt(at);if(listener!=null)listener.text(index);}

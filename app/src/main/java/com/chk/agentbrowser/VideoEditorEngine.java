@@ -438,6 +438,7 @@ public final class VideoEditorEngine {
             }
             if(sounds.length()>0&&audioDuration>videoDuration+1000)throw new IllegalArgumentException("Audio plus long que la vidéo : raccourcis la piste");
         }
+        StudioLayers.validate(context,p,videoDuration);
         if(videoDuration>20*60*1000)throw new IllegalArgumentException("Montage limité à 20 minutes");
         String output=p.optString("output","");
         if(!output.toLowerCase(Locale.ROOT).endsWith(".mp4")||output.length()>400)throw new IllegalArgumentException("Destination MP4 obligatoire");
@@ -556,6 +557,12 @@ public final class VideoEditorEngine {
         WorkspaceStore store=new WorkspaceStore(context);
         JSONArray clips=project.getJSONArray("clips"),audios=project.optJSONArray("audio");
         List<EditedMediaItem> videos=new ArrayList<>(),sounds=new ArrayList<>();
+        boolean layered=StudioLayers.items(project).length()>0;
+        float layerAspect=ratio(project.optString("aspect_ratio","source"));
+        if(layered&&layerAspect==0&&clips.length()>0){JSONObject info=MediaInspection.info(context,clips.getJSONObject(0).getString("path"));layerAspect=info.optInt("width",1)/(float)Math.max(1,info.optInt("height",1));if((Math.abs(info.optInt("rotation")+(int)clips.getJSONObject(0).optDouble("rotation",0))%180)==90)layerAspect=1/layerAspect;}
+        int layerQuality=project.optInt("resolution",720);
+        final int layerWidth=layerAspect>=1?Math.max(2,Math.round(layerQuality*layerAspect/2)*2):layerQuality;
+        final int layerHeight=layerAspect>=1?layerQuality:Math.max(2,Math.round(layerQuality/Math.max(.2f,layerAspect)/2)*2);
         java.util.Map<String,Long> sourceDurations=new java.util.HashMap<>();
         boolean external=audios!=null&&audios.length()>0;
         boolean original=!project.optBoolean("mute_original",external);
@@ -585,6 +592,7 @@ public final class VideoEditorEngine {
                 androidx.media3.effect.StaticOverlaySettings settings=new androidx.media3.effect.StaticOverlaySettings.Builder().setBackgroundFrameAnchor(0,-0.75f).build();
                 fx.add(new androidx.media3.effect.OverlayEffect(Collections.singletonList(androidx.media3.effect.TextOverlay.createStaticTextOverlay(text,settings))));
             }
+            if(layered)fx.add(Presentation.createForWidthAndHeight(layerWidth,layerHeight,"fit".equals(project.optString("aspect_mode","fit"))?Presentation.LAYOUT_SCALE_TO_FIT:Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP));
             final float speed=(float)c.optDouble("speed",1);
             EditedMediaItem.Builder video=new EditedMediaItem.Builder(media(store.file(c.getString("path")),c.optLong("start_ms",0),len))
                 .setFrameRate(project.optInt("fps",30))
@@ -600,6 +608,10 @@ public final class VideoEditorEngine {
         }
         EditedMediaItemSequence sequence=original?EditedMediaItemSequence.withAudioAndVideoFrom(videos):EditedMediaItemSequence.withVideoFrom(videos);
         Composition.Builder builder=sounds.isEmpty()?new Composition.Builder(sequence):new Composition.Builder(sequence,EditedMediaItemSequence.withAudioFrom(sounds));
+        if(layered){
+            List<EditedMediaItemSequence> sequences=StudioLayers.sequences(context,project,StudioEdits.total(project));sequences.add(sequence);if(!sounds.isEmpty())sequences.add(EditedMediaItemSequence.withAudioFrom(sounds));
+            return new Composition.Builder(sequences).setVideoCompositorSettings(StudioLayers.compositor(project,layerWidth,layerHeight)).build();
+        }
         float aspect=ratio(project.optString("aspect_ratio","source"));
         if(aspect==0){
             JSONObject first=clips.getJSONObject(0);JSONObject metadata=MediaInspection.info(context,first.getString("path"));

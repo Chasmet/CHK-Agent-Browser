@@ -26,9 +26,22 @@ Avec le relais 1.4.1, `android_media(operation=nom_action, ...)` expose aussi ce
 }
 ```
 
-`add` accepte un index d’insertion facultatif. `update` modifie un plan ; `delete` le supprime. Les pistes prises en charge sont `clips` et `audio`, toutes deux séquentielles. Les photos ont `start_ms=0` et une durée de 1000 à 60000 ms. Maximum 100 plans et 20 minutes, projet JSON limité à 64000 caractères. L’interface importe jusqu’à 100 médias et donne 5 secondes à une photo. Le découpage permet de changer cette durée. Appui long sur un plan pour le déplacer ; le zoom de la timeline reste disponible.
+`add` accepte un index d’insertion facultatif. `update` modifie un plan ; `delete` le supprime. Les pistes `clips` et `audio` restent séquentielles. La piste `layers` accepte jusqu’à trois images ou vidéos superposées muettes ; l’index 0 est le calque le plus haut. Les photos ont `start_ms=0` et une durée de 1000 à 60000 ms. Maximum 100 plans et 20 minutes, projet JSON limité à 64000 caractères. L’interface importe jusqu’à 100 médias et donne 5 secondes à une photo. Le découpage permet de changer cette durée. Appui long sur un plan pour le déplacer ; le zoom de la timeline reste disponible.
 
-Les filtres restent `aucun`, `noir`, `vintage`, `chaud`, `froid`, `cinema`, `contraste`, `nuit`, `vibrant`, `doux`, `desature`, `sepia`. `fade_ms` est un passage par le noir, pas un fondu croisé. `zoom`/`zoom_end` (1..4), `pan_x`/`pan_x_end` et `pan_y`/`pan_y_end` (-1..1) définissent le mouvement linéaire ; l’étalonnage accepte aussi valeurs de début/fin. Les effets sont calculés à l’export. L’aperçu reste celui des sources avec textes ; il ne simule pas tous les effets du rendu.
+Les filtres restent `aucun`, `noir`, `vintage`, `chaud`, `froid`, `cinema`, `contraste`, `nuit`, `vibrant`, `doux`, `desature`, `sepia`. `fade_ms` est un passage par le noir, pas un fondu croisé. `zoom`/`zoom_end` (1..4), `pan_x`/`pan_x_end` et `pan_y`/`pan_y_end` (-1..1) définissent le mouvement linéaire ; l’étalonnage accepte aussi valeurs de début/fin. Les effets sont calculés à l’export. Le mode source est identifié et montre les médias avec textes. Le bouton **Aperçu rendu** calcule une copie privée en 480p avec la même composition que l’export pour contrôler aussi effets et calques. Ce rendu se lance à la demande, avec progression et annulation ; il ne crée pas le fichier de sortie du projet. Retour au mode source avant édition, sans appliquer vitesse ou volume deux fois.
+
+### Ajouter un calque par Local 2
+
+```json
+{
+  "expected_revision": 13,
+  "operations": [
+    {"op":"add","track":"layers","clip":{"path":"Categories/Images/logo.png","offset_ms":1000,"start_ms":0,"duration_ms":3000,"x":0.5,"y":-0.5,"scale":0.35,"opacity":1}}
+  ]
+}
+```
+
+`offset_ms` est le début dans le montage ; `start_ms` est le début dans la source vidéo (0 pour une photo). La durée doit tenir dans le montage et dans la source : minimum 500 ms pour une vidéo, 1000 ms pour une photo et maximum 60000 ms pour une photo. `x` et `y` sont le centre du calque entre -1 et 1 : x positif vers la droite, y positif vers le bas. `scale` (0,1 à 1) est sa largeur relative à la sortie, en conservant les proportions. `opacity` varie de 0 à 1 ; les PNG transparents conservent leur alpha. `move`, `update` et `delete` s’appliquent aussi aux calques. Leurs pistes audio sont coupées. Les sources ne sont jamais écrasées par l’export ; elles sont également incluses dans les SHA-256 de la file. Raccourcir la piste principale raccourcit les calques à sa fin, ou retire ceux qui deviennent trop courts ; l’historique permet de restaurer l’état précédent.
 
 `video_editor_history(expected_revision, redo=false)` annule ; `redo=true` rétablit. Les 30 dernières sauvegardes sont conservées par projet. Chaque sauvegarde est atomique ; le brouillon le plus récent est récupéré après interruption.
 
@@ -58,4 +71,4 @@ La vérification contrôle la durée, la piste audio demandée et une image déc
 
 ## Limites de ce lot
 
-1080p maximum, cadence 24/30/60 selon l’encodeur du téléphone. Pas encore de vidéo superposée, pistes audio parallèles, masques, transitions croisées, LUT, transcription locale automatique, proxies ou 4K. Les erreurs d’encodeur sont remontées ; les projets restent enregistrés. Aucune génération vidéo et aucun rendu sur Windows.
+1080p maximum, cadence 24/30/60 selon l’encodeur du téléphone. Jusqu’à trois calques visuels au-dessus de la piste principale. Pas encore de pistes audio parallèles, masques, transitions croisées, LUT, transcription locale automatique, proxies ou 4K. Les erreurs d’encodeur sont remontées ; les projets restent enregistrés. Aucune génération vidéo et aucun rendu sur Windows.

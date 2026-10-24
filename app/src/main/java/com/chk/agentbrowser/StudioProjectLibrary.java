@@ -202,7 +202,7 @@ final class StudioProjectLibrary {
                     .put("created_at",p.optLong("created_at",file.lastModified()))
                     .put("updated_at",p.optLong("updated_at",file.lastModified()))
                     .put("duration_ms",total).put("clips",n)
-                    .put("audio",audio==null?0:audio.length())
+                    .put("audio",audio==null?0:audio.length()).put("layers",StudioLayers.items(p).length())
                     .put("aspect_ratio",p.optString("aspect_ratio","source"))
                     .put("output",p.optString("output",""))
                     .put("cover_path",n>0?clips.optJSONObject(0).optString("path",""):"")
