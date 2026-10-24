@@ -559,7 +559,7 @@ public final class VideoEditorEngine {
         List<EditedMediaItem> videos=new ArrayList<>(),sounds=new ArrayList<>();
         boolean layered=StudioLayers.items(project).length()>0;
         float layerAspect=ratio(project.optString("aspect_ratio","source"));
-        if(layered&&layerAspect==0&&clips.length()>0){JSONObject info=MediaInspection.info(context,clips.getJSONObject(0).getString("path"));layerAspect=info.optInt("width",1)/(float)Math.max(1,info.optInt("height",1));if((Math.abs(info.optInt("rotation"))%180)==90)layerAspect=1/layerAspect;}
+        if(layered&&layerAspect==0&&clips.length()>0){JSONObject info=MediaInspection.info(context,clips.getJSONObject(0).getString("path"));layerAspect=info.optInt("width",1)/(float)Math.max(1,info.optInt("height",1));if((Math.abs(info.optInt("rotation")+(int)clips.getJSONObject(0).optDouble("rotation",0))%180)==90)layerAspect=1/layerAspect;}
         int layerQuality=project.optInt("resolution",720);
         final int layerWidth=layerAspect>=1?Math.max(2,Math.round(layerQuality*layerAspect/2)*2):layerQuality;
         final int layerHeight=layerAspect>=1?layerQuality:Math.max(2,Math.round(layerQuality/Math.max(.2f,layerAspect)/2)*2);

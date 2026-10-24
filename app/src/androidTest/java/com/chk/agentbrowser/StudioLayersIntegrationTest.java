@@ -57,6 +57,11 @@ public final class StudioLayersIntegrationTest {
     @Test public void videoLayerHasSourceFramesAndDisappearsAfterEnd()throws Exception {
         JSONObject p=project("-video-pip").put("layers",new JSONArray().put(layer(video,500,1000)));export(p);String output=p.getString("output");blue(pixel(output,200,50,50));int c=pixel(output,1000,50,50);assertTrue("Video PiP must replace the blue center",Color.red(c)>70||Color.green(c)>70||Color.blue(c)<100);blue(pixel(output,2200,50,50));
     }
+    @Test public void rotatedSourceKeepsItsAspectAndMusicWithLayers()throws Exception {
+        JSONObject source=MediaInspection.info(app,video);
+        JSONObject p=project("-rotated").put("aspect_ratio","source").put("clips",new JSONArray().put(new JSONObject().put("path",video).put("start_ms",0).put("duration_ms",2000).put("rotation",90))).put("audio",new JSONArray().put(new JSONObject().put("path",video).put("start_ms",0).put("duration_ms",2000))).put("layers",new JSONArray().put(layer(red,0,2000)));export(p);
+        JSONObject info=MediaInspection.info(app,p.getString("output"));assertEquals(source.getDouble("height")/source.getDouble("width"),info.getDouble("width")/info.getDouble("height"),.02);int color=pixel(p.getString("output"),1000,50,50);assertTrue(Color.red(color)>180&&Color.blue(color)<70);assertTrue(invoke("video_editor_verify_output",new JSONObject()).getBoolean("has_audio"));
+    }
     @Test public void invalidLayersNeverOverwriteSourcesAndMcpKeepsTheirHashes()throws Exception {
         JSONObject p=project("-model").put("layers",new JSONArray().put(layer(red,1000,1000)));long length=store.file(video).length();JSONObject invalid=new JSONObject(p.toString()).put("layers",new JSONArray().put(layer(video,0,1000))).put("output",video);
         try{VideoEditorEngine.get().validate(app,invalid);fail("Source overwrite");}catch(IllegalArgumentException expected){}assertEquals(length,store.file(video).length());
