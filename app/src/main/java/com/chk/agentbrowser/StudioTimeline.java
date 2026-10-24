@@ -103,8 +103,8 @@ final class StudioTimeline extends View {
             if(!c.optString("text").isEmpty()){captions=true;segment(canvas,x(textAt),x(textAt+len),154,184,0xff53457b,"T  "+c.optString("text"));}textAt+=len;}
         if(!captions)segment(canvas,dp(12),getWidth()-dp(12),154,184,0xff302d40,"＋ Ajouter un texte");
         paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff1f6ff);paint.setStrokeWidth(dp(2));canvas.drawLine(getWidth()/2f,dp(27),getWidth()/2f,dp(190),paint);canvas.drawRoundRect(getWidth()/2f-dp(4),dp(27),getWidth()/2f+dp(4),dp(34),dp(2),dp(2),paint);
-        if(pendingTrim!=null)text(canvas,"Durée : "+String.format(java.util.Locale.ROOT,"%.2f s",StudioEdits.duration(pendingTrim)/1000f),dp(12),dp(201),12,0xff55e2ca);
-        else text(canvas,dragging?"Relâcher pour déplacer le plan":"Glisser · pincer pour zoomer · appui long pour déplacer",dp(12),dp(201),10,0xff98a9c2);
+        if(pendingTrim!=null)text(canvas,"Durée : "+String.format(java.util.Locale.ROOT,"%.2f s",StudioEdits.duration(pendingTrim)/1000f),dp(12),dp(109),10,0xff55e2ca);
+
     }
     private Bitmap thumbnail(JSONObject clip,long at){
         String path=clip.optString("path");boolean photo=StudioImages.isImage(new java.io.File(path));if(photo)at=0;

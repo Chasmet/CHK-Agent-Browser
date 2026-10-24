@@ -30,7 +30,8 @@ public final class VideoEditorActivity extends Activity {
     private TextView selectionLabel;
     private int selectedAudio=-1;
     private Float auditionSpeed;
-    private String toolPage="Éditer";
+    private String toolPage="Accueil";
+    private HorizontalScrollView contextStrip,mainNavigation;
     private WorkspaceMediaChooser studioPicker;
     private final java.util.concurrent.ConcurrentHashMap<String,Long> sourceLengths=new java.util.concurrent.ConcurrentHashMap<>();
     private TextView quality,scope;
@@ -71,7 +72,7 @@ public final class VideoEditorActivity extends Activity {
         status.setText(importing?"Importation des médias…":"running".equals(state)?"Export MP4 · "+s.optInt("progress_percent")+" %":"preparing".equals(state)?"Préparation du rendu…":"completed".equals(state)?"Export terminé · toucher pour lire / partager":"failed".equals(state)?"Export impossible : "+s.optString("error"):"Montage local · sauvegarde automatique");
         ui.postDelayed(this,player!=null&&player.isPlaying()?33:600);
     }};
-    @Override public void onCreate(Bundle state){super.onCreate(state);alive=true;if(state!=null){exportCopyPath=state.getString("export_copy_path","");editSeek=state.getLong("studio_position",0);selected=state.getInt("studio_selected",0);selectedAudio=state.getInt("studio_audio",-1);toolPage=state.getString("studio_tool_page","Éditer");restoredZoom=state.getFloat("studio_zoom",1);}
+    @Override public void onCreate(Bundle state){super.onCreate(state);alive=true;if(state!=null){exportCopyPath=state.getString("export_copy_path","");editSeek=state.getLong("studio_position",0);selected=state.getInt("studio_selected",0);selectedAudio=state.getInt("studio_audio",-1);toolPage=state.getString("studio_tool_page","Accueil");restoredZoom=state.getFloat("studio_zoom",1);}
         getWindow().setStatusBarColor(0xff111111);getWindow().setNavigationBarColor(0xff111111);
         compact=getResources().getDisplayMetrics().heightPixels/getResources().getDisplayMetrics().density<720;
         LinearLayout root=MobileUi.column(this);root.setBackgroundColor(0xff111214);setContentView(root);
@@ -126,11 +127,11 @@ public final class VideoEditorActivity extends Activity {
         format=chip("9:16");format.setTextSize(11);format.setContentDescription("Format du montage");playback.addView(format,new LinearLayout.LayoutParams(dp(44),dp(38)));format.setOnClickListener(v->ratioMenu());
         TextView un=chip("↶");un.setContentDescription("Annuler la dernière modification");playback.addView(un,new LinearLayout.LayoutParams(dp(40),-1));un.setOnClickListener(v->history(false));
         TextView re=chip("↷");re.setContentDescription("Rétablir la modification");playback.addView(re,new LinearLayout.LayoutParams(dp(40),-1));re.setOnClickListener(v->history(true));
-        timeline=new StudioTimeline(this);root.addView(timeline,new LinearLayout.LayoutParams(-1,dp(206)));
+        timeline=new StudioTimeline(this);root.addView(timeline,new LinearLayout.LayoutParams(-1,dp(192)));
         timeline.zoomBy(restoredZoom);
         timeline.setListener(new StudioTimeline.Listener(){
             public void move(int from,int to){if(saving||importing)return;try{remember();JSONArray items=clips();Object item=items.remove(from);JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==to)out.put(item);if(i<items.length())out.put(items.get(i));}project.put("clips",out);selected=to;editSeek=start(to);save();}catch(Exception ex){toast(ex.getMessage());}}
-            public void seek(long position,int index){selected=index;if(selectedAudio>=0)toolPage="Éditer";selectedAudio=-1;pausePreview();seekPreview(position);timeline.audioSelection(-1);updateSelectionTools();clock.setText(time(position)+" / "+time(total()));}
+            public void seek(long position,int index){selected=index;if(selectedAudio>=0||toolPage.equals("Accueil"))toolPage="Éditer";selectedAudio=-1;pausePreview();seekPreview(position);timeline.audioSelection(-1);updateSelectionTools();clock.setText(time(position)+" / "+time(total()));}
             public void scrubbing(boolean active){scrubbing=active;if(active)pausePreview();}
             public void trim(int index,JSONObject value){if(!editable())return;try{remember();clips().put(index,value);selected=index;save();}catch(Exception e){toast(e.getMessage());}}
             public void audio(int index){selectedAudio=index;pausePreview();toolPage="Audio";updateSelectionTools();}
@@ -143,8 +144,8 @@ public final class VideoEditorActivity extends Activity {
         TextView plus=chip("+");plus.setTag("studio_zoom_in");plus.setContentDescription("Zoomer sur la timeline");summary.addView(plus,new LinearLayout.LayoutParams(dp(44),-1));plus.setOnClickListener(v->timeline.zoomBy(1.35f));
         TextView add=chip("＋ Média");add.setTag("studio_add_media");add.setTextSize(12);summary.addView(add,new LinearLayout.LayoutParams(dp(88),-1));add.setOnClickListener(v->addMenu("video"));
         selectionLabel=scope;selectionLabel.setTag("studio_selection");selectionLabel.setSingleLine(true);selectionLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        HorizontalScrollView strip=new HorizontalScrollView(this);strip.setHorizontalScrollBarEnabled(false);root.addView(strip,new LinearLayout.LayoutParams(-1,dp(62)));tools=new LinearLayout(this);strip.addView(tools);
-        HorizontalScrollView navigation=new HorizontalScrollView(this);navigation.setHorizontalScrollBarEnabled(false);root.addView(navigation,new LinearLayout.LayoutParams(-1,dp(48)));
+        HorizontalScrollView strip=new HorizontalScrollView(this);contextStrip=strip;strip.setHorizontalScrollBarEnabled(false);root.addView(strip,new LinearLayout.LayoutParams(-1,dp(62)));tools=new LinearLayout(this);strip.addView(tools);
+        HorizontalScrollView navigation=new HorizontalScrollView(this);mainNavigation=navigation;navigation.setHorizontalScrollBarEnabled(false);root.addView(navigation,new LinearLayout.LayoutParams(-1,dp(62)));
         mainTools=new LinearLayout(this);navigation.addView(mainTools);
         mainTool(mainTools,"Éditer","scissors",()->showToolPage("Éditer"));mainTool(mainTools,"Audio","audio",()->showToolPage("Audio"));mainTool(mainTools,"Texte","text",()->showToolPage("Texte"));mainTool(mainTools,"Effets","effects",()->showToolPage("Effets"));mainTool(mainTools,"Format","crop",()->ratioMenu());mainTool(mainTools,"Exports","queue",()->exportQueue());mainTool(mainTools,"Analyse","layers",()->showToolPage("Analyse"));
         updateSelectionTools();
@@ -192,6 +193,9 @@ public final class VideoEditorActivity extends Activity {
         String name=selectedAudio>=0?"Audio "+(selectedAudio+1)+" · "+name(audio().optJSONObject(selectedAudio).optString("path")):
             clip()==null?"Ajoute une vidéo ou une photo":"Plan "+(selected+1)+" / "+clips().length()+" · "+name(clip().optString("path"))+" · "+String.format(Locale.FRANCE,"%.2f s",length(clip())/1000.0);
         selectionLabel.setText(name);tools.removeAllViews();
+        contextStrip.setVisibility(toolPage.equals("Accueil")?View.GONE:View.VISIBLE);
+        mainNavigation.setVisibility(toolPage.equals("Accueil")?View.VISIBLE:View.GONE);
+        TextView back=chip("‹\nOutils");back.setTextSize(12);back.setTag("studio_tools_back");tools.addView(back,new LinearLayout.LayoutParams(dp(52),-1));back.setOnClickListener(v->showToolPage("Accueil"));
         if(mainTools!=null)for(int i=0;i<mainTools.getChildCount();i++){
             View v=mainTools.getChildAt(i);v.setBackground(MobileUi.bg(this,("studio_page_"+toolPage).equals(v.getTag())?0xff29433f:0xff111214));
         }
@@ -212,7 +216,10 @@ public final class VideoEditorActivity extends Activity {
             tool("⇄","Déplacer",()->move());tool("◁","−1 image",()->stepFrame(-1));tool("▷","+1 image",()->stepFrame(1));
         }
     }
-    private void tool(String glyph,String label,Runnable action){TextView v=chip(glyph+"\n"+label);v.setTag("studio_tool_"+label);v.setTextSize(12);v.setPadding(dp(6),dp(3),dp(6),dp(3));v.setMinHeight(dp(56));v.setMinWidth(dp(78));tools.addView(v,new LinearLayout.LayoutParams(dp(82),-1));v.setOnClickListener(w->{if(project!=null&&!saving&&!importing)action.run();});}
+    private void tool(String glyph,String label,Runnable action){
+        String icon=label.equals("Diviser")||label.equals("Découper")?"scissors":label.equals("Vitesse")||label.equals("Durée")?"speed":label.equals("Volume")||label.equals("Son original")?"audio":label.equals("Dupliquer")?"layers":label.equals("Supprimer")||label.equals("Retirer")?"trash":label.equals("Ajuster")||label.equals("Étalonnage")?"sliders":label.contains("Texte")||label.equals("Transcrire")?"text":label.equals("Ajouter")?"plus":label.equals("Animation")?"animation":label.equals("Rotation")?"rotation":label.equals("Déplacer")?"move":label.contains("image")?"play":label.contains("exports")?"download":label.contains("Audit")?"search":"effects";
+        TextView v=UiIcons.button(this,label,icon,0xffedf5ff);v.setTag("studio_tool_"+label);v.setSingleLine(true);v.setEllipsize(android.text.TextUtils.TruncateAt.END);v.setPadding(dp(4),dp(5),dp(4),dp(5));tools.addView(v,new LinearLayout.LayoutParams(dp(82),-1));v.setOnClickListener(w->{if(project!=null&&!saving&&!importing)action.run();});
+    }
     private void toast(String text){if(alive)Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
     private JSONArray clips(){return project==null?new JSONArray():project.optJSONArray("clips");}
     private JSONArray audio(){if(project==null)return new JSONArray();JSONArray a=project.optJSONArray("audio");return a==null?new JSONArray():a;}

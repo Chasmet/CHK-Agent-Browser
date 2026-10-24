@@ -66,7 +66,7 @@ public final class StudioTouchIntegrationTest {
                 MotionEvent e=MotionEvent.obtain(now,now+30*i,action,x+(endX-x)*t,y+(endY-y)*t,0);try{timeline.onTouchEvent(e);}finally{e.recycle();}}
         });
     }
-    private void tapTool(String name)throws Exception {inst.runOnMainSync(()->{View v=activity.getWindow().getDecorView().findViewWithTag("studio_tool_"+name);assertNotNull(name,v);v.performClick();});}
+    private void tapTool(String name)throws Exception {inst.runOnMainSync(()->{View v=activity.getWindow().getDecorView().findViewWithTag("studio_tool_"+name);assertNotNull(name,v);if(!v.isShown())activity.getWindow().getDecorView().findViewWithTag("studio_page_Éditer").performClick();v=activity.getWindow().getDecorView().findViewWithTag("studio_tool_"+name);v.performClick();});}
     private void screenshot(String name)throws Exception {
         inst.waitForIdleSync();Thread.sleep(150);Bitmap image=inst.getUiAutomation().takeScreenshot();assertNotNull(image);
         File f=new File(app.getExternalFilesDir(null),"studio-touch-"+name+".png");try(OutputStream out=new FileOutputStream(f)){image.compress(Bitmap.CompressFormat.PNG,100,out);}image.recycle();
@@ -77,7 +77,7 @@ public final class StudioTouchIntegrationTest {
         launch();float d=app.getResources().getDisplayMetrics().density;StudioTimeline t=timeline();
         float center=t.getWidth()/2f;gesture(center,15*d,center-110*d,15*d);
         AtomicLong at=new AtomicLong();inst.runOnMainSync(()->at.set(t.playhead()));assertTrue(at.get()>1500);
-        screenshot("01-editor");float old=t.zoomLevel();inst.runOnMainSync(()->activity.getWindow().getDecorView().findViewWithTag("studio_zoom_in").performClick());assertTrue(t.zoomLevel()>old);
+        await(()->((View)field("previewHint")).getVisibility()==View.GONE);screenshot("01-editor");float old=t.zoomLevel();inst.runOnMainSync(()->activity.getWindow().getDecorView().findViewWithTag("studio_zoom_in").performClick());assertTrue(t.zoomLevel()>old);
         inst.runOnMainSync(()->t.position(1000));gesture(center,125*d,center,125*d);
         assertEquals(0,((Integer)field("selectedAudio")).intValue());assertNotNull(activity.getWindow().getDecorView().findViewWithTag("studio_tool_Volume"));
         screenshot("02-audio-selection");
