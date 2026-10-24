@@ -55,21 +55,28 @@ public final class WorkspaceCategoryView {
 
     public static JSONObject query(Context context, String folder, String category,
                                    String search, String sort, int offset) throws Exception {
+        return query(context,folder,category,search,sort,offset,50);
+    }
+
+    /** Shared category model for the picker; bounded snapshot before MIME filtering. */
+    static JSONObject query(Context context,String folder,String category,String search,
+                            String sort,int offset,int limit)throws Exception {
+        limit=Math.max(1,Math.min(SCAN_LIMIT,limit));
         WorkspaceStore store=new WorkspaceStore(context);
         String q=search==null?"":search.toLowerCase(Locale.ROOT).trim();
         if("recent".equals(category))
-            return WorkspaceCatalog.query(context,"","recent",q,sort,offset);
+            return WorkspaceCatalog.query(context,"","recent",q,sort,offset,limit);
         if(!folder.isEmpty()) {
             // Navigation normale une fois le dossier ouvert. Les chemins existants sont intacts.
-            return WorkspaceCatalog.query(context,folder,"all",q,sort,offset);
+            return WorkspaceCatalog.query(context,folder,"all",q,sort,offset,limit);
         }
         if("all".equals(category)) {
             // L'accueil est constitué uniquement d'icônes, jamais d'une liste brute.
-            if(q.isEmpty()) return page(new ArrayList<>(),sort,offset,false);
-            return WorkspaceCatalog.query(context,"","search",q,sort,offset);
+            if(q.isEmpty()) return page(new ArrayList<>(),sort,offset,false,limit);
+            return WorkspaceCatalog.query(context,"","search",q,sort,offset,limit);
         }
         if(!isContainerCategory(category))
-            return WorkspaceCatalog.query(context,"",category,q,sort,offset);
+            return WorkspaceCatalog.query(context,"",category,q,sort,offset,limit);
 
         List<JSONObject> result=new ArrayList<>();
         Set<String> seen=new HashSet<>();
@@ -97,7 +104,7 @@ public final class WorkspaceCategoryView {
             next=page.getInt("next_offset");
         }
         if(!q.isEmpty())result=searchFolders(store,result,q,scanned);
-        return page(result,sort,offset,scanned.count>=SCAN_LIMIT);
+        return page(result,sort,offset,scanned.count>=SCAN_LIMIT,limit);
     }
 
     /** Search the folders actually visible in this category, including their contents. */
@@ -189,7 +196,7 @@ public final class WorkspaceCategoryView {
         return "";
     }
 
-    private static JSONObject page(List<JSONObject> rows,String sort,int offset,boolean truncated)
+    private static JSONObject page(List<JSONObject> rows,String sort,int offset,boolean truncated,int limit)
         throws Exception {
         Collections.sort(rows,(x,y)->{
             boolean d1=x.optBoolean("directory"),d2=y.optBoolean("directory");
@@ -200,9 +207,9 @@ public final class WorkspaceCategoryView {
         });
         JSONArray out=new JSONArray();
         int start=Math.max(0,offset);
-        for(int i=start;i<Math.min(start+50,rows.size());i++)out.put(rows.get(i));
+        for(int i=start;i<Math.min(start+limit,rows.size());i++)out.put(rows.get(i));
         return new JSONObject().put("items",out).put("total",rows.size())
-            .put("next_offset",start+50<rows.size()?start+50:-1).put("truncated",truncated);
+            .put("next_offset",start+limit<rows.size()?start+limit:-1).put("truncated",truncated);
     }
     private static final class Counter {int count;}
 }
