@@ -1,3 +1,13 @@
+## Studio tactile — montage direct sur téléphone (24 octobre 2026)
+
+- Timeline avec curseur central fixe, défilement au doigt, zoom par pincement/boutons et double appui sur la règle pour cadrer le projet. Miniatures vidéo échantillonnées dans le plan, pas une image répétée unique.
+- Poignées tactiles de découpe avec durée affichée pendant le geste ; limites de source, vitesse et durées photo respectées. Appui long pour réordonner les plans. Les sources originales restent intactes.
+- Sélection directe des segments audio et texte. Outils contextuels horizontaux avec boutons lisibles, au lieu de huit icônes comprimées sur une ligne. Aperçu vidéo agrandi et état d’export superposé.
+- Vitesse de 0,25× à 4× avec curseur, durée résultante et écoute. Volume indépendant des plans et des segments audio, de 0 à 100 %, appliqué à l’aperçu et au MP4 exporté. La commande MCP video_editor_timeline accepte le même réglage volume.
+- Duplication immédiatement après le plan choisi. La piste musicale séquentielle est raccourcie à la fin du montage après découpe/changement de vitesse ; annuler restaure le projet antérieur.
+- Import multiple depuis le sélecteur Fichiers CHK à miniatures, catégories et recherche, sans recopier les médias déjà présents. Les imports du téléphone restent accessibles.
+- Projets, historique persistant, contrôle MCP et signature Android existants conservés. Le moteur reste une piste vidéo séquentielle, une suite audio et les textes par plan ; les filtres/animations GPU gardent leur aperçu brut explicitement indiqué et leur rendu à l’export.
+
 ## Importation — mêmes dossiers que Fichiers (24 octobre 2026)
 
 - Nouveau sélecteur CHK plein écran : Images, Vidéos, Audio, Documents et Récents utilisent les catégories et dossiers du gestionnaire Fichiers, sans déplacement des médias.

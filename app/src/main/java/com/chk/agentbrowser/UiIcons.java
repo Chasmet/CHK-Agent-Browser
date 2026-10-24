@@ -35,6 +35,11 @@ final class UiIcons {
                 case "layers":Path layer=new Path();layer.moveTo(12,3);layer.lineTo(22,9);layer.lineTo(12,15);layer.lineTo(2,9);layer.close();c.drawPath(layer,p);c.drawLine(2,15,12,21,p);c.drawLine(12,21,22,15,p);break;
                 case "crop":c.drawLine(6,2,6,18,p);c.drawLine(6,18,22,18,p);c.drawLine(2,6,18,6,p);c.drawLine(18,6,18,22,p);break;
                 case "scissors":c.drawCircle(6,18,3,p);c.drawCircle(18,18,3,p);c.drawLine(4,2,17,16,p);c.drawLine(20,2,7,16,p);break;
+                case "trash":c.drawLine(4,6,20,6,p);c.drawLine(9,3,15,3,p);c.drawLine(6,6,7,21,p);c.drawLine(7,21,17,21,p);c.drawLine(17,21,18,6,p);c.drawLine(10,10,10,17,p);c.drawLine(14,10,14,17,p);break;
+                case "sliders":for(int x=5;x<=19;x+=7)c.drawLine(x,3,x,21,p);c.drawCircle(5,8,2.5f,p);c.drawCircle(12,16,2.5f,p);c.drawCircle(19,9,2.5f,p);break;
+                case "move":c.drawLine(2,12,22,12,p);c.drawLine(2,12,7,7,p);c.drawLine(2,12,7,17,p);c.drawLine(22,12,17,7,p);c.drawLine(22,12,17,17,p);break;
+                case "rotation":c.drawArc(4,4,21,21,0,295,false,p);c.drawLine(4,4,10,4,p);c.drawLine(4,4,4,10,p);break;
+                case "animation":c.drawRect(3,10,12,20,p);c.drawLine(7,5,21,5,p);c.drawLine(21,5,16,1,p);c.drawLine(21,5,16,10,p);break;
                 case "effects":Path star=new Path();for(int i=0;i<10;i++){double a=-Math.PI/2+i*Math.PI/5;float r=i%2==0?10:5;float x=12+(float)Math.cos(a)*r,y=12+(float)Math.sin(a)*r;if(i==0)star.moveTo(x,y);else star.lineTo(x,y);}star.close();c.drawPath(star,p);break;
                 default:c.drawRoundRect(4,4,20,20,3,3,p);break;
             }c.restore();
