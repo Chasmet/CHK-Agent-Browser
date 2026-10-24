@@ -38,7 +38,7 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.WorkspaceImportPickerTest,com.chk.agentbrowser.Local2BrowserAutomationTest,com.chk.agentbrowser.BrowserMediaUploadTest,com.chk.agentbrowser.Local2SessionIntegrationTest
-            adb pull /sdcard/Android/data/com.chk.agentbrowser.debug/files/picker-screens app/build/picker-screens
+            adb pull /data/local/tmp/chk-picker-screens app/build/picker-screens
       - name: Save test reports
         if: always()
         uses: actions/upload-artifact@v4

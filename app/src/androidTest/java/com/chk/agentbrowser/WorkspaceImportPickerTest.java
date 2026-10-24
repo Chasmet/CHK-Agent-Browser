@@ -92,7 +92,16 @@ public final class WorkspaceImportPickerTest {
     private void screenshot(String name)throws Exception {
         instrument.waitForIdleSync();android.graphics.Bitmap image=instrument.getUiAutomation().takeScreenshot();
         assertNotNull(image);File dir=new File(app.getExternalFilesDir(null),"picker-screens");assertTrue(dir.isDirectory()||dir.mkdirs());
-        try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}finally{image.recycle();}
+        File target=new File(dir,name+".png");
+        try(FileOutputStream out=new FileOutputStream(target)){image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}finally{image.recycle();}
+        shell("mkdir -p /data/local/tmp/chk-picker-screens");
+        shell("cp "+target.getAbsolutePath()+" /data/local/tmp/chk-picker-screens/");
+    }
+    private void shell(String command)throws Exception {
+        try(android.os.ParcelFileDescriptor fd=instrument.getUiAutomation().executeShellCommand(command);
+            java.io.InputStream input=new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)){
+            byte[] buffer=new byte[1024];while(input.read(buffer)!=-1){}
+        }
     }
     private void waitCallbacks(int value)throws Exception {long deadline=System.currentTimeMillis()+10000;while(callbacks.get()!=value&&System.currentTimeMillis()<deadline)Thread.sleep(50);assertEquals(value,callbacks.get());}
     private boolean contains(JSONArray rows,String path){for(int i=0;i<rows.length();i++)if(path.equals(rows.optJSONObject(i).optString("path")))return true;return false;}
