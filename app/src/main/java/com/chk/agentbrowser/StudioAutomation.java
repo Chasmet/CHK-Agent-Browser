@@ -96,7 +96,7 @@ final class StudioAutomation {
         else{
             if(index<0||index>=items.length())throw new IOException("Plan absent");
             if(type.equals("update")){JSONObject c=items.getJSONObject(index),values=op.getJSONObject("values");for(Iterator<String> it=values.keys();it.hasNext();){String key=it.next();
-                if(!Arrays.asList("path","start_ms","duration_ms","speed","mute","filter","fade_ms","rotation","text","grade_exposure","grade_exposure_end","grade_warmth","grade_warmth_end","grade_saturation","grade_saturation_end","zoom","zoom_end","pan_x","pan_x_end","pan_y","pan_y_end").contains(key))throw new IOException("Paramètre inconnu : "+key);c.put(key,values.get(key));}}
+                if(!Arrays.asList("path","start_ms","duration_ms","volume","speed","mute","filter","fade_ms","rotation","text","grade_exposure","grade_exposure_end","grade_warmth","grade_warmth_end","grade_saturation","grade_saturation_end","zoom","zoom_end","pan_x","pan_x_end","pan_y","pan_y_end").contains(key))throw new IOException("Paramètre inconnu : "+key);c.put(key,values.get(key));}}
             else if(type.equals("delete"))items.remove(index);
             else if(type.equals("move")){int to=op.getInt("to");if(to<0||to>=items.length())throw new IOException("Destination invalide");Object moved=items.remove(index);JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==to)out.put(moved);if(i<items.length())out.put(items.get(i));}p.put(track,out);}
             else throw new IOException("Opération inconnue : "+type);
@@ -159,7 +159,7 @@ final class StudioAutomation {
         .put("clip_parameters",new JSONObject().put("path","fichier Android existant").put("start_ms","entier >=0 ; 0 pour photo").put("duration_ms","photo 1000..60000 ; vidéo 500..1200000")
             .put("filter","aucun,noir,vintage,chaud,froid,cinema,contraste,nuit,vibrant,doux,desature,sepia")
             .put("fade_ms","0..min(1500,duration/3), passage par le noir")
-            .put("speed","0.25..4").put("rotation","-180..180").put("mute","boolean").put("text","500 caractères maximum")
+            .put("volume","0..1 · vidéo et audio, aperçu et export").put("speed","0.25..4").put("rotation","-180..180").put("mute","boolean").put("text","500 caractères maximum")
             .put("grade_exposure / grade_exposure_end","-0.5..0.5").put("grade_warmth / grade_warmth_end","-0.5..0.5").put("grade_saturation / grade_saturation_end","0..2")
             .put("zoom / zoom_end","1..4").put("pan_x / pan_x_end / pan_y / pan_y_end","-1..1"))
         .put("queue_request",new JSONObject().put("request_id","identifiant stable, lettres/chiffres/tirets/soulignés, 1..80 caractères").put("projects",new JSONArray().put(new JSONObject().put("path","dossier/montage.json")).put(new JSONObject().put("project","objet projet complet, alternative à path"))))

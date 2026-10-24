@@ -3,44 +3,164 @@ package com.chk.agentbrowser;
 import android.content.Context;
 import android.graphics.*;
 import android.view.*;
+import android.util.LruCache;
 import org.json.*;
 import java.util.*;
 
-/** Draws time-proportional clips and actual audio/text segments without rebuilding views per frame. */
+/** Fixed playhead; the actual tracks scroll underneath. Trim commits once per gesture. */
 final class StudioTimeline extends View {
-    interface Listener {void seek(long position,int clip);default void scrubbing(boolean active){}default void move(int from,int to){}}
-    private final Paint paint=new Paint(3);private final RectF rect=new RectF();
-    private JSONObject project=new JSONObject();private final Map<String,Bitmap> thumbnails=new HashMap<>();
-    private long total,position;private int selected,generation;private boolean fitted;private float scale=1,downX,downY;private boolean scrub;private boolean dragging;private int dragFrom,dragTo;
-    private final Runnable startDrag=()->{if(downY<getHeight()*35/186f||downY>getHeight()*94/186f)return;dragging=true;dragFrom=indexAt(downX);dragTo=dragFrom;getParent().requestDisallowInterceptTouchEvent(true);performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);invalidate();};
-    private Listener listener;private final ScaleGestureDetector zoom;
-    StudioTimeline(Context context){super(context);setFocusable(true);setContentDescription("Timeline du projet : toucher un plan ou glisser sur la règle pour déplacer le curseur");zoom=new ScaleGestureDetector(context,new ScaleGestureDetector.SimpleOnScaleGestureListener(){@Override public boolean onScale(ScaleGestureDetector d){scale=Math.max(.3f,Math.min(16,scale*d.getScaleFactor()));requestLayout();invalidate();return true;}});}
-    void setListener(Listener value){listener=value;}
-    void zoomBy(float factor){
-        scale=Math.max(.3f,Math.min(16,scale*factor));
-        fitted=true;requestLayout();invalidate();
+    interface Listener {
+        void seek(long position,int clip);
+        default void scrubbing(boolean active){}
+        default void move(int from,int to){}
+        default void trim(int clip,JSONObject value){}
+        default void audio(int index){}
+        default void text(int index){}
+        default void add(String kind){}
     }
-    void setProject(JSONObject value,int clip){project=value;selected=clip;generation++;total=0;JSONArray clips=project.optJSONArray("clips");Set<String> currentKeys=new HashSet<>();if(clips!=null)for(int i=0;i<clips.length();i++){JSONObject c=clips.optJSONObject(i);total+=duration(c);final int ticket=generation;String path=c.optString("path");long at=c.optLong("start_ms");String key=path+":"+at;currentKeys.add(key);if(!thumbnails.containsKey(key))ThumbnailLoader.load(getContext(),path,at,!StudioImages.isImage(new java.io.File(path)),new ThumbnailLoader.Result(){public boolean current(){return ticket==generation;}public void ready(Bitmap b){thumbnails.put(key,b);invalidate();}});}thumbnails.keySet().retainAll(currentKeys);if(!fitted&&total>0){scale=Math.max(.3f,Math.min(16,(getResources().getDisplayMetrics().widthPixels-dp(60))/(total*dp(30)/1000)));fitted=true;}requestLayout();invalidate();}
-    @Override protected void onDetachedFromWindow(){generation++;super.onDetachedFromWindow();}
-    void position(long value){position=value;invalidate();}
-    private long duration(JSONObject c){return c==null?0:Math.round(c.optLong("duration_ms",10000)/c.optDouble("speed",1));}
+    private final Paint paint=new Paint(3);
+    private final RectF rect=new RectF();
+    private JSONObject project=new JSONObject();
+    private final LruCache<String,Bitmap> thumbnails=new LruCache<>(48);
+    private final Set<String> loading=new HashSet<>();
+    private final Map<String,Long> sources=new HashMap<>();
+    private long total,position,downPosition;
+    private int selected,generation,dragFrom,dragTo,trimEdge,selectedAudio=-1;
+    private float scale=1,downX,downY,lastX;
+    private boolean moving,dragging,pinching;
+    private JSONObject pendingTrim;
+    private Listener listener;
+    private final ScaleGestureDetector zoom;
+    private final GestureDetector gestures;
+    private final Runnable startDrag=()->{
+        if(moving||pinching||trimEdge!=0||downY<dp(36)||downY>dp(100)||clips().length()==0||downX<x(0)||downX>x(total))return;
+        dragging=true;dragFrom=indexAt(timeAt(downX));dragTo=dragFrom;
+        getParent().requestDisallowInterceptTouchEvent(true);performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);invalidate();
+    };
+    StudioTimeline(Context context){
+        super(context);setTag("studio_timeline");setFocusable(true);
+        setContentDescription("Timeline : glisser pour parcourir, pincer pour zoomer, poignées pour découper, appui long pour déplacer");
+        zoom=new ScaleGestureDetector(context,new ScaleGestureDetector.SimpleOnScaleGestureListener(){
+            public boolean onScale(ScaleGestureDetector detector){pinching=true;removeCallbacks(startDrag);zoomBy(detector.getScaleFactor());return true;}
+        });
+        gestures=new GestureDetector(context,new GestureDetector.SimpleOnGestureListener(){
+            public boolean onDown(MotionEvent e){return true;}
+            public boolean onDoubleTap(MotionEvent e){if(e.getY()<dp(32)){fit();return true;}return false;}
+        });
+    }
+    void setListener(Listener value){listener=value;}
+    private JSONArray clips(){JSONArray a=project.optJSONArray("clips");return a==null?new JSONArray():a;}
     private float dp(float n){return n*getResources().getDisplayMetrics().density;}
-    private float pixelsPerMs(){return dp(30)*scale/1000f;}
-    private float x(long ms){return dp(24)+ms*pixelsPerMs();}
-    @Override protected void onMeasure(int widthSpec,int heightSpec){int viewport=getResources().getDisplayMetrics().widthPixels;setMeasuredDimension(Math.max(viewport,(int)(x(total)+dp(60))),MeasureSpec.getSize(heightSpec));}
+    private float pixelsPerMs(){return dp(48)*scale/1000f;}
+    private float x(long ms){return getWidth()/2f+(ms-position)*pixelsPerMs();}
+    private long timeAt(float x){return Math.max(0,Math.min(total,position+Math.round((x-getWidth()/2f)/pixelsPerMs())));}
+    void zoomBy(float factor){scale=Math.max(.15f,Math.min(64,scale*factor));invalidate();}
+    void fit(){scale=Math.max(.15f,Math.min(64,(getWidth()-dp(40))/Math.max(1,total*dp(48)/1000f)));seek(total/2);invalidate();}
+    float zoomLevel(){return scale;}
+    long playhead(){return position;}
+    void audioSelection(int index){selectedAudio=index;invalidate();}
+    void sourceDuration(String path,long duration){sources.put(path,duration);}
+    void setProject(JSONObject value,int clip){
+        project=value;selected=clip;total=StudioEdits.total(project);position=Math.min(position,total);
+        generation++;loading.clear();pendingTrim=null;invalidate();
+    }
+    void position(long value){if(moving||dragging||trimEdge!=0||pinching)return;position=Math.max(0,Math.min(total,value));selected=indexAt(position);invalidate();}
+    @Override protected void onDetachedFromWindow(){generation++;removeCallbacks(startDrag);loading.clear();super.onDetachedFromWindow();}
     private void text(Canvas canvas,String value,float x,float y,int size,int color){paint.setStyle(Paint.Style.FILL);paint.setColor(color);paint.setTypeface(Typeface.create("sans-serif",Typeface.NORMAL));paint.setTextSize(dp(size));canvas.drawText(value,x,y,paint);}
-    @Override protected void onDraw(Canvas canvas){super.onDraw(canvas);canvas.save();canvas.scale(1,getHeight()/dp(186));canvas.drawColor(0xff1b1c20);Rect visible=new Rect();canvas.getClipBounds(visible);float step=1000;while(step*pixelsPerMs()<dp(52))step*=2;
-        long first=Math.max(0,(long)((visible.left-dp(24))/pixelsPerMs()/step)* (long)step);
-        for(long t=first;t<=total&&x(t)<visible.right;t+=(long)step){text(canvas,String.format(java.util.Locale.ROOT,"%02d:%02d",t/60000,(t/1000)%60),x(t)+dp(2),dp(16),10,0xffb7bac5);paint.setColor(0xff50535e);canvas.drawLine(x(t),dp(24),x(t),dp(29),paint);}
-        JSONArray clips=project.optJSONArray("clips");long start=0;if(clips!=null)for(int i=0;i<clips.length();i++){JSONObject c=clips.optJSONObject(i);float left=x(start),right=x(start+duration(c));start+=duration(c);if(right<visible.left||left>visible.right)continue;rect.set(left,dp(35),right,dp(94));paint.setColor(0xff343740);paint.setStyle(Paint.Style.FILL);canvas.drawRect(rect,paint);Bitmap b=thumbnails.get(c.optString("path")+":"+c.optLong("start_ms"));if(b!=null){canvas.save();canvas.clipRect(rect);for(float tx=left+(float)Math.floor(Math.max(0,visible.left-left)/dp(64))*dp(64);tx<Math.min(right,visible.right);tx+=dp(64)){RectF tile=new RectF(tx,dp(35),tx+dp(64),dp(94));canvas.drawBitmap(b,null,tile,paint);}canvas.restore();}if(i==selected||dragging&&i==dragTo){paint.setStyle(Paint.Style.STROKE);paint.setColor(0xff20d4d3);paint.setStrokeWidth(dp(3));canvas.drawRoundRect(rect,dp(3),dp(3),paint);paint.setStyle(Paint.Style.FILL);canvas.drawRect(left,dp(35),left+dp(4),dp(94),paint);canvas.drawRect(right-dp(4),dp(35),right,dp(94),paint);}paint.setStyle(Paint.Style.FILL);paint.setColor(0x99000000);canvas.drawRect(left,dp(75),right,dp(94),paint);canvas.save();canvas.clipRect(left,dp(75),right,dp(94));text(canvas,(i+1)+" · "+String.format(java.util.Locale.ROOT,"%.1f s",duration(c)/1000f),left+dp(6),dp(88),10,0xffffffff);canvas.restore();}
-        JSONArray audio=project.optJSONArray("audio");long audioAt=0;if(audio!=null&&audio.length()>0)for(int i=0;i<audio.length();i++){JSONObject c=audio.optJSONObject(i);long len=c.optLong("duration_ms");segment(canvas,x(audioAt),x(audioAt+len),106,136,0xff17626c,"♫ "+filename(c.optString("path")));audioAt+=len;}else segment(canvas,x(0),x(total),106,136,0xff284148,project.optBoolean("mute_original",false)?"Son original coupé":"♫ Son original");
-        long textAt=0;if(clips!=null)for(int i=0;i<clips.length();i++){JSONObject c=clips.optJSONObject(i);long len=duration(c);if(!c.optString("text").isEmpty())segment(canvas,x(textAt),x(textAt+len),144,174,0xff514b8d,"T  "+c.optString("text"));textAt+=len;}
-        paint.setColor(0xffffffff);paint.setStrokeWidth(dp(1.5f));canvas.drawLine(x(position),dp(25),x(position),dp(181),paint);paint.setStyle(Paint.Style.FILL);canvas.drawCircle(x(position),dp(28),dp(3),paint);canvas.restore();
+    private String time(long ms){return String.format(java.util.Locale.ROOT,"%02d:%02d.%01d",ms/60000,ms/1000%60,ms%1000/100);}
+    @Override protected void onDraw(Canvas canvas){
+        super.onDraw(canvas);canvas.drawColor(0xff191c23);
+        float step=100;while(step*pixelsPerMs()<dp(56))step*=2;
+        long first=Math.max(0,(long)((position-getWidth()/2f/pixelsPerMs())/step)*(long)step);
+        for(long t=first;t<=total&&x(t)<getWidth();t+=(long)step){text(canvas,time(t),x(t)+dp(3),dp(18),10,0xffb7c3d7);paint.setColor(0xff657084);canvas.drawLine(x(t),dp(24),x(t),dp(29),paint);}
+        long at=0;JSONArray clips=clips();
+        for(int i=0;i<clips.length();i++){
+            JSONObject clip=clips.optJSONObject(i);long len=StudioEdits.duration(clip);float left=x(at),right=x(at+len);at+=len;
+            if(i==selected&&pendingTrim!=null){float length=StudioEdits.duration(pendingTrim)*pixelsPerMs();if(trimEdge<0)left=right-length;else right=left+length;}
+            if(right<0||left>getWidth())continue;
+            rect.set(left,dp(38),right,dp(100));paint.setStyle(Paint.Style.FILL);paint.setColor(0xff333f52);canvas.drawRoundRect(rect,dp(6),dp(6),paint);
+            canvas.save();canvas.clipRect(rect);
+            for(float tile=Math.max(left,left+(float)Math.floor(Math.max(0,-left)/dp(60))*dp(60));tile<Math.min(right,getWidth());tile+=dp(60)){
+                double fraction=Math.max(0,Math.min(.999,(tile-left)/(right-left)));int sample=Math.min(2,(int)(fraction*3));
+                long sourceAt=clip.optLong("start_ms")+clip.optLong("duration_ms")*(sample*2+1)/6;
+                Bitmap bitmap=thumbnail(clip,sourceAt);
+                if(bitmap!=null){paint.setColor(0xffffffff);canvas.drawBitmap(bitmap,null,new RectF(tile,dp(38),tile+dp(60),dp(100)),paint);}
+            }
+            paint.setColor(0xbb10151f);canvas.drawRect(left,dp(79),right,dp(100),paint);
+            text(canvas,(i+1)+" · "+String.format(java.util.Locale.ROOT,"%.1f s",len/1000f),Math.max(left,0)+dp(8),dp(94),11,0xffffffff);canvas.restore();
+            if(i==selected&&selectedAudio<0||dragging&&i==dragTo){
+                paint.setColor(0xff55e2ca);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(2));canvas.drawRoundRect(rect,dp(6),dp(6),paint);paint.setStyle(Paint.Style.FILL);
+                for(float hx:new float[]{left,right-dp(12)}){canvas.drawRoundRect(hx,dp(38),hx+dp(12),dp(100),dp(4),dp(4),paint);}
+                paint.setColor(0xff142c2a);paint.setStrokeWidth(dp(2));canvas.drawLine(left+dp(6),dp(57),left+dp(6),dp(81),paint);canvas.drawLine(right-dp(6),dp(57),right-dp(6),dp(81),paint);
+            }
+        }
+        JSONArray audio=project.optJSONArray("audio");long audioAt=0;
+        if(audio!=null&&audio.length()>0)for(int i=0;i<audio.length();i++){
+            JSONObject c=audio.optJSONObject(i);long len=c.optLong("duration_ms");segment(canvas,x(audioAt),x(audioAt+len),111,145,i==selectedAudio?0xff148d8a:0xff22575f,"♫ "+filename(c.optString("path")));audioAt+=len;
+        }else segment(canvas,dp(12),getWidth()-dp(12),111,145,0xff28353f,"＋ Ajouter un audio");
+        long textAt=0;boolean captions=false;
+        for(int i=0;i<clips.length();i++){JSONObject c=clips.optJSONObject(i);long len=StudioEdits.duration(c);
+            if(!c.optString("text").isEmpty()){captions=true;segment(canvas,x(textAt),x(textAt+len),154,184,0xff53457b,"T  "+c.optString("text"));}textAt+=len;}
+        if(!captions)segment(canvas,dp(12),getWidth()-dp(12),154,184,0xff302d40,"＋ Ajouter un texte");
+        paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff1f6ff);paint.setStrokeWidth(dp(2));canvas.drawLine(getWidth()/2f,dp(27),getWidth()/2f,dp(190),paint);canvas.drawRoundRect(getWidth()/2f-dp(4),dp(27),getWidth()/2f+dp(4),dp(34),dp(2),dp(2),paint);
+        if(pendingTrim!=null)text(canvas,"Durée : "+String.format(java.util.Locale.ROOT,"%.2f s",StudioEdits.duration(pendingTrim)/1000f),dp(12),dp(201),12,0xff55e2ca);
+        else text(canvas,dragging?"Relâcher pour déplacer le plan":"Glisser · pincer pour zoomer · appui long pour déplacer",dp(12),dp(201),10,0xff98a9c2);
+    }
+    private Bitmap thumbnail(JSONObject clip,long at){
+        String path=clip.optString("path");boolean photo=StudioImages.isImage(new java.io.File(path));if(photo)at=0;
+        String key=path+":"+at;Bitmap existing=thumbnails.get(key);
+        if(existing==null&&!loading.contains(key)){
+            loading.add(key);int ticket=generation;
+            ThumbnailLoader.load(getContext(),path,at,!photo,new ThumbnailLoader.Result(){
+                public boolean current(){return ticket==generation;}
+                public void ready(Bitmap b){loading.remove(key);thumbnails.put(key,b);invalidate();}
+            });
+        }
+        return existing;
     }
     private String filename(String path){return path.substring(path.lastIndexOf('/')+1);}
-    private void segment(Canvas canvas,float left,float right,int top,int bottom,int color,String label){if(right<=left)return;paint.setColor(color);paint.setStyle(Paint.Style.FILL);rect.set(left,dp(top),right,dp(bottom));canvas.drawRoundRect(rect,dp(4),dp(4),paint);canvas.save();canvas.clipRect(rect);text(canvas,label,left+dp(8),dp(bottom-9),11,0xffeeeeff);canvas.restore();}
-    private int indexAt(float where){JSONArray clips=project.optJSONArray("clips");long time=Math.max(0,(long)((where-dp(24))/pixelsPerMs())),at=0;if(clips==null)return 0;for(int i=0;i<clips.length();i++){at+=duration(clips.optJSONObject(i));if(time<at)return i;}return Math.max(0,clips.length()-1);}
-    private void seek(float where){position=Math.max(0,Math.min(total,(long)((where-dp(24))/pixelsPerMs())));JSONArray clips=project.optJSONArray("clips");long start=0;int index=clips==null?0:Math.max(0,clips.length()-1);if(clips!=null)for(int i=0;i<clips.length();i++){start+=duration(clips.optJSONObject(i));if(position<start){index=i;break;}}selected=index;invalidate();if(listener!=null)listener.seek(position,index);}
-    @Override public boolean onTouchEvent(MotionEvent event){zoom.onTouchEvent(event);if(event.getPointerCount()>1){getParent().requestDisallowInterceptTouchEvent(true);return true;}switch(event.getActionMasked()){case MotionEvent.ACTION_DOWN:downX=event.getX();downY=event.getY();dragging=false;postDelayed(startDrag,450);scrub=downY<getHeight()*32/186f;if(scrub){getParent().requestDisallowInterceptTouchEvent(true);if(listener!=null)listener.scrubbing(true);}return true;case MotionEvent.ACTION_MOVE:if(dragging){dragTo=indexAt(event.getX());invalidate();}else{if(Math.abs(event.getX()-downX)>dp(8)||Math.abs(event.getY()-downY)>dp(8))removeCallbacks(startDrag);if(scrub)seek(event.getX());}return true;case MotionEvent.ACTION_UP:removeCallbacks(startDrag);if(dragging){dragging=false;if(listener!=null&&dragFrom!=dragTo)listener.move(dragFrom,dragTo);getParent().requestDisallowInterceptTouchEvent(false);invalidate();return true;}if(scrub||Math.abs(event.getX()-downX)<dp(8)){seek(event.getX());performClick();}scrub=false;if(listener!=null)listener.scrubbing(false);getParent().requestDisallowInterceptTouchEvent(false);return true;case MotionEvent.ACTION_CANCEL:removeCallbacks(startDrag);dragging=false;scrub=false;if(listener!=null)listener.scrubbing(false);return true;}return true;}
+    private void segment(Canvas canvas,float left,float right,int top,int bottom,int color,String label){
+        if(right<=0||left>=getWidth()||right<=left)return;
+        paint.setColor(color);paint.setStyle(Paint.Style.FILL);rect.set(Math.max(-dp(5),left),dp(top),Math.min(getWidth()+dp(5),right),dp(bottom));canvas.drawRoundRect(rect,dp(5),dp(5),paint);
+        canvas.save();canvas.clipRect(rect);text(canvas,label,Math.max(dp(3),left)+dp(8),dp(bottom-10),12,0xfff1f6ff);canvas.restore();
+    }
+    private int indexAt(long time){long at=0;JSONArray clips=clips();for(int i=0;i<clips.length();i++){at+=StudioEdits.duration(clips.optJSONObject(i));if(time<at)return i;}return Math.max(0,clips.length()-1);}
+    private long start(int index){long n=0;for(int i=0;i<index;i++)n+=StudioEdits.duration(clips().optJSONObject(i));return n;}
+    private void seek(long at){position=Math.max(0,Math.min(total,at));selected=indexAt(position);selectedAudio=-1;invalidate();if(listener!=null)listener.seek(position,selected);}
+    @Override public boolean onTouchEvent(MotionEvent event){
+        zoom.onTouchEvent(event);gestures.onTouchEvent(event);
+        if(event.getPointerCount()>1){pinching=true;removeCallbacks(startDrag);getParent().requestDisallowInterceptTouchEvent(true);return true;}
+        switch(event.getActionMasked()){
+            case MotionEvent.ACTION_DOWN:
+                downX=lastX=event.getX();downY=event.getY();downPosition=position;moving=false;dragging=false;pinching=false;trimEdge=0;pendingTrim=null;
+                if(downY>=dp(38)&&downY<=dp(100)&&selectedAudio<0&&clips().length()>0){float left=x(start(selected)),right=x(start(selected)+StudioEdits.duration(clips().optJSONObject(selected)));
+                    if(Math.abs(downX-left)<dp(18))trimEdge=-1;else if(Math.abs(downX-right)<dp(18))trimEdge=1;}
+                postDelayed(startDrag,450);getParent().requestDisallowInterceptTouchEvent(true);return true;
+            case MotionEvent.ACTION_MOVE:
+                if(pinching)return true;
+                if(Math.abs(event.getX()-downX)>dp(6)||Math.abs(event.getY()-downY)>dp(6)){moving=true;removeCallbacks(startDrag);}
+                if(dragging){dragTo=indexAt(timeAt(event.getX()));if(event.getX()<dp(32))position=Math.max(0,position-100);else if(event.getX()>getWidth()-dp(32))position=Math.min(total,position+100);invalidate();}
+                else if(trimEdge!=0){try{JSONObject c=clips().getJSONObject(selected);long source=sources.containsKey(c.optString("path"))?sources.get(c.optString("path")):c.optLong("start_ms")+c.optLong("duration_ms");pendingTrim=StudioEdits.trimmed(c,trimEdge<0,Math.round((event.getX()-downX)/pixelsPerMs()),source);invalidate();}catch(Exception ignored){}}
+                else if(moving){if(listener!=null)listener.scrubbing(true);seek(downPosition-Math.round((event.getX()-downX)/pixelsPerMs()));}
+                lastX=event.getX();return true;
+            case MotionEvent.ACTION_UP:
+                removeCallbacks(startDrag);
+                if(pinching){pinching=false;finishGesture();return true;}
+                if(dragging){dragging=false;if(listener!=null&&dragFrom!=dragTo)listener.move(dragFrom,dragTo);}
+                else if(trimEdge!=0&&pendingTrim!=null&&moving){if(listener!=null)listener.trim(selected,pendingTrim);}
+                else if(!moving){long at=timeAt(event.getX());
+                    if(downY>=dp(111)&&downY<dp(146)){
+                        JSONArray a=project.optJSONArray("audio");int hit=-1;long n=0;if(a!=null)for(int i=0;i<a.length();i++){n+=a.optJSONObject(i).optLong("duration_ms");if(at<n){hit=i;break;}}
+                        selectedAudio=hit;if(listener!=null){if(hit>=0)listener.audio(hit);else listener.add("audio");}
+                    }else if(downY>=dp(154)&&downY<dp(185)){int index=indexAt(at);if(listener!=null)listener.text(index);}
+                    else seek(at);
+                    performClick();
+                }
+                finishGesture();return true;
+            case MotionEvent.ACTION_CANCEL:removeCallbacks(startDrag);dragging=false;pinching=false;finishGesture();return true;
+        }
+        return true;
+    }
+    private void finishGesture(){trimEdge=0;moving=false;pendingTrim=null;getParent().requestDisallowInterceptTouchEvent(false);if(listener!=null)listener.scrubbing(false);invalidate();}
     @Override public boolean performClick(){super.performClick();return true;}
 }
