@@ -746,11 +746,14 @@ public final class VideoEditorActivity extends Activity {
         },uris->{if(uris==null||uris.length==0)return;ArrayList<String> paths=new ArrayList<>();for(android.net.Uri uri:uris)paths.add(android.text.TextUtils.join("/",uri.getPathSegments().subList(1,uri.getPathSegments().size())));addWorkspaceBatch(kind,paths);},()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(kind.equals("audio")?"audio/*":"*/*").putExtra(Intent.EXTRA_MIME_TYPES,kind.equals("audio")?new String[]{"audio/*"}:new String[]{"video/*","image/png","image/jpeg","image/webp"}).addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true),810));}catch(Exception e){toast(e.getMessage());}
     }
     private void addWorkspaceBatch(String kind,List<String> paths){
-        if(project==null||saving||importing)return;importing=true;String snapshot=project.toString();
+        if(project==null||saving||importing)return;
+        if(kind.equals("audio")){long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().optJSONObject(i).optLong("duration_ms");if(remaining<500){toast(total()==0?"Ajoute d’abord une vidéo ou une photo":"La piste audio couvre déjà le montage. Raccourcis-la avant d’ajouter un audio.");return;}}
+        importing=true;String snapshot=project.toString();
         WorkspaceCommands.IO.execute(()->{try{
             JSONObject copy=new JSONObject(snapshot);JSONArray target=copy.getJSONArray(kind.equals("audio")?"audio":"clips");int maximum=kind.equals("audio")?40:100;
             if(target.length()+paths.size()>maximum)throw new Exception(maximum+" médias maximum");
-            for(String path:paths){JSONObject info=MediaInspection.info(this,path);boolean image=info.optBoolean("image");if(kind.equals("audio")&&image)throw new Exception("Choisis un fichier audio");long duration=image?5000:info.optLong("duration_ms");if(duration<500)throw new Exception("Média trop court : "+path);target.put(new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration));}
+            long audioRemaining=StudioEdits.total(copy);for(int i=0;i<copy.getJSONArray("audio").length();i++)audioRemaining-=copy.getJSONArray("audio").getJSONObject(i).optLong("duration_ms");
+            for(String path:paths){JSONObject info=MediaInspection.info(this,path);boolean image=info.optBoolean("image");if(kind.equals("audio")&&image)throw new Exception("Choisis un fichier audio");long duration=image?5000:info.optLong("duration_ms");if(duration<500)throw new Exception("Média trop court : "+path);if(kind.equals("audio")){if(audioRemaining<500)throw new Exception("Le montage est trop court pour tous les audios sélectionnés. Réduis la sélection.");duration=Math.min(duration,audioRemaining);audioRemaining-=duration;}target.put(new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration));}
             if(kind.equals("audio"))StudioEdits.fitAudio(copy);engine.validate(this,copy);
             ui.post(()->{importing=false;if(!alive)return;remember();project=copy;selected=clips().length()-1;selectedAudio=kind.equals("audio")?audio().length()-1:-1;save();});
         }catch(Exception e){ui.post(()->{importing=false;toast("Importation : "+e.getMessage());});}});
