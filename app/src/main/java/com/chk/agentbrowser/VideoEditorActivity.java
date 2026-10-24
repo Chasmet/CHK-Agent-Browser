@@ -33,6 +33,7 @@ public final class VideoEditorActivity extends Activity {
     private StudioRenderPreview renderPreview;
     private boolean renderedMode;
     private TextView renderBadge;
+    private Runnable preparedEditorAction;
     private String toolPage="Accueil";
     private HorizontalScrollView contextStrip,mainNavigation;
     private WorkspaceMediaChooser studioPicker;
@@ -107,7 +108,7 @@ public final class VideoEditorActivity extends Activity {
         fullscreenButton.setOnClickListener(v->openFullscreen());
         renderPreview=new StudioRenderPreview(this);
         renderBadge=MobileUi.text(this,"Source · Aperçu rendu pour voir les effets",10,0xffb4cbdc);renderBadge.setPadding(dp(5),dp(3),dp(5),dp(3));renderBadge.setBackgroundColor(0xbb15202d);renderBadge.setTag("studio_render_preview");
-        FrameLayout.LayoutParams badgeLayout=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.LEFT);badgeLayout.bottomMargin=dp(3);canvas.addView(renderBadge,badgeLayout);renderBadge.setOnClickListener(v->renderedPreview());
+        FrameLayout.LayoutParams badgeLayout=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.LEFT);badgeLayout.bottomMargin=dp(3);canvas.addView(renderBadge,badgeLayout);renderBadge.setOnClickListener(v->{if(renderedMode)preview();else renderedPreview();});
         player=new ExoPlayer.Builder(this).build();
         // Keep ExoPlayer's direct decoder output while seeking on multi-clip projects.
         // GPU filters are applied by Transformer on export; hot-swapping live GL
@@ -121,11 +122,12 @@ public final class VideoEditorActivity extends Activity {
             @Override public void onPlaybackStateChanged(int state){
                 if(state==Player.STATE_READY&&clip()!=null&&StudioImages.isImage(new java.io.File(clip().optString("path"))))previewReady=true;
                 if(state==Player.STATE_READY && previewReady)previewHint.setVisibility(View.GONE);
+                if(state==Player.STATE_READY&&!renderedMode&&preparedEditorAction!=null){Runnable action=preparedEditorAction;preparedEditorAction=null;ui.post(()->{if(alive&&!saving&&!importing)action.run();});}
                 if(state==Player.STATE_ENDED && audioPlayer!=null)audioPlayer.pause();
             }
             @Override public void onPlayerError(androidx.media3.common.PlaybackException error){
                 previewHint.setText("Vidéo non lisible sur cet appareil : "+error.getErrorCodeName()+"\nVérifie le codec ou réimporte ce plan.");
-                previewHint.setVisibility(View.VISIBLE);pausePreview();
+                previewHint.setVisibility(View.VISIBLE);preparedEditorAction=null;pausePreview();
             }
         });
         LinearLayout playback=new LinearLayout(this);playback.setPadding(dp(8),0,dp(4),0);playback.setGravity(Gravity.CENTER_VERTICAL);root.addView(playback,new LinearLayout.LayoutParams(-1,dp(42)));
@@ -228,7 +230,7 @@ public final class VideoEditorActivity extends Activity {
     }
     private void tool(String glyph,String label,Runnable action){
         String icon=label.equals("Diviser")||label.equals("Découper")?"scissors":label.equals("Vitesse")||label.equals("Durée")?"speed":label.equals("Volume")||label.equals("Son original")?"audio":label.equals("Dupliquer")?"layers":label.equals("Supprimer")||label.equals("Retirer")?"trash":label.equals("Ajuster")||label.equals("Étalonnage")?"sliders":label.contains("Texte")||label.equals("Transcrire")?"text":label.equals("Ajouter")?"plus":label.equals("Animation")?"animation":label.equals("Rotation")?"rotation":label.equals("Déplacer")?"move":label.contains("image")?"play":label.contains("exports")?"download":label.contains("Audit")?"search":"effects";
-        TextView v=UiIcons.button(this,label,icon,0xffedf5ff);v.setTag("studio_tool_"+label);v.setSingleLine(true);v.setEllipsize(android.text.TextUtils.TruncateAt.END);v.setPadding(dp(4),dp(5),dp(4),dp(5));tools.addView(v,new LinearLayout.LayoutParams(dp(82),-1));v.setOnClickListener(w->{if(project!=null&&!saving&&!importing)action.run();});
+        TextView v=UiIcons.button(this,label,icon,0xffedf5ff);v.setTag("studio_tool_"+label);v.setSingleLine(true);v.setEllipsize(android.text.TextUtils.TruncateAt.END);v.setPadding(dp(4),dp(5),dp(4),dp(5));tools.addView(v,new LinearLayout.LayoutParams(dp(82),-1));v.setOnClickListener(w->{if(project!=null&&!saving&&!importing){if(renderedMode&&!label.equals("Aperçu rendu")){preparedEditorAction=action;preview();}else action.run();}});
     }
     private void toast(String text){if(alive)Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
     private JSONArray clips(){return project==null?new JSONArray():project.optJSONArray("clips");}
@@ -760,11 +762,12 @@ public final class VideoEditorActivity extends Activity {
         if(renderPreview!=null)renderPreview.cancel();if(renderBadge!=null)renderBadge.setText(StudioLayers.items(project==null?new JSONObject():project).length()>0?"Source sans calques · toucher pour l’aperçu rendu":"Source · toucher pour voir les effets rendus");
     }
     private void renderedPreview(){
+        if(renderedMode){toast("Aperçu déjà rendu. Touche le bandeau pour revenir à la source.");return;}
         if(project==null||saving||importing||clips().length()==0)return;String state=engine.status().optString("state");if(state.equals("running")||state.equals("preparing")){toast("Attends la fin de l’export");return;}
         pausePreview();long at=timelinePosition();int requestedRevision=revision;previewHint.setText("Préparation de l’aperçu rendu sur Android…");previewHint.setVisibility(View.VISIBLE);
         renderPreview.start(project,new StudioRenderPreview.Result(){
             public void ready(java.io.File file){if(!alive||revision!=requestedRevision){renderPreview.cancel();return;}
-                renderedMode=true;audioPlayer.stop();audioPlayer.clearMediaItems();previewCaption.setText("");player.setPlaybackSpeed(1);player.setVolume(1);player.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)));player.prepare();player.seekTo(Math.min(at,Math.max(0,total()-1)));renderBadge.setText("Aperçu rendu · calques, textes et effets");previewHint.setVisibility(View.GONE);
+                renderedMode=true;audioPlayer.stop();audioPlayer.clearMediaItems();previewCaption.setText("");player.setPlaybackSpeed(1);player.setVolume(1);player.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)));player.prepare();player.seekTo(Math.min(at,Math.max(0,total()-1)));renderBadge.setText("Aperçu rendu · toucher pour éditer la source");previewHint.setVisibility(View.GONE);
             }
             public void failed(String error){if(!alive)return;previewHint.setVisibility(View.GONE);toast("Aperçu rendu : "+error);}
         });

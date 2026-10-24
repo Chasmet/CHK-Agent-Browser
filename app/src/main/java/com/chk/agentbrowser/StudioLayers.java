@@ -19,6 +19,7 @@ final class StudioLayers {
     private StudioLayers(){}
     static JSONArray items(JSONObject project){JSONArray a=project.optJSONArray("layers");return a==null?new JSONArray():a;}
     static void validate(Context context,JSONObject project,long total)throws Exception {
+        if(project.has("layers")&&!(project.opt("layers") instanceof JSONArray))throw new IllegalArgumentException("La piste layers doit être une liste");
         JSONArray layers=items(project);if(layers.length()>MAX)throw new IllegalArgumentException("3 calques maximum");
         WorkspaceStore store=new WorkspaceStore(context);File output=store.file(project.getString("output"));
         for(int i=0;i<layers.length();i++){
@@ -28,7 +29,7 @@ final class StudioLayers {
             JSONObject info=MediaInspection.info(context,path);boolean image=info.optBoolean("image");
             boolean hasVideo=false;JSONArray tracks=info.optJSONArray("tracks");if(tracks!=null)for(int j=0;j<tracks.length();j++)if(tracks.optJSONObject(j).optString("mime_type").startsWith("video/"))hasVideo=true;
             if(!image&&!hasVideo)throw new IllegalArgumentException("Calque image ou vidéo requis");
-            long at=layer.optLong("offset_ms"),start=layer.optLong("start_ms"),duration=layer.optLong("duration_ms",3000);
+            long at=layer.optLong("offset_ms"),start=layer.optLong("start_ms"),duration=layer.getLong("duration_ms");
             if(at<0||start<0||duration<(image?1000:500)||at>total-duration)throw new IllegalArgumentException("Le calque doit tenir dans le montage");
             if(image&&(start!=0||duration>60000))throw new IllegalArgumentException("Photo de 1 à 60 secondes requise");
             if(!image&&start+duration>info.optLong("duration_ms")+250)throw new IllegalArgumentException("Calque au-delà de la source");
