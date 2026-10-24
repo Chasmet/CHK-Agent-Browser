@@ -29,6 +29,11 @@ final class StudioEdits {
     }
     static void clampFade(JSONObject clip)throws Exception {if(clip.has("fade_ms"))clip.put("fade_ms",Math.min(clip.optLong("fade_ms"),Math.min(1500,clip.optLong("duration_ms")/3)));}
     static void conform(JSONObject project)throws Exception {fitAudio(project);JSONArray clips=project.optJSONArray("clips");if(clips!=null)for(int i=0;i<clips.length();i++)clampFade(clips.getJSONObject(i));}
+    static void clipVolume(JSONObject project,JSONObject target,double volume)throws Exception {
+        JSONArray clips=project.getJSONArray("clips");JSONArray audio=project.optJSONArray("audio");
+        if(project.optBoolean("mute_original",audio!=null&&audio.length()>0))for(int i=0;i<clips.length();i++)if(clips.getJSONObject(i)!=target)clips.getJSONObject(i).put("mute",true);
+        target.put("volume",volume).put("mute",false);project.put("mute_original",false);
+    }
     static void duplicate(JSONObject project,int index)throws Exception {
         JSONArray clips=project.getJSONArray("clips"),out=new JSONArray();
         for(int i=0;i<clips.length();i++){out.put(clips.get(i));if(i==index)out.put(new JSONObject(clips.getJSONObject(i).toString()));}
