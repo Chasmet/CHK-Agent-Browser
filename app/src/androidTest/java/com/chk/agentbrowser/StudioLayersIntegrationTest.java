@@ -37,7 +37,7 @@ public final class StudioLayersIntegrationTest {
     private int pixel(String path,long at,int x,int y)throws Exception {MediaMetadataRetriever r=new MediaMetadataRetriever();try{r.setDataSource(store.file(path).getAbsolutePath());Bitmap b=r.getFrameAtTime(at*1000,MediaMetadataRetriever.OPTION_CLOSEST);assertNotNull(b);int color=b.getPixel(b.getWidth()*x/100,b.getHeight()*y/100);b.recycle();return color;}finally{r.release();}}
     private void blue(int color){assertTrue("Expected blue: "+Integer.toHexString(color),Color.blue(color)>170&&Color.red(color)<70);}
     @Test public void timedPhotoLayerIsVisibleOnlyInsideItsRange()throws Exception {
-        JSONObject p=project("-photo").put("layers",new JSONArray().put(layer(red,1000,1000).put("x",.5).put("y",-.5))).put("aspect_ratio","9:16");export(p);String path=p.getString("output");
+        JSONObject p=project("-photo").put("layers",new JSONArray().put(layer(red,1000,1000).put("x",.5).put("y",-.5))).put("aspect_ratio","9:16").put("aspect_mode","crop");export(p);String path=p.getString("output");
         blue(pixel(path,500,75,25));int center=pixel(path,1500,75,25);assertTrue(Integer.toHexString(center),Color.red(center)>180&&Color.blue(center)<70);blue(pixel(path,1500,10,10));blue(pixel(path,2500,75,25));
         assertTrue(invoke("video_editor_verify_output",new JSONObject()).getBoolean("valid"));
     }
@@ -47,6 +47,12 @@ public final class StudioLayersIntegrationTest {
     @Test public void transparentPngPreservesTheBackground()throws Exception {
         String path=id+"-transparent.png";files.add(path);Bitmap bitmap=Bitmap.createBitmap(160,160,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);Paint paint=new Paint();paint.setColor(Color.RED);canvas.drawRect(24,24,136,136,paint);try(OutputStream out=new FileOutputStream(store.file(path))){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}bitmap.recycle();
         JSONObject p=project("-transparent").put("layers",new JSONArray().put(layer(path,0,3000)));export(p);String output=p.getString("output");assertTrue(Color.red(pixel(output,1500,50,50))>180);blue(pixel(output,1500,27,50));
+    }
+    @Test public void threeLayersKeepTheirStackingOrderAndIndependentTiming()throws Exception {
+        String green=image("green",Color.GREEN),yellow=image("yellow",Color.YELLOW);
+        JSONObject p=project("-stack").put("layers",new JSONArray().put(layer(red,1000,1000)).put(layer(green,0,3000).put("scale",.75)).put(layer(yellow,0,3000).put("scale",.2).put("x",.8).put("y",.8)));export(p);String path=p.getString("output");
+        int before=pixel(path,500,50,50),during=pixel(path,1500,50,50),after=pixel(path,2500,50,50),corner=pixel(path,1500,90,90);
+        assertTrue("Green second layer before top layer",Color.green(before)>170&&Color.red(before)<70);assertTrue("First layer stays on top",Color.red(during)>180&&Color.green(during)<70);assertTrue("Green second layer restored after top layer",Color.green(after)>170&&Color.red(after)<70);assertTrue("Third layer keeps its own position",Color.red(corner)>170&&Color.green(corner)>170&&Color.blue(corner)<70);
     }
     @Test public void videoLayerHasSourceFramesAndDisappearsAfterEnd()throws Exception {
         JSONObject p=project("-video-pip").put("layers",new JSONArray().put(layer(video,500,1000)));export(p);String output=p.getString("output");blue(pixel(output,200,50,50));int c=pixel(output,1000,50,50);assertTrue("Video PiP must replace the blue center",Color.red(c)>70||Color.green(c)>70||Color.blue(c)<100);blue(pixel(output,2200,50,50));
