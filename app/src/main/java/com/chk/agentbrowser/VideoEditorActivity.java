@@ -107,8 +107,8 @@ public final class VideoEditorActivity extends Activity {
         canvas.addView(fullscreenButton,fullButtonLayout);
         fullscreenButton.setOnClickListener(v->openFullscreen());
         renderPreview=new StudioRenderPreview(this);
-        renderBadge=MobileUi.text(this,"Source · Aperçu rendu pour voir les effets",10,0xffb4cbdc);renderBadge.setPadding(dp(5),dp(3),dp(5),dp(3));renderBadge.setBackgroundColor(0xbb15202d);renderBadge.setTag("studio_render_preview");
-        FrameLayout.LayoutParams badgeLayout=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.LEFT);badgeLayout.bottomMargin=dp(3);canvas.addView(renderBadge,badgeLayout);renderBadge.setOnClickListener(v->{if(renderedMode)preview();else renderedPreview();});
+        renderBadge=MobileUi.text(this,"Source · Aperçu rendu pour voir les effets",11,0xffe1efff);renderBadge.setMaxLines(2);renderBadge.setPadding(dp(7),dp(5),dp(7),dp(5));renderBadge.setBackgroundColor(0xbb15202d);renderBadge.setTag("studio_render_preview");
+        FrameLayout.LayoutParams badgeLayout=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP|Gravity.LEFT);badgeLayout.setMargins(dp(6),dp(6),dp(70),0);canvas.addView(renderBadge,badgeLayout);renderBadge.setOnClickListener(v->{if(renderedMode)preview();else renderedPreview();});
         player=new ExoPlayer.Builder(this).build();
         // Keep ExoPlayer's direct decoder output while seeking on multi-clip projects.
         // GPU filters are applied by Transformer on export; hot-swapping live GL
@@ -159,7 +159,7 @@ public final class VideoEditorActivity extends Activity {
         mainTools=new LinearLayout(this);navigation.addView(mainTools);
         mainTool(mainTools,"Éditer","scissors",()->showToolPage("Éditer"));mainTool(mainTools,"Audio","audio",()->showToolPage("Audio"));mainTool(mainTools,"Texte","text",()->showToolPage("Texte"));mainTool(mainTools,"Effets","effects",()->showToolPage("Effets"));mainTool(mainTools,"Calques","layers",()->showToolPage("Calques"));mainTool(mainTools,"Format","crop",()->ratioMenu());mainTool(mainTools,"Exports","queue",()->exportQueue());mainTool(mainTools,"Analyse","layers",()->showToolPage("Analyse"));
         updateSelectionTools();
-        status=MobileUi.text(this,"Montage local",11,MobileUi.MUTED);status.setPadding(dp(10),dp(2),dp(10),dp(2));status.setMaxLines(2);FrameLayout.LayoutParams statusLayout=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);canvas.addView(status,statusLayout);status.setBackgroundColor(0xdd15202d);status.setOnClickListener(v->{if(renderPreview!=null&&renderPreview.busy()){renderPreview.cancel();previewHint.setVisibility(View.GONE);}else outputMenu();});scope.setOnClickListener(v->{if(selectedAudio>=0)trim(true,selectedAudio);else editMenu();});
+        status=MobileUi.text(this,"Montage local",11,MobileUi.MUTED);status.setPadding(dp(10),dp(2),dp(10),dp(2));status.setMaxLines(2);FrameLayout.LayoutParams statusLayout=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);canvas.addView(status,statusLayout);status.setBackgroundColor(0xdd15202d);status.setOnClickListener(v->{if(renderPreview!=null&&renderPreview.busy()){renderPreview.cancel();previewHint.setVisibility(View.GONE);status.setVisibility(View.GONE);}else outputMenu();});scope.setOnClickListener(v->{if(selectedAudio>=0)trim(true,selectedAudio);else editMenu();});
         engine.command(this,"video_editor_project_read",new JSONObject(),(ok,res)->runOnUiThread(()->{try{if(ok){project=new JSONObject(res);revision=project.optInt("revision",0);draw();preview();String launch=getIntent().getStringExtra("add_path");String jsonPath=getIntent().getStringExtra("project_path");if(jsonPath!=null)addFile("project",jsonPath);else if(launch!=null)addFile("video",launch);}else toast(res);}catch(Exception e){toast(e.getMessage());}}));ui.post(ticker);
     }
     private int dp(int n){return MobileUi.dp(this,n);}
@@ -767,9 +767,9 @@ public final class VideoEditorActivity extends Activity {
         pausePreview();long at=timelinePosition();int requestedRevision=revision;previewHint.setText("Préparation de l’aperçu rendu sur Android…");previewHint.setVisibility(View.VISIBLE);
         renderPreview.start(project,new StudioRenderPreview.Result(){
             public void ready(java.io.File file){if(!alive||revision!=requestedRevision){renderPreview.cancel();return;}
-                renderedMode=true;audioPlayer.stop();audioPlayer.clearMediaItems();previewCaption.setText("");player.setPlaybackSpeed(1);player.setVolume(1);player.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)));player.prepare();player.seekTo(Math.min(at,Math.max(0,total()-1)));renderBadge.setText("Aperçu rendu · toucher pour éditer la source");previewHint.setVisibility(View.GONE);
+                renderedMode=true;audioPlayer.stop();audioPlayer.clearMediaItems();previewCaption.setText("");player.setPlaybackSpeed(1);player.setVolume(1);player.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)));player.prepare();player.seekTo(Math.min(at,Math.max(0,total()-1)));renderBadge.setText("Aperçu rendu · toucher pour éditer la source");previewHint.setVisibility(View.GONE);status.setVisibility(View.GONE);
             }
-            public void failed(String error){if(!alive)return;previewHint.setVisibility(View.GONE);toast("Aperçu rendu : "+error);}
+            public void failed(String error){if(!alive)return;previewHint.setVisibility(View.GONE);status.setVisibility(View.GONE);toast("Aperçu rendu : "+error);}
         });
     }
     private void addLayers(List<String> paths){
