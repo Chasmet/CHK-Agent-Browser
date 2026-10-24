@@ -129,7 +129,10 @@ public final class StudioTouchIntegrationTest {
     }
     @Test public void speedPanelIsScrollableAndCancellationDoesNotChangeProject()throws Exception {
         launch();JSONObject before=invoke("video_editor_project_read",new JSONObject());tapTool("Vitesse");screenshot("03-speed-panel");
-        android.view.accessibility.AccessibilityNodeInfo root=inst.getUiAutomation().getRootInActiveWindow();assertNotNull(root);List<android.view.accessibility.AccessibilityNodeInfo> cancel=root.findAccessibilityNodeInfosByText("Annuler");assertFalse(cancel.isEmpty());cancel.get(0).performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK);Thread.sleep(200);
+        long until=SystemClock.elapsedRealtime()+10000;boolean dismissed=false;
+        while(SystemClock.elapsedRealtime()<until){android.view.accessibility.AccessibilityNodeInfo root=inst.getUiAutomation().getRootInActiveWindow();if(root!=null&&!root.findAccessibilityNodeInfosByText("Vitesse du plan").isEmpty()&&!root.findAccessibilityNodeInfosByText("Annuler").isEmpty()){root.findAccessibilityNodeInfosByText("Annuler").get(0).performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK);dismissed=true;break;}Thread.sleep(80);}
+        assertTrue("Speed panel and cancel button must be available",dismissed);Thread.sleep(200);
+
         assertEquals(before.getInt("revision"),invoke("video_editor_project_read",new JSONObject()).getInt("revision"));
     }
     private double rms(String path)throws Exception {
