@@ -422,6 +422,25 @@ public final class AgentClient {
                             .put("operation",nativeAction.equals("browser_task_submit")?"submit":"status");
                         nativeAction="desktop";
                     }
+                    // Backward compatible Local 2 (Windows 1.3.0) browser workflows.
+                    // The existing android_action transport accepts these explicit aliases;
+                    // video bytes remain on the Android device, never in the MCP relay.
+                    // Preserve caller-supplied id for idempotent uploads.
+                    if(nativeAction.equals("browser_upload_workspace_file")
+                        ||nativeAction.equals("browser_upload_status")
+                        ||nativeAction.equals("browser_fill_fields")
+                        ||nativeAction.equals("browser_verify_fields")){
+                        String browserOperation;
+                        switch(nativeAction){
+                            case "browser_upload_workspace_file":browserOperation="upload_file";break;
+                            case "browser_upload_status":browserOperation="upload_status";break;
+                            case "browser_fill_fields":browserOperation="fill_form";break;
+                            default:browserOperation="verify_form";break;
+                        }
+                        nativeArgs=new JSONObject(nativeArgs.toString())
+                            .put("tool","browser").put("operation",browserOperation);
+                        nativeAction="desktop";
+                    }
                     JSONObject cmd = new JSONObject().put("id", "local2-native")
                         .put("action", nativeAction).put("args", nativeArgs);
                     boolean allowed = WorkspaceCommands.handles(nativeAction)
