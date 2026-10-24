@@ -66,9 +66,9 @@ public final class VideoEditorActivity extends Activity {
             if(fullscreenSeek!=null&&!fullscreenScrubbing)fullscreenSeek.setProgress((int)Math.min(Integer.MAX_VALUE,timelinePosition()));
         }
         long now=android.os.SystemClock.elapsedRealtime();if(!saving&&!importing&&project!=null&&now-lastProjectCheck>2500){lastProjectCheck=now;engine.command(VideoEditorActivity.this,"video_editor_project_read",new JSONObject(),(ok,value)->ui.post(()->{if(!alive||saving||importing||scrubbing||!ok)return;try{JSONObject fresh=new JSONObject(value);if(fresh.optInt("revision")!=revision){project=fresh;revision=fresh.optInt("revision");undo.clear();redo.clear();draw();preview();}}catch(Exception ignored){}}));}
-        JSONObject s=engine.status();String state=s.optString("state");
+        JSONObject s=engine.status();String state=s.optString("state");boolean currentOutput=project!=null&&project.optString("output").equals(s.optString("output"));
         if(!state.equals(lastExportState)){lastExportState=state;exportStateAt=android.os.SystemClock.elapsedRealtime();}
-        status.setVisibility(importing||state.equals("running")||state.equals("preparing")||((state.equals("failed")||state.equals("completed"))&&android.os.SystemClock.elapsedRealtime()-exportStateAt<6000)?View.VISIBLE:View.GONE);
+        status.setVisibility(importing||state.equals("running")||state.equals("preparing")||(currentOutput&&(state.equals("failed")||state.equals("completed"))&&android.os.SystemClock.elapsedRealtime()-exportStateAt<6000)?View.VISIBLE:View.GONE);
         status.setText(importing?"Importation des médias…":"running".equals(state)?"Export MP4 · "+s.optInt("progress_percent")+" %":"preparing".equals(state)?"Préparation du rendu…":"completed".equals(state)?"Export terminé · toucher pour lire / partager":"failed".equals(state)?"Export impossible : "+s.optString("error"):"Montage local · sauvegarde automatique");
         ui.postDelayed(this,player!=null&&player.isPlaying()?33:600);
     }};
@@ -131,7 +131,7 @@ public final class VideoEditorActivity extends Activity {
         timeline.zoomBy(restoredZoom);
         timeline.setListener(new StudioTimeline.Listener(){
             public void move(int from,int to){if(saving||importing)return;try{remember();JSONArray items=clips();Object item=items.remove(from);JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==to)out.put(item);if(i<items.length())out.put(items.get(i));}project.put("clips",out);selected=to;editSeek=start(to);save();}catch(Exception ex){toast(ex.getMessage());}}
-            public void seek(long position,int index){selected=index;if(selectedAudio>=0||toolPage.equals("Accueil"))toolPage="Éditer";selectedAudio=-1;pausePreview();seekPreview(position);timeline.audioSelection(-1);updateSelectionTools();clock.setText(time(position)+" / "+time(total()));}
+            public void seek(long position,int index){boolean changed=selected!=index||selectedAudio>=0||toolPage.equals("Accueil");selected=index;if(selectedAudio>=0||toolPage.equals("Accueil"))toolPage="Éditer";selectedAudio=-1;pausePreview();seekPreview(position);timeline.audioSelection(-1);if(changed)updateSelectionTools();clock.setText(time(position)+" / "+time(total()));}
             public void scrubbing(boolean active){scrubbing=active;if(active)pausePreview();}
             public void trim(int index,JSONObject value){if(!editable())return;try{remember();clips().put(index,value);selected=index;save();}catch(Exception e){toast(e.getMessage());}}
             public void audio(int index){selectedAudio=index;pausePreview();toolPage="Audio";updateSelectionTools();}
@@ -488,11 +488,11 @@ public final class VideoEditorActivity extends Activity {
         }));
     }
 
-    /** Fine timeline positioning at 30 fps approximation; never duplicates footage. */
+    /** Snap frame steps to the actual project cadence without accumulated rounding drift. */
     private void stepFrame(int direction){
         if(project==null||clips().length()==0)return;
         pausePreview();
-        long target=Math.max(0,Math.min(total()-1,timelinePosition()+direction*33L));
+        long target=StudioEdits.framePosition(timelinePosition(),direction,project.optInt("fps",30),total());
         seekPreview(target);
         clock.setText(time(target)+" / "+time(total()));
     }

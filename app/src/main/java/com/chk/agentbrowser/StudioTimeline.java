@@ -70,7 +70,7 @@ final class StudioTimeline extends View {
     private String time(long ms){return String.format(java.util.Locale.ROOT,"%02d:%02d.%01d",ms/60000,ms/1000%60,ms%1000/100);}
     @Override protected void onDraw(Canvas canvas){
         super.onDraw(canvas);canvas.drawColor(0xff191c23);
-        float step=100;while(step*pixelsPerMs()<dp(56))step*=2;
+        float step=600000;for(float candidate:new float[]{100,200,500,1000,2000,5000,10000,15000,30000,60000,120000,300000,600000})if(candidate*pixelsPerMs()>=dp(56)){step=candidate;break;}
         long first=Math.max(0,(long)((position-getWidth()/2f/pixelsPerMs())/step)*(long)step);
         for(long t=first;t<=total&&x(t)<getWidth();t+=(long)step){text(canvas,time(t),x(t)+dp(3),dp(18),10,0xffb7c3d7);paint.setColor(0xff657084);canvas.drawLine(x(t),dp(24),x(t),dp(29),paint);}
         long at=0;JSONArray clips=clips();

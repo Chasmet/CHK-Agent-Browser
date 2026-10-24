@@ -98,6 +98,7 @@ public final class StudioTouchIntegrationTest {
         JSONObject saved=invoke("video_editor_project_read",new JSONObject());assertEquals("Titre du plan",saved.getJSONArray("clips").getJSONObject(0).getString("text"));
     }
     @Test public void boundsUseSourceTimeAndPhotoLimitsAndDuplicationIsAdjacent()throws Exception {
+        assertEquals(1042,StudioEdits.framePosition(1000,1,24,5000));assertEquals(983,StudioEdits.framePosition(1000,-1,60,5000));assertEquals(0,StudioEdits.framePosition(0,-1,30,5000));
         JSONObject c=new JSONObject().put("path",video).put("start_ms",1000).put("duration_ms",2000).put("speed",2).put("fade_ms",500);
         JSONObject left=StudioEdits.trimmed(c,true,250,5000);assertEquals(1500,left.getLong("start_ms"));assertEquals(1500,left.getLong("duration_ms"));
         assertEquals(500,StudioEdits.trimmed(c,false,-99999,5000).getLong("duration_ms"));assertEquals(166,StudioEdits.trimmed(c,false,-99999,5000).getLong("fade_ms"));assertEquals(4000,StudioEdits.trimmed(c,false,99999,5000).getLong("duration_ms"));

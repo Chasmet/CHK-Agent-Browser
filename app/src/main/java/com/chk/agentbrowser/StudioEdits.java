@@ -29,6 +29,7 @@ final class StudioEdits {
     }
     static void clampFade(JSONObject clip)throws Exception {if(clip.has("fade_ms"))clip.put("fade_ms",Math.min(clip.optLong("fade_ms"),Math.min(1500,clip.optLong("duration_ms")/3)));}
     static void conform(JSONObject project)throws Exception {fitAudio(project);JSONArray clips=project.optJSONArray("clips");if(clips!=null)for(int i=0;i<clips.length();i++)clampFade(clips.getJSONObject(i));}
+    static long framePosition(long position,int direction,int fps,long total){long frame=Math.max(0,Math.round(position*fps/1000.0)+direction);return Math.max(0,Math.min(Math.max(0,total-1),Math.round(frame*1000.0/fps)));}
     static void clipVolume(JSONObject project,JSONObject target,double volume)throws Exception {
         JSONArray clips=project.getJSONArray("clips");JSONArray audio=project.optJSONArray("audio");
         if(project.optBoolean("mute_original",audio!=null&&audio.length()>0))for(int i=0;i<clips.length();i++)if(clips.getJSONObject(i)!=target)clips.getJSONObject(i).put("mute",true);
