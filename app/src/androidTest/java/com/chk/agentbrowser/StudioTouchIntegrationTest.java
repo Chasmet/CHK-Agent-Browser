@@ -68,10 +68,10 @@ public final class StudioTouchIntegrationTest {
     private void tapTool(String name)throws Exception {inst.runOnMainSync(()->{View v=activity.getWindow().getDecorView().findViewWithTag("studio_tool_"+name);assertNotNull(name,v);v.performClick();});}
     private void screenshot(String name)throws Exception {
         inst.waitForIdleSync();Thread.sleep(150);Bitmap image=inst.getUiAutomation().takeScreenshot();assertNotNull(image);
-        File f=new File(app.getCacheDir(),"studio-touch-"+name+".png");try(OutputStream out=new FileOutputStream(f)){image.compress(Bitmap.CompressFormat.PNG,100,out);}image.recycle();
-        shell("mkdir -p /data/local/tmp/chk-studio-touch");shell("cp "+f.getAbsolutePath()+" /data/local/tmp/chk-studio-touch/");
+        File f=new File(app.getExternalFilesDir(null),"studio-touch-"+name+".png");try(OutputStream out=new FileOutputStream(f)){image.compress(Bitmap.CompressFormat.PNG,100,out);}image.recycle();
+        shell("mkdir -p /data/local/tmp/chk-studio-touch");shell("cp "+f.getAbsolutePath()+" /data/local/tmp/chk-studio-touch/");assertTrue(shell("ls /data/local/tmp/chk-studio-touch").contains(f.getName()));
     }
-    private void shell(String command)throws Exception {try(android.os.ParcelFileDescriptor fd=inst.getUiAutomation().executeShellCommand(command);InputStream in=new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)){byte[] b=new byte[1024];while(in.read(b)!=-1){}}}
+    private String shell(String command)throws Exception {try(android.os.ParcelFileDescriptor fd=inst.getUiAutomation().executeShellCommand(command);InputStream in=new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)){java.io.ByteArrayOutputStream output=new java.io.ByteArrayOutputStream();byte[] b=new byte[1024];int n;while((n=in.read(b))!=-1)output.write(b,0,n);return output.toString("UTF-8");}}
     @Test public void scrollAndZoomMoveTheRealPreviewAndAudioTrackCanBeSelected()throws Exception {
         launch();float d=app.getResources().getDisplayMetrics().density;StudioTimeline t=timeline();
         float center=t.getWidth()/2f;gesture(center,15*d,center-110*d,15*d);

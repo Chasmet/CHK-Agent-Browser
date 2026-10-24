@@ -40,6 +40,10 @@ public final class VideoEditorActivity extends Activity {
     private boolean previewReady;
     private TextView previewHint,previewCaption;
     private TextView title,clock,status,play,format;
+    private String lastExportState="";
+    private long exportStateAt;
+    private Long editSeek;
+    private float restoredZoom=1;
     private boolean auditing;
 
     private androidx.media3.ui.PlayerView viewer;
@@ -62,11 +66,12 @@ public final class VideoEditorActivity extends Activity {
         }
         long now=android.os.SystemClock.elapsedRealtime();if(!saving&&!importing&&project!=null&&now-lastProjectCheck>2500){lastProjectCheck=now;engine.command(VideoEditorActivity.this,"video_editor_project_read",new JSONObject(),(ok,value)->ui.post(()->{if(!alive||saving||importing||scrubbing||!ok)return;try{JSONObject fresh=new JSONObject(value);if(fresh.optInt("revision")!=revision){project=fresh;revision=fresh.optInt("revision");undo.clear();redo.clear();draw();preview();}}catch(Exception ignored){}}));}
         JSONObject s=engine.status();String state=s.optString("state");
-        status.setVisibility(importing||state.equals("running")||state.equals("preparing")||state.equals("failed")||state.equals("completed")?View.VISIBLE:View.GONE);
+        if(!state.equals(lastExportState)){lastExportState=state;exportStateAt=android.os.SystemClock.elapsedRealtime();}
+        status.setVisibility(importing||state.equals("running")||state.equals("preparing")||((state.equals("failed")||state.equals("completed"))&&android.os.SystemClock.elapsedRealtime()-exportStateAt<6000)?View.VISIBLE:View.GONE);
         status.setText(importing?"Importation des médias…":"running".equals(state)?"Export MP4 · "+s.optInt("progress_percent")+" %":"preparing".equals(state)?"Préparation du rendu…":"completed".equals(state)?"Export terminé · toucher pour lire / partager":"failed".equals(state)?"Export impossible : "+s.optString("error"):"Montage local · sauvegarde automatique");
         ui.postDelayed(this,player!=null&&player.isPlaying()?33:600);
     }};
-    @Override public void onCreate(Bundle state){super.onCreate(state);alive=true;if(state!=null)exportCopyPath=state.getString("export_copy_path","");
+    @Override public void onCreate(Bundle state){super.onCreate(state);alive=true;if(state!=null){exportCopyPath=state.getString("export_copy_path","");editSeek=state.getLong("studio_position",0);selected=state.getInt("studio_selected",0);selectedAudio=state.getInt("studio_audio",-1);toolPage=state.getString("studio_tool_page","Éditer");restoredZoom=state.getFloat("studio_zoom",1);}
         getWindow().setStatusBarColor(0xff111111);getWindow().setNavigationBarColor(0xff111111);
         compact=getResources().getDisplayMetrics().heightPixels/getResources().getDisplayMetrics().density<720;
         LinearLayout root=MobileUi.column(this);root.setBackgroundColor(0xff111214);setContentView(root);
@@ -122,8 +127,9 @@ public final class VideoEditorActivity extends Activity {
         TextView un=chip("↶");un.setContentDescription("Annuler la dernière modification");playback.addView(un,new LinearLayout.LayoutParams(dp(40),-1));un.setOnClickListener(v->history(false));
         TextView re=chip("↷");re.setContentDescription("Rétablir la modification");playback.addView(re,new LinearLayout.LayoutParams(dp(40),-1));re.setOnClickListener(v->history(true));
         timeline=new StudioTimeline(this);root.addView(timeline,new LinearLayout.LayoutParams(-1,dp(206)));
+        timeline.zoomBy(restoredZoom);
         timeline.setListener(new StudioTimeline.Listener(){
-            public void move(int from,int to){if(saving||importing)return;try{remember();JSONArray items=clips();Object item=items.remove(from);JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==to)out.put(item);if(i<items.length())out.put(items.get(i));}project.put("clips",out);selected=to;save();}catch(Exception ex){toast(ex.getMessage());}}
+            public void move(int from,int to){if(saving||importing)return;try{remember();JSONArray items=clips();Object item=items.remove(from);JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==to)out.put(item);if(i<items.length())out.put(items.get(i));}project.put("clips",out);selected=to;editSeek=start(to);save();}catch(Exception ex){toast(ex.getMessage());}}
             public void seek(long position,int index){selected=index;selectedAudio=-1;pausePreview();seekPreview(position);timeline.audioSelection(-1);updateSelectionTools();clock.setText(time(position)+" / "+time(total()));}
             public void scrubbing(boolean active){scrubbing=active;if(active)pausePreview();}
             public void trim(int index,JSONObject value){if(!editable())return;try{remember();clips().put(index,value);selected=index;save();}catch(Exception e){toast(e.getMessage());}}
@@ -146,7 +152,7 @@ public final class VideoEditorActivity extends Activity {
         engine.command(this,"video_editor_project_read",new JSONObject(),(ok,res)->runOnUiThread(()->{try{if(ok){project=new JSONObject(res);revision=project.optInt("revision",0);draw();preview();String launch=getIntent().getStringExtra("add_path");String jsonPath=getIntent().getStringExtra("project_path");if(jsonPath!=null)addFile("project",jsonPath);else if(launch!=null)addFile("video",launch);}else toast(res);}catch(Exception e){toast(e.getMessage());}}));ui.post(ticker);
     }
     private int dp(int n){return MobileUi.dp(this,n);}
-    private TextView chip(String text){TextView v=MobileUi.text(this,text,15,MobileUi.TEXT);v.setMinHeight(dp(48));v.setMinWidth(dp(48));v.setGravity(Gravity.CENTER);v.setFocusable(true);return v;}
+    private TextView chip(String text){TextView v=MobileUi.text(this,text,15,MobileUi.TEXT);v.setPadding(dp(6),0,dp(6),0);v.setMinHeight(dp(48));v.setMinWidth(dp(48));v.setGravity(Gravity.CENTER);v.setFocusable(true);return v;}
     private void mainTool(LinearLayout parent,String label,String icon,Runnable action){TextView view=UiIcons.button(this,label,icon,0xfff4f4ff);view.setTag("studio_page_"+label);parent.addView(view,new LinearLayout.LayoutParams(dp(76),-1));view.setOnClickListener(v->action.run());}
     private void editMenu(){if(!editable())return;new AgentDialog.Builder(this).setTitle("Éditer le plan "+(selected+1)).setItems(new String[]{"Découper avec les curseurs","Diviser au curseur","Vitesse","Rotation","Son du plan"},(d,n)->{switch(n){case 0:trim(false,selected);break;case 1:split();break;case 2:speed();break;case 3:rotation();break;case 4:mute();break;}}).show();}
     private void audioMenu(){new AgentDialog.Builder(this).setTitle("Audio").setItems(new String[]{"Ajouter un audio","Son original","Modifier les pistes","Transcrire les paroles · IA locale"},(d,n)->{if(n==0)addMenu("audio");else if(n==1)mute();else if(n==3)transcribeAudio();else{String[] names=new String[audio().length()];for(int i=0;i<names.length;i++)names[i]=name(audio().optJSONObject(i).optString("path"));new AgentDialog.Builder(this).setTitle("Pistes audio").setItems(names,(x,i)->new AgentDialog.Builder(this).setItems(new String[]{"Découper","Supprimer"},(y,j)->{if(j==0)trim(true,i);else delete(true,i);}).show()).show();}}).show();}
@@ -330,7 +336,7 @@ public final class VideoEditorActivity extends Activity {
     /** Reliable source-frame preview. The native export remains the final authority for effects. */
     private void preview(){
         if(clips().length()==0){player.stop();player.clearMediaItems();audioPlayer.stop();audioPlayer.clearMediaItems();previewHint.setVisibility(View.GONE);return;}
-        int generation=++previewGeneration;long position=timelinePosition();boolean playing=player.isPlaying();
+        int generation=++previewGeneration;long position=editSeek==null?timelinePosition():editSeek;editSeek=null;boolean playing=player.isPlaying();
         String snapshot=project.toString();previewReady=false;previewHint.setText("Chargement des vidéos…");previewHint.setVisibility(View.VISIBLE);
         WorkspaceCommands.IO.execute(()->{
             try{
@@ -589,8 +595,8 @@ public final class VideoEditorActivity extends Activity {
     private void configureAudio(){if(audioPlayer==null||audio().length()==0)return;JSONObject c=audio().optJSONObject(Math.min(audio().length()-1,Math.max(0,audioPlayer.getCurrentMediaItemIndex())));if(c!=null)audioPlayer.setVolume((float)c.optDouble("volume",1));}
     private void rotation(){if(!editable())return;new AgentDialog.Builder(this).setTitle("Rotation du plan").setItems(new String[]{"0°","90°","180°","−90°"},(d,n)->put(clip(),"rotation",new int[]{0,90,180,-90}[n])).show();}
     private void mute(){if(project==null)return;new AgentDialog.Builder(this).setTitle("Son").setItems(new String[]{"Conserver le son des vidéos","Couper le son des vidéos","Couper ce plan","Rétablir ce plan"},(d,n)->{if(n<2)put(project,"mute_original",n==1);else if(clip()!=null)put(clip(),"mute",n==2);}).show();}
-    private void move(){new AgentDialog.Builder(this).setTitle("Déplacer le plan").setItems(new String[]{"Vers la gauche","Vers la droite"},(d,n)->{int to=selected+(n==0?-1:1);if(to<0||to>=clips().length())return;try{remember();Object a=clips().get(selected),b=clips().get(to);clips().put(selected,b);clips().put(to,a);selected=to;save();}catch(Exception ignored){}}).show();}
-    private void duplicate(){if(!editable())return;try{remember();StudioEdits.duplicate(project,selected);selected++;save();}catch(Exception e){toast(e.getMessage());}}
+    private void move(){new AgentDialog.Builder(this).setTitle("Déplacer le plan").setItems(new String[]{"Vers la gauche","Vers la droite"},(d,n)->{int to=selected+(n==0?-1:1);if(to<0||to>=clips().length())return;try{remember();Object a=clips().get(selected),b=clips().get(to);clips().put(selected,b);clips().put(to,a);selected=to;editSeek=start(to);save();}catch(Exception ignored){}}).show();}
+    private void duplicate(){if(!editable())return;try{remember();StudioEdits.duplicate(project,selected);selected++;editSeek=start(selected);save();}catch(Exception e){toast(e.getMessage());}}
     private void delete(boolean sound,int index){if(project==null||saving)return;try{remember();JSONArray src=sound?audio():clips(),out=new JSONArray();for(int i=0;i<src.length();i++)if(i!=index)out.put(src.get(i));project.put(sound?"audio":"clips",out);if(!sound&&out.length()==0)project.put("audio",new JSONArray());save();}catch(Exception e){toast(e.getMessage());}}
     private void ratioMenu(){if(project==null)return;String[] ratios={"source","9:16","16:9","1:1","4:3","3:4","4:5","2:1","2.35:1","custom"};new AgentDialog.Builder(this).setTitle("Format du montage").setItems(new String[]{"Original","9:16 · Téléphone","16:9 · Paysage","1:1 · Carré","4:3","3:4","4:5","2:1","2,35:1 · Cinéma","Ratio personnalisé"},(d,n)->{if(n==9)prompt("Largeur:hauteur","9:16",r->setRatio(r));else setRatio(ratios[n]);}).show();}
     private void setRatio(String ratio){new AgentDialog.Builder(this).setTitle("Adapter l’image").setItems(new String[]{"Tout conserver (bandes noires)","Remplir (recadrage centré)"},(d,n)->{try{remember();project.put("aspect_ratio",ratio).put("aspect_mode",n==0?"fit":"crop");save();}catch(Exception ignored){}}).show();}
@@ -777,7 +783,7 @@ public final class VideoEditorActivity extends Activity {
             ui.post(()->{importing=false;if(!alive)return;if(batch.length()>0)try{remember();JSONArray target=kind.equals("video")?clips():audio();long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().optJSONObject(i).optLong("duration_ms");for(int i=0;i<batch.length();i++){JSONObject c=batch.getJSONObject(i);if(kind.equals("audio")){if(remaining<500){errors.add("Audio supplémentaire ignoré : le montage vidéo est trop court");break;}long length=Math.min(c.getLong("duration_ms"),remaining);c.put("duration_ms",length);remaining-=length;}target.put(c);}if(kind.equals("audio"))project.put("audio",target);selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}if(!errors.isEmpty())new AgentDialog.Builder(this).setTitle("Importation à vérifier").setMessage(android.text.TextUtils.join("\n",errors)).setPositiveButton("OK",null).show();});
         });
     }
-    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("export_copy_path",exportCopyPath);}
+    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("export_copy_path",exportCopyPath);if(timeline!=null){state.putLong("studio_position",timeline.playhead());state.putFloat("studio_zoom",timeline.zoomLevel());}state.putInt("studio_selected",selected);state.putInt("studio_audio",selectedAudio);state.putString("studio_tool_page",toolPage);}
     @Override protected void onResume(){super.onResume();resumed=true;ui.removeCallbacks(ticker);ui.post(ticker);}
     @Override public void onBackPressed(){
         if(fullscreenDialog!=null){fullscreenDialog.dismiss();return;}

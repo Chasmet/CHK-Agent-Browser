@@ -13,7 +13,7 @@ final class StudioSheet {
         Dialog dialog=AgentDialog.watch(new Dialog(activity));dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout root=MobileUi.column(activity);root.setPadding(12,10,12,12);root.setBackgroundColor(0xff202631);
         root.addView(MobileUi.text(activity,name,17,MobileUi.TEXT));
-        ScrollView scroll=new ScrollView(activity);scroll.setFillViewport(false);scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
+        ScrollView scroll=new ScrollView(activity){@Override protected void onMeasure(int width,int height){int maximum=(int)(getResources().getDisplayMetrics().heightPixels*.42f);super.onMeasure(width,android.view.View.MeasureSpec.makeMeasureSpec(maximum,android.view.View.MeasureSpec.AT_MOST));}};scroll.setFillViewport(false);scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
         LinearLayout footer=new LinearLayout(activity);root.addView(footer);
         TextView cancel=MobileUi.action(activity,"Annuler"),confirm=MobileUi.action(activity,"Appliquer");
         confirm.setTag("studio_sheet_apply");cancel.setTag("studio_sheet_cancel");
