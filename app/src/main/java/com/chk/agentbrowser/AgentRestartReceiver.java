@@ -11,7 +11,7 @@ import android.content.Intent;
 public final class AgentRestartReceiver extends BroadcastReceiver {
     public static final String ACTION_RECOVER="com.chk.agentbrowser.RECOVER_MCP";
     @Override public void onReceive(Context context,Intent intent) {
-        if(intent==null||(!AgentClient.get(context).isEnabled() && !Local2Client.get(context).enabled()))return;
+        if(intent==null||(!AgentClient.get(context).isEnabled() && !Local2Client.get(context).enabled() && !Local3Client.get(context).enabled()))return;
         String action=intent.getAction();
         if(Intent.ACTION_BOOT_COMPLETED.equals(action) ||
            Intent.ACTION_MY_PACKAGE_REPLACED.equals(action) ||
