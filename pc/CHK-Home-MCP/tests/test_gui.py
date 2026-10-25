@@ -58,6 +58,65 @@ class CloudflareGuiSmoke(unittest.TestCase):
         self.assertEqual(len(attempts), 3)
         self.assertTrue(any("validée" in line for line in logs))
 
+    def test_install_button_launches_worker_without_closing_window(self):
+        instance = object.__new__(gui.Gui)
+        instance.messages = queue.Queue()
+        instance.is_busy = False
+        events = []
+        class FakeButton:
+            def configure(self, **kwargs):
+                events.append(("button", kwargs))
+        class FakeStatus:
+            def set(self, value):
+                events.append(("status", value))
+        class FakeRoot:
+            def destroy(self):
+                events.append(("destroy", None))
+        instance.root = FakeRoot()
+        instance.status_var = FakeStatus()
+        instance.log_line = lambda message: events.append(("log", message))
+        instance.install_button = FakeButton()
+        instance.update_button = FakeButton()
+        instance.diagnostic_button = FakeButton()
+        instance.cloudflare_button = FakeButton()
+        instance.copy_button = FakeButton()
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(gui, "APP_DIR", Path(directory)), \
+             patch.object(gui, "INSTALL_LOG", Path(directory) / "install.log"), \
+             patch.object(gui.threading, "Thread") as worker, \
+             patch.object(gui.messagebox, "askyesno", return_value=True):
+            instance.confirm_install()
+            self.assertTrue(instance.is_busy)
+            worker.return_value.start.assert_called_once()
+            instance.on_close()
+            self.assertFalse(any(event[0] == "destroy" for event in events))
+            trace = (Path(directory) / "install.log").read_text("utf-8")
+            self.assertIn("INSTALL_CLICKED", trace)
+            self.assertIn("ACTION_STARTED", trace)
+
+    def test_worker_failure_is_reported_and_does_not_exit(self):
+        instance = object.__new__(gui.Gui)
+        instance.messages = queue.Queue()
+        def problem():
+            raise RuntimeError("Erreur de démarrage du relais")
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(gui, "APP_DIR", Path(directory)), \
+             patch.object(gui, "INSTALL_LOG", Path(directory) / "install.log"):
+            instance.worker(problem)
+            self.assertEqual(instance.messages.get_nowait(), ("failed", "Erreur de démarrage du relais"))
+            self.assertEqual(instance.messages.get_nowait(), ("done", None))
+            self.assertIn("ACTION_FAILED | RuntimeError", (Path(directory) / "install.log").read_text("utf-8"))
+
+    def test_diagnostic_never_logs_private_tokens(self):
+        secret = "c" * 64
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(gui, "APP_DIR", Path(directory)), \
+             patch.object(gui, "INSTALL_LOG", Path(directory) / "install.log"):
+            gui.record_install_step("INSTALL_CLICKED", RuntimeError(secret))
+            trace = (Path(directory) / "install.log").read_text("utf-8")
+            self.assertIn("INSTALL_CLICKED | RuntimeError", trace)
+            self.assertNotIn(secret, trace)
+
     def test_official_binary_pin(self):
         self.assertEqual(len(gui.CLOUDFLARED_SHA256), 64)
         self.assertIn("github.com/cloudflare/cloudflared/releases/download/", gui.CLOUDFLARED_URL)
