@@ -99,7 +99,8 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         // Bounded and renewed only while the user-enabled foreground session runs.
         AgentClient client=AgentClient.get(this);
         if((client.isEnabled() || Local2Client.get(this).enabled())
-            &&(!client.isEcoMode()||client.isExecuting()))sessionLock.acquire(120000L);
+            &&(!client.isEcoMode()||client.isExecuting()||Local2Client.get(this).isExecuting()))
+            sessionLock.acquire(120000L);
     }
 
     public static void ensureRunning(Context context) {
