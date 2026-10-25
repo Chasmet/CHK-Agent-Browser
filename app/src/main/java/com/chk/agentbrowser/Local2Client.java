@@ -31,6 +31,11 @@ public final class Local2Client {
     private int consecutiveFailures;
     private final java.util.concurrent.atomic.AtomicBoolean commandInFlight = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile String status = "Non connecté";
+    // Hold a completed Android result until Windows has acknowledged it.
+    // A network failure must never cause an already executed command to run again.
+    private volatile JSONObject unsentCompletion;
+    private volatile String unsentCompletionAddress = "";
+    private static final long CONNECTION_GRACE_MS = 60000L;
     private final Runnable loop = this::poll;
 
     private Local2Client(Context context) {
@@ -45,6 +50,8 @@ public final class Local2Client {
     int sessionGeneration() { return generation; }
     public String url() { return preferences.getString("url", ""); }
     public String status() {
+        if (commandInFlight.get() && status.startsWith("Connecté"))
+            return "Commande en cours · résultat PC en attente";
         if (lastPoll > 0 && android.os.SystemClock.elapsedRealtime() - lastPoll > 45000L
             && status.startsWith("Connecté")) return "Connexion PC à revérifier";
         return status;
@@ -104,7 +111,12 @@ public final class Local2Client {
         String value = url == null ? "" : url.trim();
         value = resolveMcpAddress(value);
         boolean changed = !value.equals(url());
-        if (changed) stop();
+        if (changed) {
+            stop();
+            // Never send a reply containing owner data to a different MCP server.
+            unsentCompletion = null;
+            unsentCompletionAddress = "";
+        }
         preferences.edit().putString("url", value).putBoolean("enabled", on).apply();
         if (changed) { lastPoll = 0; serverId = "non disponible"; serverVersion = "non vérifié"; }
         if (!on) stop();
@@ -130,7 +142,10 @@ public final class Local2Client {
         main.post(()->{
             if(!enabled())return;
             long now=android.os.SystemClock.elapsedRealtime();if(now-lastReconnect<1200L)return;
-            lastReconnect=now;forceHandshake=true;consecutiveFailures=0;
+            lastReconnect=now;
+            // Network changes wake the existing verified route; they do not force
+            // another initialize request or erase the failure backoff.
+            if(verifiedAddress.isEmpty())forceHandshake=true;
             if(!running)start();
             else scheduleNext(generation,0);
         });
@@ -205,6 +220,15 @@ public final class Local2Client {
                 if(forceHandshake||!address.equals(verifiedAddress)){
                     forceHandshake=false;verifyServer(address);
                 }
+                if (unsentCompletion != null) {
+                    JSONObject completion = unsentCompletion;
+                    Local2Protocol.completion(request(unsentCompletionAddress, "android/complete", completion));
+                    if (unsentCompletion == completion) {
+                        unsentCompletion = null;
+                        unsentCompletionAddress = "";
+                        commandState = "résultat acquitté après reconnexion";
+                    }
+                }
                 JSONObject command = Local2Protocol.command(nextCommand(address));
                 if (session != generation || !running || !enabled()) return;
                 lastPoll = android.os.SystemClock.elapsedRealtime();
@@ -251,7 +275,13 @@ public final class Local2Client {
                                 }
                                 JSONObject params = new JSONObject().put("id", ident)
                                     .put("success", reportedSuccess).put("message", transportMessage);
+                                unsentCompletion = params;
+                                unsentCompletionAddress = replyAddress;
                                 Local2Protocol.completion(request(replyAddress, "android/complete", params));
+                                if (unsentCompletion == params) {
+                                    unsentCompletion = null;
+                                    unsentCompletionAddress = "";
+                                }
                                 if (session == generation) commandState = reportedSuccess ? "résultat reçu par le PC" : "échec transmis au PC";
                             } catch (Exception failure) {
                                 if (session == generation) {
@@ -269,9 +299,13 @@ public final class Local2Client {
                 }
             } catch (Exception error) {
                 if (session != generation) return;
-                verifiedAddress = "";
+                if (requiresNewHandshake(error)) verifiedAddress = "";
                 recordFailure(error);
-                status="Canal Android non connecté · "+Local2Transport.describe(error);
+                long sinceSuccess = lastPoll == 0 ? Long.MAX_VALUE
+                    : android.os.SystemClock.elapsedRealtime() - lastPoll;
+                status = sinceSuccess < CONNECTION_GRACE_MS
+                    ? "Connexion PC instable · reconnexion automatique"
+                    : "Canal Android non connecté · " + Local2Transport.describe(error);
                 consecutiveFailures=Math.min(10,consecutiveFailures+1);
                 delay=Math.min(45000L,6000L << Math.min(3,consecutiveFailures-1));
             }finally{
@@ -280,6 +314,15 @@ public final class Local2Client {
                 else scheduleNext(session,forceHandshake?0:delay);
             }
         });
+    }
+    static boolean requiresNewHandshake(Exception error) {
+        if (error instanceof Local2Transport.HttpFailure) {
+            int code = ((Local2Transport.HttpFailure) error).status;
+            return code == 401 || code == 403 || code == 404;
+        }
+        if (error instanceof Local2Protocol.RpcFailure) return true;
+        return error instanceof java.io.IOException
+            && "Identité du serveur différente".equals(error.getMessage());
     }
     private static String safeFailure(String message){
         if(message==null)return "résultat non confirmé";
