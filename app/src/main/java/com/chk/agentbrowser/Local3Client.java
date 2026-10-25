@@ -216,9 +216,16 @@ public final class Local3Client {
                         AgentClient.get(app).executeLocal3(action,parameters,(ok,message)->{
                             io.execute(()->{
                                 try{
-                                    String bounded=Local2Results.prepare(app,message);
+                                    String prepared=Local2Results.prepare(app,message);
+                                    // Universal Control accepts at most 12,000 characters per result.
+                                    // A large PDF/MP4 response stays on Android: report a bounded
+                                    // excerpt and ask for paginated reads instead of endless retries.
+                                    boolean truncated=prepared.length()>7500;
+                                    String bounded=truncated?prepared.substring(0,7500):prepared;
+                                    JSONObject result=new JSONObject().put("ok",ok).put("message",bounded)
+                                        .put("truncated",truncated);
                                     JSONObject outbound=new JSONObject().put("task_id",taskId)
-                                        .put("result",new JSONObject().put("ok",ok).put("message",bounded));
+                                        .put("result",result);
                                     String packet=outbound.toString();
                                     if(!p.edit().putString("outbox",packet).remove("leased_task").commit())
                                         throw new java.io.IOException("Résultat non enregistré");
