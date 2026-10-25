@@ -567,9 +567,10 @@ public class MainActivity extends Activity {
         final AgentClient.ResultCallback callback=new AgentClient.ResultCallback(){
             public boolean isActive(){return originalCallback.isActive()&&!isFinishing()&&!isDestroyed();}
             public boolean isLocal2(){return originalCallback.isLocal2();}
+            public boolean isLocal3(){return originalCallback.isLocal3();}
             public void finish(boolean ok,String result){transferHandler.post(()->{if(!isDestroyed())finishAgentAction(ok);});originalCallback.finish(ok,result);}
         };
-        if(!agentClient.commandEnabled(callback)){callback.finish(false,callback.isLocal2()?"Local 2 désactivé.":"MCP Render désactivé par le propriétaire.");return;}
+        if(!agentClient.commandEnabled(callback)){callback.finish(false,callback.isLocal3()?"Local 3 désactivé.":callback.isLocal2()?"Local 2 désactivé.":"MCP Render désactivé par le propriétaire.");return;}
         if(DesktopCommands.handles(action,args)){
             if(args.optString("tool").equals("browser")||args.optString("target","native").equals("web")){showSpace("browser");if(home!=null)home.revealWeb();}
             DesktopCommands.execute(this,current,action,args,callback);return;
