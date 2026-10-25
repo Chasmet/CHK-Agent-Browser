@@ -184,7 +184,16 @@ final class BrowserAutomation {
                 if(!receipt.isActive()){receipt.finish(false,"Canal arrêté pendant la préparation. Aucun nouvel envoi.");return;}
                 if(!same(web,page,version)){receipt.finish(false,"Page modifiée pendant la préparation. Aucun fichier envoyé.");return;}
                 if(!ok){receipt.finish(false,message);return;}
-                BrowserStreamUploader.upload(app,web,selector,uris,receipt);
+                // Grok Imagine can hold the synthetic same-origin response stream open
+                // indefinitely in a background WebView. Owner-selected images are
+                // small enough for the existing bounded, serial JS file injection.
+                // Keep the streaming path for all other destinations and large media.
+                if("grok.com".equalsIgnoreCase(host(web))
+                        && files.length()==1 && files.optJSONObject(0)!=null
+                        && files.optJSONObject(0).optString("workspace_path","").toLowerCase(java.util.Locale.ROOT)
+                            .matches(".*\\.(png|jpg|jpeg|webp)"))
+                    BrowserJsUploader.upload(app,web,selector,uris,receipt);
+                else BrowserStreamUploader.upload(app,web,selector,uris,receipt);
             });
         }catch(Exception e){cb.finish(false,e.getMessage()==null?"Importation refusée.":e.getMessage());}
     }
