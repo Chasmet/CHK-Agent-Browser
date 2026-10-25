@@ -170,9 +170,8 @@ public final class SettingsActivity extends Activity {
         local3.setOnCheckedChangeListener((b,on)->{
             Local3Client.get(this).setEnabled(on);
             if(on){
-                AgentService.ensureRunning(this);
-                if(!Local3Client.get(this).paired())
-                    Toast.makeText(this,"Utilise le bouton Associer pour connecter ton serveur.",Toast.LENGTH_LONG).show();
+                if(Local3Client.get(this).paired())AgentService.ensureRunning(this);
+                else Toast.makeText(this,"Associe d'abord le serveur avec une invitation.",Toast.LENGTH_LONG).show();
             }else if(!agent.isEnabled()&&!Local2Client.get(this).enabled())
                 stopService(new Intent(this,AgentService.class));
             local3Status.setText(Local3Client.get(this).status());
