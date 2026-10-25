@@ -47,6 +47,7 @@ public final class Local2Client {
         return instance;
     }
     public boolean enabled() { return preferences.getBoolean("enabled", false); }
+    public boolean isExecuting() { return commandInFlight.get() || unsentCompletion != null; }
     int sessionGeneration() { return generation; }
     public String url() { return preferences.getString("url", ""); }
     public String status() {
