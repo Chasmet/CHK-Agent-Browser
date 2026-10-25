@@ -281,9 +281,9 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             direct = null;
         }
         if (Local2Client.get(this).enabled()) Local2Client.get(this).start();
+        else Local2Client.get(this).stop();
         if (Local3Client.get(this).enabled()) Local3Client.get(this).start();
         else Local3Client.get(this).stop();
-        else Local2Client.get(this).stop();
         main.removeCallbacks(maintenance);main.post(maintenance);
         AgentClient.get(this).startServiceMode(this);
         lastRender=AgentClient.get(this).isEnabled();lastLocal=Local2Client.get(this).enabled();lastDirect=AgentClient.get(this).isDirectMode();lastThird=Local3Client.get(this).enabled();
