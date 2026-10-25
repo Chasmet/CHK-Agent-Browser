@@ -9,6 +9,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
+import faulthandler
+from datetime import datetime, timezone
 import queue
 import re
 import shutil
@@ -35,6 +38,34 @@ APP_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CHKHomeMCP"
 CF_HOST_PATTERN = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com", re.I)
 CF_LOG = APP_DIR / "cloudflared-test.log"
 CF_STATE = APP_DIR / "cloudflared-test.json"
+INSTALL_LOG = APP_DIR / "installer-diagnostic.log"
+_FATAL_LOG_STREAM = None
+
+
+def record_install_step(stage: str, error: BaseException | None = None) -> None:
+    """Only log fixed stage names and error categories, never any secret, URL or payload."""
+    if not re.fullmatch(r"[A-Z_]{2,48}", stage or ""):
+        stage = "UNEXPECTED_STAGE"
+    try:
+        APP_DIR.mkdir(parents=True, exist_ok=True)
+        with INSTALL_LOG.open("a", encoding="utf-8") as stream:
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            kind = "" if error is None else " | " + type(error).__name__
+            stream.write(f"{stamp} | {stage}{kind}\n")
+    except OSError:
+        pass
+
+
+def install_fatal_diagnostics() -> None:
+    """Retain native Python crash information when the EXE has no console."""
+    global _FATAL_LOG_STREAM
+    try:
+        APP_DIR.mkdir(parents=True, exist_ok=True)
+        _FATAL_LOG_STREAM = (APP_DIR / "installer-native-crash.log").open("a", encoding="utf-8")
+        faulthandler.enable(file=_FATAL_LOG_STREAM, all_threads=True)
+    except (OSError, RuntimeError):
+        pass
+    record_install_step("APP_OPENED")
 
 
 def hidden_kwargs() -> dict:
@@ -123,6 +154,9 @@ def upgrade_managed_backend(src: Path, target: Path, progress) -> bool:
     if same_binary(src, target):
         return False
     if fetch_health() is not None:
+        # Never allow a renamed installer to terminate itself via taskkill.
+        if Path(sys.executable).name.casefold() == BACKEND_NAME.casefold():
+            raise RuntimeError("Ouvre CHK-Home-Installation.exe, pas CHK-Home-MCP.exe.")
         progress("Nouvelle version MCP détectée : arrêt du seul serveur CHK local…")
         result = run_quiet(["taskkill.exe", "/F", "/IM", BACKEND_NAME], timeout=12)
         if result.returncode != 0:
@@ -175,7 +209,6 @@ def verify_funnel_mcp(dns: str, capability: str, progress) -> None:
 def ensure_local_mcp(progress) -> str:
     source = Path(__file__).resolve().parent / BACKEND_NAME
     # When frozen by PyInstaller, sys.executable is GUI in the extracted ZIP.
-    import sys
     if getattr(sys, "frozen", False):
         source = Path(sys.executable).resolve().parent / BACKEND_NAME
     if not source.is_file():
@@ -482,7 +515,10 @@ class Gui:
         self.url = ""
         self.status_var = tk.StringVar(value="Prêt à installer le second connecteur.")
         self.make_widgets()
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.root.report_callback_exception = self.on_tk_exception
         self.root.after(120, self.consume_messages)
+        record_install_step("GUI_READY")
 
     def make_widgets(self):
         tk.Label(self.root, text="CHK  /  HOME MCP", font=("Segoe UI", 21, "bold"),
@@ -553,28 +589,57 @@ class Gui:
     def msg(self, text):
         self.messages.put(("log", text))
 
+    def on_tk_exception(self, error_type, error, _traceback):
+        record_install_step("GUI_CALLBACK_ERROR", error)
+        self.status_var.set("Erreur d'interface : consulte le diagnostic. Fenêtre conservée.")
+        try:
+            self.log_line("ERREUR INTERFACE : " + error_type.__name__)
+        except tk.TclError:
+            pass
+
+    def on_close(self):
+        if self.is_busy:
+            self.status_var.set("Installation en cours : la fenêtre reste ouverte.")
+            return
+        record_install_step("GUI_CLOSED")
+        self.root.destroy()
+
+
     def run_task(self, callback):
         if self.is_busy:
             return
         self.is_busy = True
+        record_install_step("ACTION_STARTED")
+        self.status_var.set("Installation en cours : ne ferme pas cette fenêtre.")
         self.install_button.configure(state="disabled")
         self.update_button.configure(state="disabled")
         self.diagnostic_button.configure(state="disabled")
         self.cloudflare_button.configure(state="disabled")
         self.copy_button.configure(state="disabled")
         self.log_line("────────────────────────────────────────────────────────")
-        threading.Thread(target=self.worker, args=(callback,), daemon=True).start()
+        try:
+            threading.Thread(target=self.worker, args=(callback,), daemon=True,
+                             name="CHK-Installer").start()
+        except Exception as err:
+            record_install_step("WORKER_START_FAILED", err)
+            self.messages.put(("failed", "Impossible de lancer l'installation : " + type(err).__name__))
+            self.messages.put(("done", None))
 
     def worker(self, callback):
         try:
             callback()
-        except Exception as err:
-            # Error messages generated here contain no secret, unlike Tailscale raw logs.
-            self.messages.put(("failed", str(err)))
+        except BaseException as err:
+            record_install_step("ACTION_FAILED", err)
+            # Unknown errors can contain private URLs: only trusted RuntimeError text is shown.
+            message = str(err) if isinstance(err, RuntimeError) else "Échec (" + type(err).__name__ + ")."
+            self.messages.put(("failed", message))
+        else:
+            record_install_step("ACTION_SUCCEEDED")
         finally:
             self.messages.put(("done", None))
 
     def confirm_install(self):
+        record_install_step("INSTALL_CLICKED")
         if not messagebox.askyesno(
                 "Autoriser CHK Home MCP",
                 "Installer le serveur sur ce PC et publier UNIQUEMENT son chemin MCP\n"
@@ -587,18 +652,22 @@ class Gui:
         self.run_task(self.install)
 
     def install(self):
+        record_install_step("INSTALL_PRECHECK")
         self.msg("1/4 — Vérification de l'exécutable Windows…")
         secret = ensure_local_mcp(self.msg)
         self.msg("2/4 — Démarrage automatique (session Windows)…")
         register_autostart()
+        record_install_step("BACKEND_READY")
         self.msg("3/4 — Recherche de Tailscale et de son adresse HTTPS…")
         tailscale, dns = tailscale_status()
         self.msg("Tailscale connecté sur : " + dns)
+        record_install_step("TAILSCALE_CHECKED")
         self.msg("4/4 — Activation et contrôle de Funnel sur 8443…")
         ensure_funnel(tailscale, self.msg)
         verify_funnel_mcp(dns, secret, self.msg)
         # Credential is intentionally NEVER displayed, printed or logged.
         private_url = f"https://{dns}:8443/mcp/{secret}"
+        record_install_step("INSTALL_VERIFIED")
         self.messages.put(("ready", private_url))
 
     def update_existing(self):
@@ -688,6 +757,7 @@ class Gui:
                 elif action == "failed":
                     self.status_var.set("Installation incomplète — voir le diagnostic ci-dessous.")
                     self.log_line("PROBLÈME : " + data)
+                    self.log_line("Diagnostic enregistré sur le PC. Fenêtre conservée.")
                     self.log_line("Ton IIS 443 et ton MCP Render ont été conservés.")
                 elif action == "done":
                     self.is_busy = False
@@ -715,4 +785,16 @@ class Gui:
 
 
 if __name__ == "__main__":
-    Gui().start()
+    install_fatal_diagnostics()
+    try:
+        Gui().start()
+    except BaseException as failure:
+        record_install_step("APP_FATAL_ERROR", failure)
+        try:
+            fallback = tk.Tk()
+            fallback.withdraw()
+            messagebox.showerror("CHK Home MCP — erreur",
+                "Le programme a rencontré une erreur. Un diagnostic local est conservé.")
+            fallback.destroy()
+        except Exception:
+            pass
