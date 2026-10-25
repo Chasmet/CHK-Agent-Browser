@@ -120,6 +120,25 @@ public final class Local2BrowserAutomationTest {
         assertEquals("selected",nativeCall("files_browser_upload_status",new JSONObject().put("id",job)).json().getString("state"));
         assertFalse(nativeCall("browser_upload_workspace_file",new JSONObject(args.toString()).put("selector","#other")).ok);
     }
+    @Test public void grokBackgroundPngUsesBoundedJsImportWithVerifiedReceipt()throws Exception{
+        path="dalton-test-"+job+".png";
+        long size=280000L;
+        try(RandomAccessFile file=new RandomAccessFile(new WorkspaceStore(app).file(path),"rw")){
+            file.setLength(size);
+            file.seek(0);file.write(new byte[]{(byte)137,80,78,71,13,10,26,10});
+        }
+        WebView web=open("grok.com","<html><body><input id='media' type='file' accept='image/png'>"
+            +"<output id='received'></output><script>document.getElementById('media').addEventListener('change',function(){"
+            +"var f=this.files[0];document.getElementById('received').textContent=f.name+':'+f.size;this.value='';});</script></body></html>");
+        settings=(SettingsActivity)instrument.startActivitySync(new Intent(app,SettingsActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        JSONObject args=new JSONObject().put("id",job).put("expected_host","grok.com").put("selector","#media")
+            .put("files",new JSONArray().put(new JSONObject().put("workspace_path",path)));
+        JSONObject receipt=browserCall("upload_file",args).json();
+        assertEquals("selected",receipt.getString("state"));
+        assertFalse(receipt.getBoolean("server_upload_verified"));
+        assertEquals(JSONObject.quote(path+":"+size),eval(web,"document.getElementById('received').textContent"));
+        assertEquals("selected",browserCall("upload_status",new JSONObject().put("id",job)).json().getString("state"));
+    }
     @Test public void destroyedActivityRetainsExactTabsFormAndJsStateThenReattaches()throws Exception{
         WebView original=open("example.com","<html><body><input id='draft' value='keep'><input type='file' id='media'><script>window.sessionMarker='original-dom';</script></body></html>");
         eval(original,"document.querySelector('#draft').value='unsaved';var dt=new DataTransfer();dt.items.add(new File(['abc'],'retained.txt'));document.querySelector('#media').files=dt.files;true");
