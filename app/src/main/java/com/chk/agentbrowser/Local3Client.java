@@ -165,6 +165,31 @@ public final class Local3Client {
             }
         }finally{c.disconnect();}
     }
+    /** Large text, MP3/MP4/PDF metadata and previews remain in Android workspace. */
+    private static String compactResult(Context app,String result)throws Exception{
+        if(result.length()<=7500)return result;
+        byte[] bytes=result.getBytes(StandardCharsets.UTF_8);
+        if(bytes.length>2*1024*1024)
+            return new JSONObject().put("result_too_large",true)
+                .put("max_bytes",2*1024*1024).put("next","Utiliser la lecture paginée de fichiers")
+                .toString();
+        WorkspaceStore store=new WorkspaceStore(app);
+        java.io.File directory=store.file("AgentResults");
+        if(!directory.exists())store.mkdir("AgentResults");
+        String name="Local3-"+java.util.UUID.randomUUID()+".json";
+        String path="AgentResults/"+name;
+        java.io.File target=store.file(path);
+        java.io.File stage=new java.io.File(directory,".stage-"+java.util.UUID.randomUUID());
+        try{
+            try(java.io.FileOutputStream out=new java.io.FileOutputStream(stage)){
+                out.write(bytes);out.getFD().sync();
+            }
+            if(!stage.renameTo(target))throw new java.io.IOException("Enregistrement du résultat impossible");
+            return new JSONObject().put("result_in_file",true).put("result_file",path)
+                .put("size",target.length()).put("sha256",WorkspaceTransfer.hash(target))
+                .put("read_action","files_transfer_read").put("truncated",false).toString();
+        }finally{stage.delete();}
+    }
     private static String safe(Exception e){
         if(e instanceof java.net.SocketTimeoutException)return "délai réseau dépassé";
         if(e instanceof java.net.UnknownHostException)return "serveur PC introuvable";
@@ -216,14 +241,8 @@ public final class Local3Client {
                         AgentClient.get(app).executeLocal3(action,parameters,(ok,message)->{
                             io.execute(()->{
                                 try{
-                                    String prepared=Local2Results.prepare(app,message);
-                                    // Universal Control accepts at most 12,000 characters per result.
-                                    // A large PDF/MP4 response stays on Android: report a bounded
-                                    // excerpt and ask for paginated reads instead of endless retries.
-                                    boolean truncated=prepared.length()>7500;
-                                    String bounded=truncated?prepared.substring(0,7500):prepared;
-                                    JSONObject result=new JSONObject().put("ok",ok).put("message",bounded)
-                                        .put("truncated",truncated);
+                                    String bounded=compactResult(app,Local2Results.prepare(app,message));
+                                    JSONObject result=new JSONObject().put("ok",ok).put("message",bounded);
                                     JSONObject outbound=new JSONObject().put("task_id",taskId)
                                         .put("result",result);
                                     String packet=outbound.toString();
