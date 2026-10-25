@@ -64,6 +64,7 @@ public final class AgentClient {
         void finish(boolean success, String result);
         default boolean isActive(){return true;}
         default boolean isLocal2(){return false;}
+        default boolean isLocal3(){return false;}
     }
     public interface CommandHandler {
         void onCommand(JSONObject command, ResultCallback callback);
@@ -90,16 +91,16 @@ public final class AgentClient {
     public boolean isEnabled() { return settings.getBoolean("enabled", false); }
     boolean serviceModeRunning(){return running;}
     boolean commandEnabled(ResultCallback callback) {
-        return callback.isLocal2() ? Local2Client.get(app).enabled() : isEnabled();
+        return callback.isLocal3() ? Local3Client.get(app).enabled() : callback.isLocal2() ? Local2Client.get(app).enabled() : isEnabled();
     }
     private CommandHandler local2Browser() {
         return local2Screen != null && !local2Screen.isFinishing() && !local2Screen.isDestroyed()
-            ? local2Handler : (isAutonomous() && Local2Client.get(app).enabled() ? retainedLocal2 : null);
+            ? local2Handler : (isAutonomous() && (Local2Client.get(app).enabled() || Local3Client.get(app).enabled()) ? retainedLocal2 : null);
     }
     // Retain the actual owner's WebViews, not a second browser loaded from a URL.
     boolean retainBrowser(Activity activity, java.util.List<android.webkit.WebView> tabs,
                           android.webkit.WebView selected) {
-        if(local2Screen!=activity || !isAutonomous() || !Local2Client.get(app).enabled()
+        if(local2Screen!=activity || !isAutonomous() || !(Local2Client.get(app).enabled() || Local3Client.get(app).enabled())
                 || tabs.isEmpty())return false;
         closeRetainedBrowser();
         retainedLocal2=new BackgroundBrowser(app,new java.util.ArrayList<>(tabs),selected);
@@ -123,6 +124,7 @@ public final class AgentClient {
         CommandHandler browser = local2Browser();
         try {
             value.put("local2_enabled", Local2Client.get(app).enabled())
+                .put("local3_enabled", Local3Client.get(app).enabled())
                 .put("render_enabled", isEnabled()).put("autonomous", isAutonomous())
                 .put("browser_available", browser != null)
                 .put("visible", browser != null && browser.visible())
@@ -173,6 +175,7 @@ public final class AgentClient {
             "\nDernière commande : "+(lastCommandDurationMs<0?"non mesurée":lastCommandDurationMs+" ms");
     }
     public String shortConnectionStatus(){
+        if(Local3Client.get(app).enabled())return "Local 3 · "+Local3Client.get(app).status();
         if(Local2Client.get(app).enabled())return "Local 2 · "+Local2Client.get(app).status();
         if(!isEnabled())return "MCP désactivé";
         if(isDirectMode())return AgentService.directRunning()
@@ -340,9 +343,9 @@ public final class AgentClient {
     private void executeLocal2Batch(org.json.JSONArray steps, int index,
                                     org.json.JSONArray results,
                                     DirectMcpServer.Reply finish,int epoch,
-                                    java.util.concurrent.atomic.AtomicBoolean completed) {
-        if (completed.get() || epoch!=Local2Client.get(app).sessionGeneration()
-            || !Local2Client.get(app).enabled() || !isAutonomous()) {
+                                    java.util.concurrent.atomic.AtomicBoolean completed,boolean third) {
+        if (completed.get() || epoch!=localChannelGeneration(third)
+            || !localChannelEnabled(third) || !isAutonomous()) {
             finish.finish(false, "Canal Local 2 interrompu."); return;
         }
         if (index >= steps.length()) {
@@ -354,7 +357,7 @@ public final class AgentClient {
             if ("browser_batch".equals(next)) {
                 finish.finish(false, "Lots imbriqués interdits."); return;
             }
-            executeLocal2(next, step.optJSONObject("args") == null
+            executeLocal(next, step.optJSONObject("args") == null
                 ? new JSONObject() : step.getJSONObject("args"), (ok, message) -> {
                 ui.post(() -> {
                     try {
@@ -362,39 +365,60 @@ public final class AgentClient {
                             .put("action", next).put("success", ok)
                             .put("result", message == null ? "" : limit(message, 2000)));
                         if (!ok) finish.finish(false, results.toString());
-                        else executeLocal2Batch(steps, index + 1, results, finish,epoch,completed);
+                        else executeLocal2Batch(steps, index + 1, results, finish,epoch,completed,third);
                     } catch (Exception error) {
                         finish.finish(false, "Erreur de suivi du lot Android.");
                     }
                 });
-            });
+            },third);
         } catch(Exception error) {
             finish.finish(false, "Étape de lot invalide.");
         }
     }
 
     public void executeLocal2(String action, JSONObject args, DirectMcpServer.Reply reply) {
-        final int epoch=Local2Client.get(app).sessionGeneration();
+        executeLocal(action,args,reply,false);
+    }
+    /** Local 3 delegates to the existing CHK browser / keyboard / workspace tools. */
+    public void executeLocal3(String action, JSONObject args, DirectMcpServer.Reply reply) {
+        if(!action.startsWith("browser_") && !"android_action".equals(action)) {
+            if("keyboard".equals(action)||"desktop".equals(action)||WorkspaceCommands.handles(action)){
+                try{
+                    args=new JSONObject().put("action",action).put("args",args);
+                    action="android_action";
+                }catch(org.json.JSONException e){reply.finish(false,"Paramètres invalides");return;}
+            }else{reply.finish(false,"Fonction Local 3 inconnue");return;}
+        }
+        executeLocal(action,args,reply,true);
+    }
+    private boolean localChannelEnabled(boolean third){
+        return third?Local3Client.get(app).enabled():Local2Client.get(app).enabled();
+    }
+    private int localChannelGeneration(boolean third){
+        return third?Local3Client.get(app).sessionGeneration():Local2Client.get(app).sessionGeneration();
+    }
+    private void executeLocal(String action, JSONObject args, DirectMcpServer.Reply reply,boolean third) {
+        final int epoch=localChannelGeneration(third);
         final java.util.concurrent.atomic.AtomicBoolean completed=new java.util.concurrent.atomic.AtomicBoolean();
         Runnable timeout=()->{
             if(completed.compareAndSet(false,true))reply.finish(false,
-                "Délai Local 2 dépassé · résultat non confirmé, aucune répétition automatique.");
+                "Délai de commande locale dépassé · résultat non confirmé, aucune répétition automatique.");
         };
         ui.postDelayed(timeout,150000L);
         executeLocal2Command(action,args,(ok,message)->{
             if(completed.compareAndSet(false,true)){
                 ui.removeCallbacks(timeout);
-                if(ok && epoch!=Local2Client.get(app).sessionGeneration())
+                if(ok && epoch!=localChannelGeneration(third))
                     reply.finish(false,"Canal modifié pendant l’action · résultat à vérifier avant toute répétition.");
                 else reply.finish(ok,message);
             }
-        },epoch,completed);
+        },epoch,completed,third);
     }
     private void executeLocal2Command(String action, JSONObject args, DirectMcpServer.Reply reply,
-                                     int epoch,java.util.concurrent.atomic.AtomicBoolean completed) {
+                                     int epoch,java.util.concurrent.atomic.AtomicBoolean completed,boolean third) {
         ui.post(() -> {
-            if (!Local2Client.get(app).enabled()) {
-                reply.finish(false, "Local 2 désactivé dans Réglages."); return;
+            if (!localChannelEnabled(third)) {
+                reply.finish(false, "Canal MCP local désactivé dans Réglages."); return;
             }
             if ("browser_status".equals(action)) {
                 reply.finish(true, local2BrowserStatus().toString()); return;
@@ -407,7 +431,7 @@ public final class AgentClient {
                 if (steps == null || steps.length() < 1 || steps.length() > 12) {
                     reply.finish(false, "Lot : 1 à 12 étapes maximum."); return;
                 }
-                executeLocal2Batch(steps, 0, new org.json.JSONArray(), reply,epoch,completed);
+                executeLocal2Batch(steps, 0, new org.json.JSONArray(), reply,epoch,completed,third);
                 return;
             }
             if ("android_action".equals(action)) {
@@ -462,9 +486,10 @@ public final class AgentClient {
                     if("click".equals(nativeAction))cmd.put("action","click_verified");
                     executeTaskStep(cmd, new ResultCallback() {
                         @Override public boolean isLocal2() { return true; }
+                        @Override public boolean isLocal3() { return third; }
                         @Override public boolean isActive() {
-                            return !completed.get() && epoch==Local2Client.get(app).sessionGeneration()
-                                && Local2Client.get(app).enabled() && isAutonomous();
+                            return !completed.get() && epoch==localChannelGeneration(third)
+                                && localChannelEnabled(third) && isAutonomous();
                         }
                         @Override public void finish(boolean ok, String message) {
                             reply.finish(ok, message);
@@ -514,9 +539,10 @@ public final class AgentClient {
                 JSONObject cmd = new JSONObject().put("id","local2").put("action",translated).put("args",args);
                 receiver.onCommand(cmd, new ResultCallback() {
                     @Override public boolean isLocal2() { return true; }
+                        @Override public boolean isLocal3() { return third; }
                     @Override public boolean isActive() {
-                        return !completed.get() && epoch==Local2Client.get(app).sessionGeneration()
-                            && Local2Client.get(app).enabled() && isAutonomous()
+                        return !completed.get() && epoch==localChannelGeneration(third)
+                            && localChannelEnabled(third) && isAutonomous()
                             && local2Browser() == receiver;
                     }
                     @Override public void finish(boolean ok, String message) { reply.finish(ok, message); }
@@ -592,6 +618,7 @@ public final class AgentClient {
             WorkspaceCommands.run(app, action, command.optJSONObject("args") == null
                 ? new JSONObject() : command.optJSONObject("args"), new ResultCallback() {
                     public boolean isLocal2() { return cb.isLocal2(); }
+                    public boolean isLocal3() { return cb.isLocal3(); }
                     public boolean isActive() { return cb.isActive(); }
                     public void finish(boolean ok, String message) {
                         CommandHandler browser = cb.isLocal2() ? local2Browser() : activeHandler();

@@ -42,7 +42,7 @@ final class DesktopCommands {
             case "pointer":AgentPointer.execute(c,web,p,cb);return;
             default:WorkspaceCommands.IO.execute(()->{try{if(!cb.isActive())return;JSONObject result;
                 if(p.getString("tool").equals("files"))result=AgentFiles.command(c,p,cb);
-                else if(p.getString("tool").equals("tasks"))result=AgentTasks.command(c,p,cb.isLocal2());
+                else if(p.getString("tool").equals("tasks"))result=AgentTasks.command(c,p,cb.isLocal2(),cb.isLocal3());
                 else result=AgentScript.command(c,p);
                 WorkspaceCommands.UI.post(()->{if(cb.isActive())cb.finish(true,result.toString());});
             }catch(Exception e){WorkspaceCommands.UI.post(()->{if(cb.isActive())cb.finish(false,e.getMessage()==null?"Outil IA indisponible.":e.getMessage());});}});

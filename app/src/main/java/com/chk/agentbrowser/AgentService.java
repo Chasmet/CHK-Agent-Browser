@@ -40,13 +40,14 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     }
     private boolean deliberateStop=false;
     private volatile boolean foregroundReady;
-    private boolean lastRender,lastLocal,lastDirect;
+    private boolean lastRender,lastLocal,lastDirect,lastThird;
     private String stopReason="fin du service, origine non déterminée";
     private long createdAt;
     private int startCount;
     private boolean sameChannels(){
         return lastRender==AgentClient.get(this).isEnabled()&&lastLocal==Local2Client.get(this).enabled()
-            &&lastDirect==AgentClient.get(this).isDirectMode();
+            &&lastDirect==AgentClient.get(this).isDirectMode()
+            &&lastThird==Local3Client.get(this).enabled();
     }
     static JSONObject state(Context c){
         JSONObject value=new JSONObject();AgentService service=instance;
@@ -62,17 +63,18 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     }
     static long recoveryDelay(int rapidStops){return Math.min(900000L,60000L << Math.min(4,Math.max(0,rapidStops-1)));}
     public static void reconnect(Context c){
-        ensureRunning(c);AgentClient.get(c).reconnect();Local2Client.get(c).reconnect();
+        ensureRunning(c);AgentClient.get(c).reconnect();Local2Client.get(c).reconnect();Local3Client.get(c).reconnect();
     }
     private void resumeEnabledTransports(){
         if(Local2Client.get(this).enabled())Local2Client.get(this).start();
+        if(Local3Client.get(this).enabled())Local3Client.get(this).start();
         AgentClient client=AgentClient.get(this);
         if(client.isEnabled()&&!client.isDirectMode()&&!client.serviceModeRunning())client.startServiceMode(this);
         refreshNotification();
     }
     private void networkChanged(){
         AgentClient.get(this).reconnect();
-        if(foregroundReady)Local2Client.get(this).reconnect();
+        if(foregroundReady){Local2Client.get(this).reconnect();Local3Client.get(this).reconnect();}
     }
     private PowerManager.WakeLock sessionLock;
     private ConnectivityManager connectivity;
@@ -81,10 +83,11 @@ public final class AgentService extends Service implements AgentClient.IncomingL
     private final Handler main=new Handler(android.os.Looper.getMainLooper());
     private final Runnable maintenance=new Runnable(){
         @Override public void run(){
-            if(!AgentClient.get(AgentService.this).isEnabled() && !Local2Client.get(AgentService.this).enabled())return;
+            if(!AgentClient.get(AgentService.this).isEnabled() && !Local2Client.get(AgentService.this).enabled() && !Local3Client.get(AgentService.this).enabled())return;
             maintainSessionLock();
             AgentClient.get(AgentService.this).reconnect();
             if(Local2Client.get(AgentService.this).enabled())Local2Client.get(AgentService.this).start();
+            if(Local3Client.get(AgentService.this).enabled())Local3Client.get(AgentService.this).start();
             if(SystemClock.elapsedRealtime()-createdAt>=120000L){
                 android.content.SharedPreferences p=getSharedPreferences("mcp_service_health",0);
                 if(p.getInt("rapid_stops",0)>0)p.edit().putInt("rapid_stops",0).apply();
@@ -98,13 +101,13 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         if(sessionLock.isHeld())sessionLock.release();
         // Bounded and renewed only while the user-enabled foreground session runs.
         AgentClient client=AgentClient.get(this);
-        if((client.isEnabled() || Local2Client.get(this).enabled())
-            &&(!client.isEcoMode()||client.isExecuting()||Local2Client.get(this).isExecuting()))
+        if((client.isEnabled() || Local2Client.get(this).enabled() || Local3Client.get(this).enabled())
+            &&(!client.isEcoMode()||client.isExecuting()||Local2Client.get(this).isExecuting()||Local3Client.get(this).isExecuting()))
             sessionLock.acquire(120000L);
     }
 
     public static void ensureRunning(Context context) {
-        if(!AgentClient.get(context).isEnabled() && !Local2Client.get(context).enabled())return;
+        if(!AgentClient.get(context).isEnabled() && !Local2Client.get(context).enabled() && !Local3Client.get(context).enabled())return;
         AgentService live=instance;
         if(live!=null&&live.foregroundReady&&live.sameChannels()){
             live.main.post(()->{if(instance==live)live.resumeEnabledTransports();});return;
@@ -198,6 +201,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             deliberateStop=true;stopReason="arrêt demandé par le propriétaire via notification";
             cancelRecovery();
             Local2Client.get(this).disable();
+            Local3Client.get(this).setEnabled(false);
             AgentLog.add(this,"service",stopReason);
             AgentClient.get(this).disable();
             if(background!=null) {
@@ -207,7 +211,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             stopForeground(true);stopSelf();
             return START_NOT_STICKY;
         }
-        if(!AgentClient.get(this).isEnabled() && !Local2Client.get(this).enabled()){
+        if(!AgentClient.get(this).isEnabled() && !Local2Client.get(this).enabled() && !Local3Client.get(this).enabled()){
             deliberateStop=true;stopReason="aucun canal MCP activé";cancelRecovery();
             stopSelf();return START_NOT_STICKY;
         }
@@ -278,9 +282,11 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         }
         if (Local2Client.get(this).enabled()) Local2Client.get(this).start();
         else Local2Client.get(this).stop();
+        if (Local3Client.get(this).enabled()) Local3Client.get(this).start();
+        else Local3Client.get(this).stop();
         main.removeCallbacks(maintenance);main.post(maintenance);
         AgentClient.get(this).startServiceMode(this);
-        lastRender=AgentClient.get(this).isEnabled();lastLocal=Local2Client.get(this).enabled();lastDirect=AgentClient.get(this).isDirectMode();
+        lastRender=AgentClient.get(this).isEnabled();lastLocal=Local2Client.get(this).enabled();lastDirect=AgentClient.get(this).isDirectMode();lastThird=Local3Client.get(this).enabled();
         return START_STICKY;
     }
     private PendingIntent openBrowser(int code) {
@@ -299,7 +305,8 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             PendingIntent.FLAG_UPDATE_CURRENT|
             (Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_IMMUTABLE:0));
         boolean auto=AgentClient.get(this).isAutonomous();
-        String connection = Local2Client.get(this).enabled() ? Local2Client.get(this).status()
+        String connection = Local3Client.get(this).enabled() ? Local3Client.get(this).status()
+            : Local2Client.get(this).enabled() ? Local2Client.get(this).status()
             : AgentClient.get(this).connectionStatus();
         return builder(CHANNEL_RUNNING)
             .setSmallIcon(R.drawable.ic_browser)
@@ -312,7 +319,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             .build();
     }
     public void refreshNotification() {
-        if(notifications!=null&&(AgentClient.get(this).isEnabled() || Local2Client.get(this).enabled())) {
+        if(notifications!=null&&(AgentClient.get(this).isEnabled() || Local2Client.get(this).enabled() || Local3Client.get(this).enabled())) {
             notifications.notify(ID_RUNNING,createOngoingNotification());
         }
     }
@@ -346,7 +353,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
         getSharedPreferences("mcp_service_health",0).edit().putLong("next_recovery_at",0).apply();
     }
     private void scheduleRecovery() {
-        if(!AgentClient.get(this).isEnabled() && !Local2Client.get(this).enabled())return;
+        if(!AgentClient.get(this).isEnabled() && !Local2Client.get(this).enabled() && !Local3Client.get(this).enabled())return;
         try {
             AlarmManager alarms=(AlarmManager)getSystemService(ALARM_SERVICE);
             PendingIntent pending=recoveryIntent();
@@ -381,6 +388,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
             direct = null;
         }
         Local2Client.get(this).stop();
+        Local3Client.get(this).stop();
         AgentClient.get(this).stopServiceMode();
         if(background!=null){
             AgentClient.get(this).removeBackgroundHandler(background);

@@ -25,14 +25,14 @@ public final class SettingsActivity extends Activity {
     private static final int NOTIFICATION_PERMISSION_CODE = 735;
     private UpdateManager updates;
     private AgentClient agent;
-    private TextView mcpStatus, status, local2Status;
+    private TextView mcpStatus, status, local2Status, local3Status;
     private Button mcpConnect, mcpCopy, mcpDisable, check, install;
     private boolean askedToInstall, awaitingInstallPermission;
     private long validatedDownloadId=Long.MIN_VALUE;
     private Switch autonomousMode, previewMode;
     private final Handler refresh=new Handler();
     private final Runnable statusTick=new Runnable(){
-        @Override public void run(){showMcp();showDownloadProgress();if(local2Status!=null)local2Status.setText(Local2Client.get(SettingsActivity.this).status()+"\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+"\nNavigateur : "+agent.local2BrowserSummary());refresh.postDelayed(this,2000L);}
+        @Override public void run(){showMcp();showDownloadProgress();if(local2Status!=null)local2Status.setText(Local2Client.get(SettingsActivity.this).status()+"\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+"\nNavigateur : "+agent.local2BrowserSummary());if(local3Status!=null)local3Status.setText(Local3Client.get(SettingsActivity.this).status());refresh.postDelayed(this,2000L);}
     };
 
     @Override public void onCreate(Bundle state) {
@@ -63,7 +63,7 @@ public final class SettingsActivity extends Activity {
         channels.setPadding(16,24,16,12);
         group.addView(channels, localInsert++);
         TextView renderHelp = new TextView(this);
-        renderHelp.setText("MCP Render : utilise Activer / reconnecter Render ci-dessus. Render et Local 2 fonctionnent indépendamment.");
+        renderHelp.setText("MCP Render : utilise Activer / reconnecter Render ci-dessus. Render, Local 2 et Local 3 fonctionnent indépendamment.");
         renderHelp.setPadding(16,8,16,16);
         group.addView(renderHelp, localInsert++);
         Switch local2 = new Switch(this);
@@ -91,7 +91,7 @@ public final class SettingsActivity extends Activity {
         local2Off.setOnClickListener(v -> {
             Local2Client.get(this).configure(Local2Client.get(this).url(),false);
             local2.setChecked(false);
-            if(!agent.isEnabled()) stopService(new Intent(this,AgentService.class));
+            if(!agent.isEnabled() && !Local3Client.get(this).enabled()) stopService(new Intent(this,AgentService.class));
             local2Status.setText("Local 2 désactivé · Render inchangé");
         });
         group.addView(local2Off, localInsert++);
@@ -132,12 +132,71 @@ public final class SettingsActivity extends Activity {
             try {
                 Local2Client.get(this).configure(Local2Client.get(this).url(),on);
                 AgentService.ensureRunning(this);
-                if(!on && !agent.isEnabled())stopService(new Intent(this,AgentService.class));
+                if(!on && !agent.isEnabled() && !Local3Client.get(this).enabled())stopService(new Intent(this,AgentService.class));
             }catch(IllegalArgumentException e) {
                 local2.setChecked(false);
                 Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
             }
             local2Status.setText(Local2Client.get(this).status());
+        });
+        // Local 3 is a separate self-hosted app channel: no Render/Supabase polling.
+        TextView local3Heading=new TextView(this);
+        local3Heading.setText("MCP LOCAL 3 · SERVEUR PERSONNEL");
+        local3Heading.setTextSize(18);
+        local3Heading.setPadding(16,26,16,10);
+        group.addView(local3Heading,localInsert++);
+        Switch local3=new Switch(this);
+        local3.setText("CHK Browser Local 3 : activer / désactiver");
+        local3.setTextSize(15);
+        local3.setPadding(16,10,16,10);
+        local3.setChecked(Local3Client.get(this).enabled());
+        group.addView(local3,localInsert++);
+        TextView local3Help=new TextView(this);
+        local3Help.setText("Serveur sur ton PC, sans requêtes Render ou Supabase. "
+            +"Pour la première association, crée une invitation avec app_invite dans le connecteur "
+            +"CHK Browser Local 3 de ChatGPT, puis colle-la ici. Elle expire après 15 minutes. "
+            +"La clé privée de l'application reste uniquement sur ton téléphone. "
+            +"Les actions sensibles nécessitent l'approbation prévue sur le serveur.");
+        local3Help.setPadding(16,8,16,12);
+        group.addView(local3Help,localInsert++);
+        Button local3Pair=new Button(this);
+        local3Pair.setAllCaps(false);
+        local3Pair.setText("Associer Local 3 avec une invitation");
+        group.addView(local3Pair,localInsert++);
+        local3Status=new TextView(this);
+        local3Status.setPadding(16,10,16,12);
+        local3Status.setText(Local3Client.get(this).status());
+        group.addView(local3Status,localInsert++);
+        local3.setOnCheckedChangeListener((b,on)->{
+            Local3Client.get(this).setEnabled(on);
+            if(on){
+                if(Local3Client.get(this).paired())AgentService.ensureRunning(this);
+                else Toast.makeText(this,"Associe d'abord le serveur avec une invitation.",Toast.LENGTH_LONG).show();
+            }else if(!agent.isEnabled()&&!Local2Client.get(this).enabled())
+                stopService(new Intent(this,AgentService.class));
+            local3Status.setText(Local3Client.get(this).status());
+        });
+        local3Pair.setOnClickListener(v->{
+            android.widget.EditText input=new android.widget.EditText(this);
+            input.setSingleLine(true);
+            input.setHint("chkinvite_…");
+            new AgentDialog.Builder(this).setTitle("Association sécurisée · Local 3")
+                .setMessage("Crée une invitation avec app_invite dans ChatGPT Local 3. "
+                    +"Colle son code ici. Elle sera utilisée une seule fois.")
+                .setView(input)
+                .setNegativeButton("Annuler",null)
+                .setPositiveButton("Associer", (dialog,which)->{
+                    local3Status.setText("Association au serveur personnel en cours…");
+                    Local3Client.get(this).pair(input.getText().toString(),(ok,message)->{
+                        if(isFinishing()||isDestroyed())return;
+                        if(ok){
+                            local3.setChecked(true);
+                            AgentService.ensureRunning(this);
+                        }
+                        local3Status.setText(Local3Client.get(this).status());
+                        Toast.makeText(this,message,Toast.LENGTH_LONG).show();
+                    });
+                }).show();
         });
         Button publications=new Button(this);
         publications.setText("Publications et campagnes CHK · historique MCP");
@@ -201,7 +260,7 @@ public final class SettingsActivity extends Activity {
             startActivity(new Intent(this,DiagnosticActivity.class)));
         mcpDisable.setOnClickListener(v->{
             agent.disable();
-            if(!Local2Client.get(this).enabled())stopService(new Intent(this, AgentService.class));
+            if(!Local2Client.get(this).enabled() && !Local3Client.get(this).enabled())stopService(new Intent(this, AgentService.class));
             showMcp();
         });
         check.setOnClickListener(v->checkUpdate());
@@ -267,7 +326,7 @@ public final class SettingsActivity extends Activity {
                     +"\\nTailscale privé : "+DirectMcpServer.tailscaleIp()+":"+DirectMcpServer.PORT
                     +"\\nATTENTION : adresse privée, non accessible au ChatGPT cloud. HTTPS public à configurer."
                 :"MCP Render historique activé. Mode autonome : "+(agent.isAutonomous()?"ACTIF":"DÉSACTIVÉ"))
-            :"MCP désactivé.";
+            :"MCP Render désactivé · Local 2 et Local 3 inchangés.";
         if(enabled && Build.VERSION.SDK_INT>=33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) {
             message += "\nAutorise les notifications pour voir les demandes de confirmation.";
@@ -416,7 +475,7 @@ public final class SettingsActivity extends Activity {
     @Override public void onResume() {
         super.onResume();
         refresh.removeCallbacks(statusTick);refresh.post(statusTick);
-        if(agent!=null && (agent.isEnabled() || Local2Client.get(this).enabled())) {
+        if(agent!=null && (agent.isEnabled() || Local2Client.get(this).enabled() || Local3Client.get(this).enabled())) {
             AgentService.ensureRunning(this);
             requestNotificationsIfNeeded();
             showMcp();

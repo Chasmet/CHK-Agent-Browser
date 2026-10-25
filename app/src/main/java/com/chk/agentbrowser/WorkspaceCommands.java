@@ -101,7 +101,7 @@ public final class WorkspaceCommands {
                 case "files_transfer_commit":case "files_transfer_abort":case "files_transfer_read":
                     result=WorkspaceTransfer.command(app,action,args,cb);break;
                 case "files_external":result=ExternalFiles.command(app,args,cb);break;
-                case "files_task":result=AgentTasks.command(app,args,cb.isLocal2());break;
+                case "files_task":result=AgentTasks.command(app,args,cb.isLocal2(),cb.isLocal3());break;
                 case "document_create":result=WorkspaceDocuments.create(app,args,cb);break;
                 case "publication_prepare":
                 case "publication_status":
