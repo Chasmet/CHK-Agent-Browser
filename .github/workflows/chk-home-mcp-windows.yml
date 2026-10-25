@@ -5,6 +5,7 @@ on:
       - feat/studio-android-photos-20261022
       - feat/local2-workspace-autonomy-20261021
       - main
+      - 'feature/session-*'
       - fix/local2-verified-connection-20261021
       - feature/pc-home-mcp-20261021
       - feature/android-local2-bridge-20261021
