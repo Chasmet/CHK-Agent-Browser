@@ -91,13 +91,20 @@ class AndroidMailbox:
             if not isinstance(ident, str):
                 return False
             item = self.items.get(ident)
-            if item is None or item["state"] != "leased":
+            if item is None:
                 return False
             if not isinstance(success, bool) or not isinstance(message, str):
                 return False
             if len(message) > 24000:
                 success, message = False, "Résultat Android trop volumineux : aucune confirmation exploitable. Vérifier l’état avant de relancer ; mettre l’APK à jour pour les résultats par fichier."
-            item["result"] = {"success": success, "message": message}
+            result = {"success": success, "message": message}
+            # The reply might have reached Windows before the HTTPS ACK was lost.
+            # Return success on exact retries; never execute the command twice.
+            if item["state"] == "done":
+                return item["result"] == result
+            if item["state"] != "leased":
+                return False
+            item["result"] = result
             item["state"] = "done"
             self.lock.notify_all()
             return True
