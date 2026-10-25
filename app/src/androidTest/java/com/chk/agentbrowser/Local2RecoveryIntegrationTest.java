@@ -96,6 +96,16 @@ public final class Local2RecoveryIntegrationTest {
         try{Local2Protocol.command(Local2Transport.exchange(rpc,"android/next",new JSONObject()));fail();}
         catch(Local2Protocol.RpcFailure error){assertTrue(Local2Transport.describe(error).contains("-32601"));assertFalse(Local2Transport.describe(error).contains("private"));}
     }
+    @Test public void transientHttpAndNetworkErrorsDoNotForceHandshakeStorms(){
+        assertFalse(Local2Client.requiresNewHandshake(new java.net.SocketTimeoutException("temporary")));
+        assertFalse(Local2Client.requiresNewHandshake(new java.net.ConnectException("temporary")));
+        assertFalse(Local2Client.requiresNewHandshake(new Local2Transport.HttpFailure(502)));
+        assertFalse(Local2Client.requiresNewHandshake(new Local2Transport.HttpFailure(429)));
+        for(int code:new int[]{401,403,404})
+            assertTrue(Local2Client.requiresNewHandshake(new Local2Transport.HttpFailure(code)));
+        assertTrue(Local2Client.requiresNewHandshake(new Local2Protocol.RpcFailure(-32601)));
+        assertTrue(Local2Client.requiresNewHandshake(new java.io.IOException("Identité du serveur différente")));
+    }
     @Test public void dnsTlsAndTimeoutHaveDistinctPrivateSafeDiagnostics(){
         String secret="https://private.example/mcp/secret?cookie=value";
         assertTrue(Local2Transport.describe(new java.net.UnknownHostException(secret)).contains("DNS"));

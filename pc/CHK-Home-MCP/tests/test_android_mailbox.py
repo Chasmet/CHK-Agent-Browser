@@ -12,6 +12,8 @@ class AndroidMailboxTests(unittest.TestCase):
         self.assertEqual(queue.poll()["id"], ident)
         self.assertTrue(queue.resolve(ident, True, "ok"))
         self.assertEqual(queue.await_result(ident)["state"], "done")
+        self.assertTrue(queue.resolve(ident, True, "ok"))  # lost HTTPS ACK, safe retry
+        self.assertFalse(queue.resolve(ident, False, "ok"))
         self.assertFalse(queue.resolve(ident, True, "duplicate"))
     def test_rejects_unapproved_actions(self):
         queue = AndroidMailbox()
