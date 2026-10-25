@@ -64,6 +64,7 @@ final class BrowserAutomation {
                     String page=web.getUrl();long version=BrowserWebState.documentVersion(web);
                     form(web,args,false,new AgentClient.ResultCallback(){
                         public boolean isLocal2(){return cb.isLocal2();}
+                        public boolean isLocal3(){return cb.isLocal3();}
                         public boolean isActive(){return cb.isActive();}
                         public void finish(boolean ok,String message){
                             if(!ok){cb.finish(false,"Formulaire non confirmé. Aucun clic final : "+message);return;}
@@ -125,7 +126,7 @@ final class BrowserAutomation {
         JSONObject state=new JSONObject(raw);
         if("preparing".equals(state.optString("state"))&&(!PROCESS.equals(state.optString("process"))
                 ||state.optBoolean("local2")&&(!AgentClient.get(c).isAutonomous()
-                    ||!Local2Client.get(c).enabled()||state.optInt("generation",-1)!=Local2Client.get(c).sessionGeneration()))){
+                    ||(state.optBoolean("local3")?!Local3Client.get(c).enabled()||state.optInt("generation",-1)!=Local3Client.get(c).sessionGeneration():!Local2Client.get(c).enabled()||state.optInt("generation",-1)!=Local2Client.get(c).sessionGeneration())))){
             state.put("state","interrupted").put("message","Session Android interrompue : réception inconnue. Inspecter le site avant une nouvelle sélection.");
             save(c,id,state);
         }
@@ -165,11 +166,12 @@ final class BrowserAutomation {
             }
             JSONObject state=new JSONObject().put("id",id).put("state","preparing").put("host",host(web))
                 .put("fingerprint",fingerprint).put("process",PROCESS).put("local2",cb.isLocal2())
-                .put("generation",Local2Client.get(app).sessionGeneration()).put("server_upload_verified",false);
+                .put("local3",cb.isLocal3()).put("generation",cb.isLocal3()?Local3Client.get(app).sessionGeneration():Local2Client.get(app).sessionGeneration()).put("server_upload_verified",false);
             save(app,id,state);
             String page=web.getUrl();long version=BrowserWebState.documentVersion(web);
             AgentClient.ResultCallback receipt=new AgentClient.ResultCallback(){
                 @Override public boolean isLocal2(){return cb.isLocal2();}
+                        public boolean isLocal3(){return cb.isLocal3();}
                 @Override public boolean isActive(){return BrowserWebState.alive(web)&&AgentClient.get(app).commandEnabled(cb)
                     &&(!cb.isLocal2()||AgentClient.get(app).isAutonomous());}
                 @Override public void finish(boolean ok,String message){
