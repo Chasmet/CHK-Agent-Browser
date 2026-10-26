@@ -1,3 +1,14 @@
+## Local 3 — fiabilité des commandes Grok et téléchargements (26 octobre 2026)
+
+- Nouveau clic sécurisé `browser_click_when_enabled` : attend qu'un bouton React/ARIA devienne actif, envoie **un seul** clic et vérifie une condition de navigation ou de DOM. Chaque action garde un `receipt_id` sur Android afin de refuser une seconde soumission par erreur de réseau.
+- Les statuts « clic envoyé » et « résultat métier confirmé » restent distincts : une génération vidéo n'est acquise qu'après preuve dans Grok.
+- Nouveau `browser_download_file` : utilise le gestionnaire Android existant avec attente du résultat réel, cookies WebView et disponibilité dans les fichiers CHK. Pas de téléchargement supposé réussi sur un simple clic de menu.
+- Les fichiers injectés dans un champ Grok sont relus après rendu pour observer si la sélection tient et si l'envoi devient actif. Le connecteur **ne prétend pas** certifier le serveur Grok lors de la seule sélection locale.
+- Une erreur HTTP 503 mémorisée n'empêche plus la lecture de la page quand le DOM de l'application est réellement chargé ; l'avertissement réseau reste présent dans le résultat.
+- Contrôle des boutons `aria-disabled` et `inert` avant clic ; tests de validation ajoutés pour les flèches dynamiques.
+- Vision : la lecture DOM reste disponible sans exiger l'écran au premier plan. Android ne fournit pas de véritables pixels PixelCopy d'une WebView cachée : aucun faux aperçu ne sera signalé comme vérifié.
+- L'application conserve son identifiant, ses données, les fichiers, les projets Studio et les autorisations du propriétaire. Publication automatique via le workflow Android existant après validation des tests et signature, et installation toujours soumise à la sécurité Android.
+
 ## Local 3 — autorisations persistantes et workflows autonomes (26 octobre 2026)
 
 - Réglages : interrupteur propre à Local 3 pour autoriser ou révoquer les commandes automatiques, sous le mode autonome déjà accepté. Aucun changement de l’activation Local 2 ou Render.

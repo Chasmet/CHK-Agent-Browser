@@ -25,7 +25,7 @@ final class BrowserAutomation {
                     .put("args",new JSONObject().put("tool","browser").put("operation","capabilities"))))
             .put("operations",new JSONArray().put("capabilities").put("upload_file").put("upload_status")
                 .put("get_form").put("fill_form").put("verify_form").put("get_page_status")
-                .put("click_verified").put("publication_submit"))
+                .put("click_verified").put("click_when_enabled").put("publication_submit"))
             .put("upload",new JSONObject().put("required",new JSONArray().put("id").put("expected_host").put("selector").put("files"))
                 .put("files","[{workspace_path: chemin relatif CHK}]")
                 .put("max_files",8).put("max_local_bytes",WorkspaceStore.MAX_IMPORT)
@@ -60,6 +60,11 @@ final class BrowserAutomation {
                 case "get_page_status":web.evaluateJavascript(BrowserScripts.pageStatus(),raw->cb.finish(true,decode(raw)));return;
                 case "fill_form":case "verify_form":form(web,args,operation.equals("fill_form"),cb);return;
                 case "click_verified":VerifiedClick.run(web,args,UI,cb);return;
+                case "click_when_enabled":{
+                    JSONObject guarded=new JSONObject(args.toString());
+                    guarded.put("wait_until_enabled",true);
+                    VerifiedClick.run(web,guarded,UI,cb);return;
+                }
                 case "publication_submit":{
                     String page=web.getUrl();long version=BrowserWebState.documentVersion(web);
                     form(web,args,false,new AgentClient.ResultCallback(){

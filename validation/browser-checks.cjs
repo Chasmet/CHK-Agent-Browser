@@ -103,6 +103,18 @@ assert.equal(dynamicForm.count,0);
 assert.ok(dynamicForm.dynamic_controls.some(x=>x.label==='Upload APK'));
 assert.ok(dynamicForm.dynamic_controls.some(x=>x.type==='file'));
 
+// Reactive submit arrows must not be clicked while unavailable.
+const clickState=fs.readFileSync(root+'/click-state.js','utf8');
+const submit={disabled:true,getAttribute:()=>null,closest:()=>null};
+const clickDoc={querySelector:s=>s==='#submit'?submit:null,querySelectorAll:()=>[]};
+assert.equal(vm.runInNewContext(clickState,{document:clickDoc}),'WAIT');
+submit.disabled=false;
+assert.equal(vm.runInNewContext(clickState,{document:clickDoc}),'READY');
+submit.getAttribute=key=>key==='aria-disabled'?'true':null;
+assert.equal(vm.runInNewContext(clickState,{document:clickDoc}),'WAIT');
+assert.equal(vm.runInNewContext(clickState,{document:{querySelector:()=>null,querySelectorAll:()=>[]}}),'MISSING');
+console.log('PASS: reactive button readiness before single verified click');
+
 console.log('PASS: retry bounds, native forms, dynamic controls, upload confirmation helpers and bounded page extraction and verified-click postconditions');
 
 // A website may clear/remove its file input immediately after consuming change.

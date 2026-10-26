@@ -94,9 +94,19 @@ public final class BrowserScripts {
 
     public static String click(String selectorLiteral) {
         return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Élément introuvable';"
-            +"if(el.disabled)return 'Élément désactivé';el.scrollIntoView({block:'center',inline:'center'});mark(el);el.click();return 'Clic effectué';"
+            +"if(el.disabled||el.getAttribute('aria-disabled')==='true'||(el.closest&&el.closest('[inert]')))return 'Élément désactivé';el.scrollIntoView({block:'center',inline:'center'});mark(el);el.click();return 'Clic effectué';"
             +"}catch(e){return 'Erreur : '+e.message;}})()";
     }
+    /** Inspects a live button without clicking it; disabled is not a failure. */
+    public static String clickState(String selectorLiteral) {
+        return "(function(){try{"+finder()
+            +"var el=deepFind("+selectorLiteral+");if(!el)return 'MISSING';"
+            +"var aria=(el.getAttribute('aria-disabled')||'').toLowerCase();"
+            +"if(el.disabled||aria==='true'||el.closest('[inert]'))return 'WAIT';"
+            +"if(el.getAttribute('aria-busy')==='true')return 'WAIT';"
+            +"return 'READY';}catch(e){return 'ERROR:'+e.message;}})()";
+    }
+
     public static String valueMatches(String selectorLiteral,String expectedLiteral){
         return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");"
             +"if(!el||el.disabled)return false;return String(el.isContentEditable?el.textContent:el.value)==="+expectedLiteral+";"

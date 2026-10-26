@@ -297,12 +297,15 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                     cb.finish(true,out.toString());return;
                 }
                 case "read_page":{
-                    if(shared&&(!BrowserWebState.loaded(current)||failures.containsKey(current))){
-                        cb.finish(false,failures.containsKey(current)?failures.get(current):"Page encore en chargement ; lecture non confirmée.");return;
+                    if(shared&&!BrowserWebState.loaded(current)){
+                        cb.finish(false,"Page encore en chargement ; lecture non confirmée.");return;
                     }
+                    // A transient main-frame HTTP warning may outlive a functional SPA.
+                    // Read the live DOM and report the warning instead of rejecting it.
+                    final String networkWarning=failures.containsKey(current)?failures.get(current):"";
                     WebView web=current;String page=pageUrl(),title=pageTitle();
                     web.evaluateJavascript(BrowserScripts.readPage(),raw->{
-                        try{JSONObject result=new JSONObject();result.put("url",page);result.put("title",title);JSONObject details=new JSONObject(jsResult(raw));result.put("text",details.optString("text"));result.put("elements",details.optJSONArray("elements"));result.put("media",details.optJSONArray("media"));result.put("document_url",details.optString("document_url"));result.put("session_source",shared?"shared_android":"background");result.put("visibility",details.optString("visibility"));result.put("forms",details.optInt("forms"));result.put("ready",details.optString("ready"));WebPdfReader.enrich(app,page,result,cb);}
+                        try{JSONObject result=new JSONObject();result.put("url",page);result.put("title",title);JSONObject details=new JSONObject(jsResult(raw));result.put("text",details.optString("text"));result.put("elements",details.optJSONArray("elements"));result.put("media",details.optJSONArray("media"));result.put("document_url",details.optString("document_url"));result.put("session_source",shared?"shared_android":"background");result.put("network_warning",networkWarning);result.put("visibility",details.optString("visibility"));result.put("forms",details.optInt("forms"));result.put("ready",details.optString("ready"));WebPdfReader.enrich(app,page,result,cb);}
                         catch(Exception e){cb.finish(false,"Lecture de page impossible.");}
                     });return;
                 }

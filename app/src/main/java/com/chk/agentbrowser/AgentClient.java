@@ -538,6 +538,7 @@ public final class AgentClient {
                     case "browser_read_page": translated = "read_page"; break;
                     case "browser_open_url": translated = "open_url"; break;
                     case "browser_click": translated = "click_verified"; break;
+                    case "browser_download_file": translated = "download_file"; break;
                     case "browser_type": translated = "type"; break;
                     case "browser_scroll": translated = "scroll"; break;
                     case "browser_get_form": translated = "get_form"; break;
