@@ -381,6 +381,19 @@ public final class AgentClient {
     }
     /** Local 3 delegates to the existing CHK browser / keyboard / workspace tools. */
     public void executeLocal3(String action, JSONObject args, DirectMcpServer.Reply reply) {
+        if("local3_status".equals(action)){
+            try{reply.finish(true,Local3Client.get(app).snapshot().toString());}
+            catch(Exception e){reply.finish(false,"Diagnostic Local 3 indisponible");}
+            return;
+        }
+        if("browser_inspect".equals(action)||"browser_capture".equals(action)){
+            try{
+                args=new JSONObject(args.toString()).put("tool","vision")
+                    .put("capture","browser_capture".equals(action));
+                if(!args.has("target"))args.put("target","web");
+                action="desktop";
+            }catch(Exception e){reply.finish(false,"Paramètres de vision invalides");return;}
+        }
         if(!action.startsWith("browser_") && !"android_action".equals(action)) {
             if("keyboard".equals(action)||"desktop".equals(action)||WorkspaceCommands.handles(action)){
                 try{

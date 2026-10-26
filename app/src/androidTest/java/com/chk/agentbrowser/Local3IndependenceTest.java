@@ -59,4 +59,20 @@ public final class Local3IndependenceTest {
         }
     }
 
+    @Test public void upgradedLocal3AdvertisesVisionAndPagedResults() throws Exception {
+        org.json.JSONArray caps=Local3Client.capabilities();
+        java.util.Map<String,Boolean> found=new java.util.HashMap<>();
+        for(int i=0;i<caps.length();i++){
+            org.json.JSONObject c=caps.getJSONObject(i);
+            assertNull(found.put(c.getString("name"),c.getBoolean("readOnly")));
+        }
+        assertTrue(caps.length()<=80);
+        assertEquals(Boolean.TRUE,found.get("files_transfer_read"));
+        assertEquals(Boolean.TRUE,found.get("browser_capture"));
+        assertEquals(Boolean.TRUE,found.get("browser_inspect"));
+        assertEquals(Boolean.TRUE,found.get("local3_status"));
+        assertEquals(Boolean.FALSE,found.get("desktop"));
+        assertEquals(Boolean.FALSE,found.get("files_move"));
+    }
+
 }

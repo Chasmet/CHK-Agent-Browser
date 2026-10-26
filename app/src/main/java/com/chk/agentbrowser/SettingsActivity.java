@@ -32,7 +32,7 @@ public final class SettingsActivity extends Activity {
     private Switch autonomousMode, previewMode;
     private final Handler refresh=new Handler();
     private final Runnable statusTick=new Runnable(){
-        @Override public void run(){showMcp();showDownloadProgress();if(local2Status!=null)local2Status.setText(Local2Client.get(SettingsActivity.this).status()+"\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+"\nNavigateur : "+agent.local2BrowserSummary());if(local3Status!=null)local3Status.setText(Local3Client.get(SettingsActivity.this).status());refresh.postDelayed(this,2000L);}
+        @Override public void run(){showMcp();showDownloadProgress();if(local2Status!=null)local2Status.setText(Local2Client.get(SettingsActivity.this).status()+"\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+"\nNavigateur : "+agent.local2BrowserSummary());if(local3Status!=null)local3Status.setText(Local3Client.get(SettingsActivity.this).diagnostic());refresh.postDelayed(this,2000L);}
     };
 
     @Override public void onCreate(Bundle state) {
@@ -165,8 +165,17 @@ public final class SettingsActivity extends Activity {
         group.addView(local3Pair,localInsert++);
         local3Status=new TextView(this);
         local3Status.setPadding(16,10,16,12);
-        local3Status.setText(Local3Client.get(this).status());
+        local3Status.setText(Local3Client.get(this).diagnostic());
         group.addView(local3Status,localInsert++);
+        Button local3Reconnect=new Button(this);
+        local3Reconnect.setAllCaps(false);
+        local3Reconnect.setText("Reconnecter Local 3 et actualiser ses outils");
+        local3Reconnect.setOnClickListener(v->{
+            Local3Client.get(this).reconnect();
+            AgentService.ensureRunning(this);
+            local3Status.setText(Local3Client.get(this).diagnostic());
+        });
+        group.addView(local3Reconnect,localInsert++);
         local3.setOnCheckedChangeListener((b,on)->{
             Local3Client.get(this).setEnabled(on);
             if(on){
@@ -174,7 +183,7 @@ public final class SettingsActivity extends Activity {
                 else Toast.makeText(this,"Associe d'abord le serveur avec une invitation.",Toast.LENGTH_LONG).show();
             }else if(!agent.isEnabled()&&!Local2Client.get(this).enabled())
                 stopService(new Intent(this,AgentService.class));
-            local3Status.setText(Local3Client.get(this).status());
+            local3Status.setText(Local3Client.get(this).diagnostic());
         });
         local3Pair.setOnClickListener(v->{
             android.widget.LinearLayout fields=new android.widget.LinearLayout(this);
@@ -210,7 +219,7 @@ public final class SettingsActivity extends Activity {
                             local3.setChecked(true);
                             AgentService.ensureRunning(this);
                         }
-                        local3Status.setText(Local3Client.get(this).status());
+                        local3Status.setText(Local3Client.get(this).diagnostic());
                         Toast.makeText(this,message,Toast.LENGTH_LONG).show();
                     });
                 }).show();

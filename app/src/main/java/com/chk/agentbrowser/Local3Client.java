@@ -31,7 +31,8 @@ public final class Local3Client {
     private volatile boolean running, busy;
     private volatile int generation, errors;
     private volatile String status="Désactivé";
-    private volatile long lastContact;
+    private volatile long lastContact, nextCapabilitySync;
+    private volatile String capabilityStatus="À synchroniser", lastAction="aucune", lastOutcome="aucun";
     private volatile boolean executing;
     private final Runnable loop=this::poll;
 
@@ -93,6 +94,8 @@ public final class Local3Client {
             +"\nAppels Render / Supabase par ce canal : aucun"
             +"\nÉchecs consécutifs : "+errors
             +"\nDernier contact : "+(lastContact==0?"jamais":((android.os.SystemClock.elapsedRealtime()-lastContact)/1000)+" s")
+            +"\nOutils : "+capabilityStatus
+            +"\nDernière commande : "+lastAction+" · "+lastOutcome
             +"\nRésultat en attente : "+(!p.getString("outbox","").isEmpty()?"oui":"non");
     }
     public void setEnabled(boolean on){
@@ -102,13 +105,23 @@ public final class Local3Client {
     }
     public void start(){
         if(!enabled()||!paired()||serverUrl().isEmpty()||running)return;
-        running=true;main.post(loop);
+        running=true;nextCapabilitySync=0;main.post(loop);
     }
     public void stop(){
         running=false;generation++;main.removeCallbacks(loop);
         status="Désactivé";
     }
+    public JSONObject snapshot() throws Exception{
+        String version=app.getPackageManager().getPackageInfo(app.getPackageName(),0).versionName;
+        return new JSONObject().put("protocol_version",2).put("version",version)
+            .put("enabled",enabled()).put("paired",paired()).put("status",status())
+            .put("autonomous",AgentClient.get(app).isAutonomous())
+            .put("previews_allowed",AgentClient.get(app).isPreviewAllowed())
+            .put("capability_sync",capabilityStatus).put("last_action",lastAction)
+            .put("last_outcome",lastOutcome).put("result_pending",!p.getString("outbox","").isEmpty());
+    }
     public void reconnect(){
+        nextCapabilitySync=0;
         main.post(()->{
             if(!enabled()||!paired())return;
             if(!running)start();
@@ -142,11 +155,11 @@ public final class Local3Client {
             }
         });
     }
-    private static JSONArray capabilities() throws Exception{
+    static JSONArray capabilities() throws Exception{
         JSONArray a=new JSONArray();
         String[] read={
-            "browser_status","browser_read_page","browser_get_form","files_list",
-            "files_read_text","files_read_bytes","files_stat","files_hash","files_catalog",
+            "local3_status","browser_inspect","browser_capture","browser_status","browser_read_page","browser_get_form","files_list",
+            "files_read_text","files_read_bytes","files_transfer_read","files_stat","files_hash","files_catalog",
             "files_downloads","files_preview","files_detect_format","files_capabilities",
             "files_archive_list","files_archive_read","files_media_inspect",
             "document_read","document_page","media_info","media_frame","media_codecs",
@@ -185,7 +198,7 @@ public final class Local3Client {
             if(secret!=null)c.setRequestProperty("Authorization","Bearer "+secret);
             if(payload!=null){
                 byte[] bytes=payload.toString().getBytes(StandardCharsets.UTF_8);
-                if(bytes.length>32000)throw new IllegalArgumentException("Message trop volumineux");
+                if(bytes.length>340000)throw new IllegalArgumentException("Message trop volumineux");
                 c.setRequestProperty("Content-Type","application/json");c.setDoOutput(true);
                 try(OutputStream out=c.getOutputStream()){out.write(bytes);}
             }
@@ -194,7 +207,7 @@ public final class Local3Client {
             try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
                 byte[] buf=new byte[4096];int len;
                 while((len=in.read(buf))!=-1){
-                    if(out.size()+len>96000)throw new java.io.IOException("Réponse trop volumineuse");
+                    if(out.size()+len>350000)throw new java.io.IOException("Réponse trop volumineuse");
                     out.write(buf,0,len);
                 }
                 return new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));
@@ -203,7 +216,8 @@ public final class Local3Client {
     }
     /** Large text, MP3/MP4/PDF metadata and previews remain in Android workspace. */
     private static String compactResult(Context app,String result)throws Exception{
-        if(result.length()<=7500)return result;
+        if(result==null)return "";
+        if(result.getBytes(StandardCharsets.UTF_8).length<=240000)return result;
         byte[] bytes=result.getBytes(StandardCharsets.UTF_8);
         if(bytes.length>2*1024*1024)
             return new JSONObject().put("result_too_large",true)
@@ -222,7 +236,7 @@ public final class Local3Client {
             }
             if(!stage.renameTo(target))throw new java.io.IOException("Enregistrement du résultat impossible");
             return new JSONObject().put("result_in_file",true).put("result_file",path)
-                .put("size",target.length()).put("sha256",WorkspaceTransfer.hash(target))
+                .put("size",target.length()).put("updated",target.lastModified()).put("sha256",WorkspaceTransfer.hash(target))
                 .put("read_action","files_transfer_read").put("truncated",false).toString();
         }finally{stage.delete();}
     }
@@ -257,6 +271,18 @@ public final class Local3Client {
                     request("POST","/api/agent/"+id+"/result",o,secret);
                     if(queued.equals(p.getString("outbox","")))p.edit().remove("outbox").commit();
                 }
+                // Refresh this paired worker's fixed tool manifest after every APK update.
+                // Older servers may reject this route; keep polling existing tools.
+                long clock=android.os.SystemClock.elapsedRealtime();
+                if(clock>=nextCapabilitySync){
+                    nextCapabilitySync=clock+3600000L;
+                    try{
+                        request("PUT","/api/agent/"+id+"/capabilities",new JSONObject()
+                            .put("capabilities",capabilities()).put("diagnostic",snapshot()),secret);
+                        capabilityStatus="Synchronisés · "+capabilities().length()+" outils";
+                        nextCapabilitySync=clock+21600000L;
+                    }catch(Exception e){capabilityStatus="Serveur à mettre à jour : "+safe(e);}
+                }
                 JSONObject reply=request("GET","/api/agent/"+id+"/poll",null,secret);
                 if(session!=generation||!running||!enabled())return;
                 lastContact=android.os.SystemClock.elapsedRealtime();
@@ -270,6 +296,7 @@ public final class Local3Client {
                     if(!p.edit().putString("leased_task",taskId).commit())
                         throw new java.io.IOException("Journal de tâche non enregistré");
                     String action=task.getString("action");
+                    lastAction=action;lastOutcome="en cours";
                     JSONObject args=task.optJSONObject("args");
                     final JSONObject parameters=args==null?new JSONObject():args;
                     main.post(()->{
@@ -277,7 +304,8 @@ public final class Local3Client {
                         AgentClient.get(app).executeLocal3(action,parameters,(ok,message)->{
                             io.execute(()->{
                                 try{
-                                    String bounded=compactResult(app,Local2Results.prepare(app,message));
+                                    String bounded=compactResult(app,message);
+                                    lastOutcome=ok?"réussie":"échec";
                                     JSONObject result=new JSONObject().put("ok",ok).put("message",bounded);
                                     JSONObject outbound=new JSONObject().put("task_id",taskId)
                                         .put("result",result);

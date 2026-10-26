@@ -1,3 +1,13 @@
+## Local 3 — vision et liaison Android fiables (26 octobre 2026)
+
+- Vision web/native accessible par browser_inspect et browser_capture, sous le contrôle du partage d’aperçus existant.
+- Transport Local 3 indépendant des limites historiques Local 2 : captures et réponses paginées conservées en entier.
+- Lecture des résultats volumineux par files_transfer_read, avec date, taille et empreinte de contrôle.
+- Synchronisation des 74 capacités après mise à jour, sans refaire l’association ; les anciens serveurs continuent de recevoir leurs commandes et sont signalés dans le diagnostic.
+- Réglages : diagnostic Local 3 détaillé, dernière commande et bouton de reconnexion/actualisation des outils.
+- Nécessite le serveur Universal Control compatible pour la synchronisation et le retour des images MCP.
+- Package, clé de signature persistante, paramètres, fichiers, notes et projets existants conservés.
+
 ## CHK Browser Local 3 — troisième connecteur MCP et mise à jour automatique (26 octobre 2026)
 
 - Troisième connexion MCP indépendante dans Réglages : activation/désactivation sans toucher à Render ni Local 2.
