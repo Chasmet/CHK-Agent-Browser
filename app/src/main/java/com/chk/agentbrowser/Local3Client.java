@@ -215,9 +215,10 @@ public final class Local3Client {
         }finally{c.disconnect();}
     }
     /** Large text, MP3/MP4/PDF metadata and previews remain in Android workspace. */
-    private static String compactResult(Context app,String result)throws Exception{
+    static String compactResult(Context app,String result)throws Exception{
         if(result==null)return "";
-        if(result.getBytes(StandardCharsets.UTF_8).length<=240000)return result;
+        if(result.getBytes(StandardCharsets.UTF_8).length<=240000
+            &&new JSONObject().put("message",result).toString().getBytes(StandardCharsets.UTF_8).length<=330000)return result;
         byte[] bytes=result.getBytes(StandardCharsets.UTF_8);
         if(bytes.length>2*1024*1024)
             return new JSONObject().put("result_too_large",true)

@@ -75,4 +75,18 @@ public final class Local3IndependenceTest {
         assertEquals(Boolean.FALSE,found.get("files_move"));
     }
 
+    @Test public void escapedResultsArePagedAndRemainReadable() throws Exception {
+        Context app=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        char[] quotes=new char[200000];java.util.Arrays.fill(quotes,'"');
+        org.json.JSONObject result=new org.json.JSONObject(Local3Client.compactResult(app,new String(quotes)));
+        assertTrue(result.getBoolean("result_in_file"));
+        assertTrue(result.has("updated"));
+        assertEquals("files_transfer_read",result.getString("read_action"));
+        java.io.File stored=new WorkspaceStore(app).file(result.getString("result_file"));
+        try{assertEquals(200000,stored.length());assertEquals(stored.lastModified(),result.getLong("updated"));}
+        finally{stored.delete();}
+        String chunk=new String(new char[12000]).replace('\0','a');
+        assertEquals(chunk,Local3Client.compactResult(app,chunk));
+    }
+
 }
