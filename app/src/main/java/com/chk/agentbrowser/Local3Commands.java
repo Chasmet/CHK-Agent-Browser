@@ -8,6 +8,7 @@ final class Local3Commands {
     static JSONObject translate(String action,JSONObject input)throws Exception{
         String tool,operation;
         switch(action){
+            case "browser_click_when_enabled":tool="browser";operation="click_when_enabled";break;
             case "browser_upload_file":tool="browser";operation="upload_file";break;
             case "browser_upload_status":tool="browser";operation="upload_status";break;
             case "browser_get_page_status":tool="browser";operation="get_page_status";break;
