@@ -418,13 +418,13 @@ public final class AgentClient {
                                      int epoch,java.util.concurrent.atomic.AtomicBoolean completed,boolean third) {
         ui.post(() -> {
             if (!localChannelEnabled(third)) {
-                reply.finish(false, "Canal MCP local désactivé dans Réglages."); return;
+                reply.finish(false, third ? "Local 3 désactivé dans Réglages." : "Local 2 désactivé dans Réglages."); return;
             }
             if ("browser_status".equals(action)) {
                 reply.finish(true, local2BrowserStatus().toString()); return;
             }
             if (!isAutonomous()) {
-                reply.finish(false, "Mode autonome désactivé · active-le dans Réglages pour exécuter les commandes Local 2."); return;
+                reply.finish(false, "Mode autonome désactivé · active-le dans Réglages pour exécuter les commandes MCP locales."); return;
             }
             if ("browser_batch".equals(action)) {
                 org.json.JSONArray steps = args.optJSONArray("steps");
