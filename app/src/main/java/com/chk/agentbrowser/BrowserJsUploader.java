@@ -109,6 +109,23 @@ public final class BrowserJsUploader {
                 ok=finalResult.optBoolean("ok")&&finalResult.optInt("count")==uris.length;
                 message=ok?"Fichiers CHK injectés dans le champ du site : "+finalResult.toString()
                     :"Le champ n'a pas confirmé les médias : "+finalResult.toString();
+                // Check the real post-render form state, without claiming remote
+                // upload success: some React sites accept a file asynchronously.
+                if(ok){
+                    try{
+                        Thread.sleep(650L);
+                        String probe="(function(){try{var input=document.querySelector("+
+                            JSONObject.quote(selector)+");var form=input&&input.closest('form');"+
+                            "var submit=form&&form.querySelector('button[type=submit]');"+
+                            "return JSON.stringify({field_retained:!!(input&&input.files&&input.files.length),"+
+                            "submit_enabled:submit?(!submit.disabled&&submit.getAttribute('aria-disabled')!=='true'):null,"+
+                            "site_acceptance_verified:false});}catch(e){return JSON.stringify({probe_error:true});}})()";
+                        JSONObject observed=new JSONObject(eval(web,probe,result,documentVersion));
+                        message+=" ; vérification DOM après rendu : "+observed.toString();
+                    }catch(Exception ignored){
+                        message+=" ; prise en compte définitive par le site non vérifiable.";
+                    }
+                }
             }catch(Exception e){
                 message="Transfert direct impossible : "+(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());
                 try{eval(web,"(function(){if(window.__chkStage&&window.__chkStage.token==="+JSONObject.quote(token)+")delete window.__chkStage;return 'OK';})()",null,-1);}catch(Exception ignored){}
