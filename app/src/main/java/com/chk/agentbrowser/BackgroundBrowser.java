@@ -188,11 +188,26 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         if(!cb.isActive())return;
         if(!BrowserWebState.alive(web)){cb.finish(false,"Onglet fermé pendant la navigation.");return;}
         if(failures.containsKey(web)){cb.finish(false,failures.get(web));return;}
-        if(BrowserWebState.documentVersion(web)>before&&BrowserWebState.loaded(web)){
-            cb.finish(true,"Navigation chargée dans l’onglet Android conservé : "+web.getUrl());return;
-        }
         if(android.os.SystemClock.elapsedRealtime()>=deadline){cb.finish(false,"Navigation non confirmée avant le délai. Lire la page avant de recommencer.");return;}
-        main.postDelayed(()->confirmNavigation(web,before,deadline,cb),250L);
+        if(BrowserWebState.documentVersion(web)<=before){
+            main.postDelayed(()->confirmNavigation(web,before,deadline,cb),250L);return;
+        }
+        long document=BrowserWebState.documentVersion(web);
+        web.evaluateJavascript("JSON.stringify({url:location.href,ready:document.readyState})",raw->{
+            if(!cb.isActive())return;
+            if(!BrowserWebState.alive(web)||web!=current){cb.finish(false,"Onglet remplacé pendant la navigation.");return;}
+            if(failures.containsKey(web)){cb.finish(false,failures.get(web));return;}
+            try{
+                JSONObject page=new JSONObject(jsResult(raw));String ready=page.optString("ready");
+                if(document==BrowserWebState.documentVersion(web)&&page.optString("url").equals(web.getUrl())
+                    &&(ready.equals("interactive")||ready.equals("complete"))){
+                    cb.finish(true,new JSONObject().put("url",web.getUrl()).put("page_loaded",true)
+                        .put("ready_state",ready).put("resources_complete",BrowserWebState.loaded(web))
+                        .put("visible",false).put("session_source","shared_android").toString());return;
+                }
+            }catch(Exception ignored){}
+            main.postDelayed(()->confirmNavigation(web,before,deadline,cb),250L);
+        });
     }
     // The last visible URL is recorded by AgentService. Do not force a loadUrl
     // into this autonomous WebView: that could discard a pending form or upload.
@@ -297,9 +312,6 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                     cb.finish(true,out.toString());return;
                 }
                 case "read_page":{
-                    if(shared&&!BrowserWebState.loaded(current)){
-                        cb.finish(false,"Page encore en chargement ; lecture non confirmée.");return;
-                    }
                     // A transient main-frame HTTP warning may outlive a functional SPA.
                     // Read the live DOM and report the warning instead of rejecting it.
                     final String networkWarning=failures.containsKey(current)?failures.get(current):"";

@@ -61,8 +61,14 @@ public final class VerifiedClick {
                 if(!prior.equals(fingerprint)){
                     callback.finish(false,"receipt_id déjà utilisé pour une autre action. Aucun clic.");return;
                 }
-                callback.finish(false,"Clic déjà tenté pour "+receiptId+
-                        ". Inspecter le site ou le résultat avant toute nouvelle génération.");return;
+                // A delayed site response may have completed since the timeout.
+                // Recheck the postcondition, never dispatch another click.
+                web.evaluateJavascript(condition,raw->{
+                    if(!callback.isActive())return;
+                    boolean done="DONE".equals(value(raw));
+                    callback.finish(done,done?"Clic antérieur confirmé : condition observée, aucun nouveau clic.":
+                        "Clic déjà tenté pour "+receiptId+" ; résultat encore incertain. Aucun nouveau clic.");
+                });return;
             }
         }
         final Runnable[] waitButton=new Runnable[1];
@@ -107,6 +113,7 @@ public final class VerifiedClick {
         if(receipts!=null && !receipts.edit().putString(receiptId,fingerprint).commit()){
             callback.finish(false,"Journal d'idempotence indisponible : aucun clic envoyé.");return;
         }
+        final long clickedAt=SystemClock.elapsedRealtime();
         web.evaluateJavascript(BrowserScripts.click(JSONObject.quote(selector)),raw->{
             if(!callback.isActive())return;
             String clicked=value(raw);
@@ -126,7 +133,7 @@ public final class VerifiedClick {
                         if("DONE".equals(state)){
                             callback.finish(true,"Clic confirmé : condition observée sur la page. Un seul clic a été envoyé.");
                         }else if(!"WAIT".equals(state)||
-                                SystemClock.elapsedRealtime()-start>=timeout){
+                                SystemClock.elapsedRealtime()-clickedAt>=timeout){
                             callback.finish(false,"Clic envoyé UNE fois ; résultat encore non confirmé ("+
                                     state+"). Ne pas répéter. Vérifier la page ou le post.");
                         }else handler.postDelayed(verify[0],350L);

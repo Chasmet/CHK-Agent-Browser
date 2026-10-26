@@ -492,8 +492,7 @@ public class MainActivity extends Activity {
                 if(android.os.SystemClock.elapsedRealtime()>=deadline){
                     finish(false,"Chargement non confirmé dans le délai. Relis la page avant une nouvelle navigation.");return;
                 }
-                if(BrowserWebState.documentVersion(target)<=before||!BrowserWebState.loaded(target)
-                    ||android.os.SystemClock.elapsedRealtime()-BrowserWebState.loadedAt(target)<200L){
+                if(BrowserWebState.documentVersion(target)<=before){
                     transferHandler.postDelayed(this,150L);return;
                 }
                 long document=BrowserWebState.documentVersion(target);
@@ -505,8 +504,8 @@ public class MainActivity extends Activity {
                     if(pageErrors.containsKey(target)){finish(false,pageErrors.get(target));return;}
                     try{
                         JSONObject page=new JSONObject(fromJavascript(raw));
-                        if(document!=BrowserWebState.documentVersion(target)||!BrowserWebState.loaded(target)
-                            ||!"complete".equals(page.optString("ready"))
+                        if(document!=BrowserWebState.documentVersion(target)
+                            ||!("complete".equals(page.optString("ready"))||"interactive".equals(page.optString("ready")))
                             ||!page.optString("url").equals(target.getUrl())){
                             transferHandler.postDelayed(this,150L);return;
                         }
@@ -514,6 +513,8 @@ public class MainActivity extends Activity {
                         JSONObject proof=new JSONObject().put("requested_url",requested)
                             .put("url",page.getString("url")).put("title",page.optString("title"))
                             .put("page_loaded",true).put("visible",visible)
+                            .put("ready_state",page.optString("ready"))
+                            .put("resources_complete",BrowserWebState.loaded(target))
                             .put("session_source","shared_android").put("tab_index",tabs.indexOf(target))
                             .put("display_state",visible?"displayed":"ready_when_chk_returns");
                         finish(true,proof.toString());
@@ -667,8 +668,7 @@ public class MainActivity extends Activity {
                 }
                 case "read_page":{
                     final WebView web=current;
-                    if(callback.isLocal2()&&pageErrors.containsKey(web)){callback.finish(false,pageErrors.get(web));return;}
-                    if(callback.isLocal2()&&!BrowserWebState.loaded(web)){callback.finish(false,"Page en cours de chargement · lecture non confirmée.");return;}
+                    final String networkWarning=pageErrors.containsKey(web)?pageErrors.get(web):"";
                     final String page=web.getUrl(),title=web.getTitle();
                     web.evaluateJavascript(BrowserScripts.readPage(),raw->{
                         String content=fromJavascript(raw);
@@ -677,6 +677,8 @@ public class MainActivity extends Activity {
                             out.put("url",page==null?"":page.substring(0,Math.min(500,page.length())));
                             out.put("title",title==null?"":title.substring(0,Math.min(150,title.length())));
                             JSONObject details=new JSONObject(content);
+                            out.put("network_warning",networkWarning);
+                            out.put("resources_complete",BrowserWebState.loaded(web));
                             out.put("text",details.optString("text"));
                             out.put("elements",details.optJSONArray("elements"));
                             out.put("media",details.optJSONArray("media"));

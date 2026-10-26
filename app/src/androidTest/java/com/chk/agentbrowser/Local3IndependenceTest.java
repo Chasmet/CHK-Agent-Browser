@@ -11,6 +11,23 @@ import static org.junit.Assert.*;
 /** Regression: Local 3 must not change Render or Local 2 configuration. */
 @RunWith(AndroidJUnit4.class)
 public final class Local3IndependenceTest {
+    @Test public void legacyServerManifestMatchesWithoutChangingPolicies()throws Exception{
+        org.json.JSONArray expected;
+        try(java.io.InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets()
+            .open("local3-server-1.0.4-capabilities.json");java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
+            byte[] buffer=new byte[4096];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
+            expected=new org.json.JSONArray(new String(out.toByteArray(),java.nio.charset.StandardCharsets.UTF_8));
+        }
+        java.util.Map<String,Boolean> policy=new java.util.HashMap<>();
+        for(int i=0;i<expected.length();i++){org.json.JSONObject c=expected.getJSONObject(i);policy.put(c.getString("name"),c.getBoolean("readOnly"));}
+        org.json.JSONArray actual=Local3Client.compatibleCapabilities();
+        assertEquals(expected.length(),actual.length());
+        for(int i=0;i<actual.length();i++){
+            org.json.JSONObject c=actual.getJSONObject(i);
+            assertEquals(policy.remove(c.getString("name")),Boolean.valueOf(c.getBoolean("readOnly")));
+        }
+        assertTrue(policy.isEmpty());assertEquals(2,BrowserAutomation.VERSION);
+    }
     @Test public void enablingLocal3DoesNotEnableOtherChannels() {
         Context app=InstrumentationRegistry.getInstrumentation().getTargetContext();
         Local3Client third=Local3Client.get(app);

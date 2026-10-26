@@ -105,6 +105,16 @@ assert.ok(dynamicForm.dynamic_controls.some(x=>x.type==='file'));
 
 // Reactive submit arrows must not be clicked while unavailable.
 const clickState=fs.readFileSync(root+'/click-state.js','utf8');
+const semanticClick=fs.readFileSync(root+'/semantic-click.js','utf8');
+let semanticClicks=0;
+const sendButton={tagName:'BUTTON',getAttribute:k=>k==='aria-label'?'Envoyer':null,
+    getClientRects:()=>[{}],scrollIntoView(){},click(){semanticClicks++;}};
+const semanticDocument={querySelectorAll:()=>[sendButton],querySelector:()=>null};
+assert.equal(vm.runInNewContext(semanticClick,{document:semanticDocument}),'Clic effectué');
+assert.equal(semanticClicks,1);
+semanticDocument.querySelectorAll=()=>[sendButton,{...sendButton}];
+assert.match(vm.runInNewContext(semanticClick,{document:semanticDocument}),/Libellé ambigu/);
+assert.equal(semanticClicks,1);
 const submit={disabled:true,getAttribute:()=>null,closest:()=>null};
 const clickDoc={querySelector:s=>s==='#submit'?submit:null,querySelectorAll:()=>[]};
 assert.equal(vm.runInNewContext(clickState,{document:clickDoc}),'WAIT');

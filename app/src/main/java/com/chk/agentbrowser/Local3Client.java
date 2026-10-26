@@ -140,7 +140,7 @@ public final class Local3Client {
     }
     public JSONObject snapshot() throws Exception{
         String version=app.getPackageManager().getPackageInfo(app.getPackageName(),0).versionName;
-        return new JSONObject().put("protocol_version",2).put("version",version)
+        return new JSONObject().put("protocol_version",BrowserAutomation.VERSION).put("version",version)
             .put("enabled",enabled()).put("paired",paired()).put("status",status())
             .put("autonomous",autonomousAllowed()).put("persistent_permissions",persistentPermissions())
             .put("permission_sync",permissionStatus).put("request_quota",JSONObject.NULL)
@@ -216,6 +216,35 @@ public final class Local3Client {
         for(String name:write)a.put(new JSONObject().put("name",name).put("readOnly",false)
             .put("description","Contrôler CHK Android selon les autorisations persistantes du propriétaire"));
         return a;
+    }
+    /** Exact protocol-2 manifest accepted by Universal Control 1.0.4.
+     * The two newer operations remain callable through the existing desktop tool.
+     * Never downgrade readOnly policies or alter the pairing/permissions.
+     */
+    static JSONArray compatibleCapabilities() throws Exception{
+        JSONArray compatible=new JSONArray(),all=capabilities();
+        for(int i=0;i<all.length();i++){
+            JSONObject entry=all.getJSONObject(i);String name=entry.getString("name");
+            if(!name.equals("browser_download_file")&&!name.equals("browser_click_when_enabled"))compatible.put(entry);
+        }
+        return compatible;
+    }
+    private void syncCapabilities(String id,String secret)throws Exception{
+        JSONArray manifest=capabilities();boolean compatible=false;
+        try{
+            request("PUT","/api/agent/"+id+"/capabilities",new JSONObject()
+                .put("capabilities",manifest).put("diagnostic",snapshot()),secret);
+        }catch(java.io.IOException e){
+            // Only a manifest rejection can trigger negotiation. Auth/network
+            // errors must remain visible, with no second state-changing request.
+            if(!"HTTP 400".equals(e.getMessage()))throw e;
+            manifest=compatibleCapabilities();
+            request("PUT","/api/agent/"+id+"/capabilities",new JSONObject()
+                .put("capabilities",manifest).put("diagnostic",snapshot()),secret);
+            compatible=true;
+        }
+        capabilityStatus="Synchronisés · "+manifest.length()+" outils"+
+            (compatible?" · compatibilité serveur 1.0.4 (opérations avancées via desktop)":"");
     }
     private JSONObject request(String method,String route,JSONObject payload,String secret)throws Exception{
         String base=serverUrl();
@@ -314,9 +343,7 @@ public final class Local3Client {
                 if(clock>=nextCapabilitySync){
                     nextCapabilitySync=clock+30000L;
                     try{
-                        request("PUT","/api/agent/"+id+"/capabilities",new JSONObject()
-                            .put("capabilities",capabilities()).put("diagnostic",snapshot()),secret);
-                        capabilityStatus="Synchronisés · "+capabilities().length()+" outils";
+                        syncCapabilities(id,secret);
                         nextCapabilitySync=clock+21600000L;
                     }catch(Exception e){capabilityStatus="Serveur à mettre à jour : "+safe(e);}
                 }

@@ -22,6 +22,7 @@ import java.security.MessageDigest;
 /** Coordinates and pixels refer to CHK's own view, never the display of another app. */
 final class AgentVision {
     private static final java.util.WeakHashMap<WebView,String> webRevisions=new java.util.WeakHashMap<>();
+    private static final java.util.WeakHashMap<WebView,JSONObject> webFrames=new java.util.WeakHashMap<>();
     private static String script;
     private AgentVision(){}
     static String digest(String s)throws Exception{
@@ -85,6 +86,7 @@ final class AgentVision {
                 for(int i=0;i<controls.length();i++){JSONObject bounds=controls.getJSONObject(i).getJSONObject("bounds");bounds.put("x",bounds.getDouble("x")*sx).put("y",bounds.getDouble("y")*sy).put("width",bounds.getDouble("width")*sx).put("height",bounds.getDouble("height")*sy);}
                 String revision=digest(info.getString("revision")+dom.toString());webRevisions.put(web,revision);
                 info.put("controls",controls).put("text",dom.getString("text")).put("controls_truncated",dom.getBoolean("controls_truncated")).put("revision",revision);
+                info.put("observation_source","live_dom").put("observed_at",System.currentTimeMillis());
                 cb.ready(info);
             }catch(Exception e){cb.failed(e.getMessage()==null?"Observation web indisponible.":e.getMessage());}});
         }catch(Exception e){cb.failed(e.getMessage());}
@@ -105,15 +107,12 @@ final class AgentVision {
             // content is absent from View.draw(). Never present skeleton placeholders
             // as a verified visual preview.
             final boolean isWeb=root instanceof WebView;
-            final Window window=NativeKeyboard.window();
             final boolean foreground=NativeKeyboard.foreground();
             if(isWeb&&!foreground){
-                info.put("capture_source","unavailable_background_webview")
-                    .put("visual_verified",false)
-                    .put("reason","WebView en arrière-plan : ouvrir CHK > Web pour afficher et vérifier les vrais pixels.");
-                cb.finish(true,info.toString());
+                unavailable(web,info,"WebView en arrière-plan : contrôles DOM actuels disponibles, pixels actuels indisponibles.",cb);
                 return;
             }
+            final Window window=NativeKeyboard.window();
             if(window!=null&&(window.getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)
                 throw new Exception("Cette fenêtre protège sa capture.");
             Bitmap bitmap=Bitmap.createBitmap(info.getInt("image_width"),info.getInt("image_height"),Bitmap.Config.ARGB_8888);
@@ -126,10 +125,10 @@ final class AgentVision {
                                 throw new Exception("Écran remplacé pendant la capture.");
                             if(status==PixelCopy.SUCCESS){
                                 info.put("visual_verified",true);
-                                finish(bitmap,info,isWeb?"webview_window_pixels":"window_pixels",cb);
+                                finish(bitmap,info,isWeb?"webview_window_pixels":"window_pixels",cb,isWeb?web:null);
                             }else if(isWeb){
                                 bitmap.recycle();
-                                cb.finish(false,"PixelCopy WebView indisponible ("+status+"). Revenir dans CHK > Web et réessayer la capture.");
+                                unavailable(web,info,"PixelCopy indisponible ("+status+") ; contrôles DOM actuels disponibles.",cb);
                             }else draw(root,bitmap,info,cb);
                         }catch(Exception e){if(!bitmap.isRecycled())bitmap.recycle();cb.finish(false,e.getMessage());}
                     };
@@ -144,21 +143,48 @@ final class AgentVision {
                     return;
                 }catch(IllegalArgumentException ignored){
                     if(isWeb){bitmap.recycle();
-                        cb.finish(false,"WebView hors zone capturable : ouvrir CHK > Web et relancer la capture.");return;}
+                        unavailable(web,info,"WebView hors zone capturable ; contrôles DOM actuels disponibles.",cb);return;}
                 }
             }
             if(isWeb){bitmap.recycle();
-                cb.finish(false,"Capture WebView réelle indisponible : CHK doit être visible au premier plan.");return;}
+                unavailable(web,info,"Pixels WebView actuels indisponibles ; contrôles DOM actuels disponibles.",cb);return;}
             draw(root,bitmap,info,cb);
         }catch(Exception e){cb.finish(false,e.getMessage()==null?"Vision indisponible.":e.getMessage());}
+    }
+    private static void unavailable(WebView web,JSONObject info,String reason,AgentClient.ResultCallback cb)throws Exception{
+        info.put("capture_source","unavailable_background_webview").put("visual_verified",false)
+            .put("capture_available",false).put("capture_current",false).put("reason",reason);
+        JSONObject frame=webFrames.get(web);
+        if(frame!=null&&frame.optString("context").equals(info.optString("context"))
+            &&frame.optString("url").equals(info.optString("url"))){
+            long age=android.os.SystemClock.elapsedRealtime()-frame.optLong("elapsed_at");
+            if(age>=0&&age<=60000L){
+                info.put("capture_source","cached_window_pixels").put("capture_available",true)
+                    .put("capture_age_ms",age).put("captured_at",frame.getLong("captured_at"))
+                    .put("capture_revision",frame.getString("revision")).put("jpeg_base64",frame.getString("jpeg_base64"));
+            }
+        }
+        cb.finish(true,info.toString());
     }
     private static void draw(View root,Bitmap bitmap,JSONObject info,AgentClient.ResultCallback cb)throws Exception{
         Canvas canvas=new Canvas(bitmap);canvas.drawColor(android.graphics.Color.WHITE);canvas.scale(bitmap.getWidth()/(float)root.getWidth(),bitmap.getHeight()/(float)root.getHeight());root.draw(canvas);
         finish(bitmap,info,"retained_view_render",cb);
     }
     private static void finish(Bitmap bitmap,JSONObject info,String source,AgentClient.ResultCallback cb)throws Exception{
+        finish(bitmap,info,source,cb,null);
+    }
+    private static void finish(Bitmap bitmap,JSONObject info,String source,AgentClient.ResultCallback cb,WebView web)throws Exception{
         byte[] bytes=null;try{for(int quality=65;quality>=17;quality-=12){ByteArrayOutputStream out=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.JPEG,quality,out);bytes=out.toByteArray();if(bytes.length<=140000)break;}}finally{bitmap.recycle();}
         if(bytes==null||bytes.length>140000)throw new Exception("Capture trop volumineuse.");
-        info.put("capture_source",source).put("jpeg_base64",android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP));cb.finish(true,info.toString());
+        info.put("capture_source",source).put("capture_available",true)
+            .put("capture_current",!source.equals("retained_view_render"))
+            .put("visual_verified",!source.equals("retained_view_render"))
+            .put("captured_at",System.currentTimeMillis()).put("capture_age_ms",0)
+            .put("jpeg_base64",android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP));
+        if(web!=null){
+            if(webFrames.size()>=2)webFrames.clear();
+            webFrames.put(web,new JSONObject(info.toString()).put("elapsed_at",android.os.SystemClock.elapsedRealtime()));
+        }
+        cb.finish(true,info.toString());
     }
 }

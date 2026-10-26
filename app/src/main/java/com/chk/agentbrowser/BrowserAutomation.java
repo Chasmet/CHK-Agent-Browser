@@ -12,7 +12,7 @@ import java.util.UUID;
 
 /** Platform-independent browser operations carried by Windows 1.3's existing desktop action. */
 final class BrowserAutomation {
-    static final int VERSION=1;
+    static final int VERSION=2;
     private static final Handler UI=new Handler(Looper.getMainLooper());
     private static final String PREF="browser_upload_jobs_v1";
     private static final String PROCESS=UUID.randomUUID().toString();

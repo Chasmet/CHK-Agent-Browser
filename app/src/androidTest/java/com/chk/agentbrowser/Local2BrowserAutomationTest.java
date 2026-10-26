@@ -88,7 +88,7 @@ public final class Local2BrowserAutomationTest {
         WebView web=open("example.com","<html><body><input id='title'><div id='caption' contenteditable='true'></div>"
             +"<input type='checkbox' id='audience'><select id='visibility'><option value='private'>Private</option><option value='schedule'>Schedule</option></select>"
             +"<input type='date' id='date'><input type='time' id='time'><input id='secret' type='password'></body></html>");
-        JSONObject caps=nativeCall("files_browser_capabilities",new JSONObject()).json();assertEquals(1,caps.getInt("version"));
+        JSONObject caps=nativeCall("files_browser_capabilities",new JSONObject()).json();assertEquals(2,caps.getInt("version"));
         JSONArray fields=new JSONArray().put(field("#title","text","Fixture title"))
             .put(field("#caption","text","Une description #Shorts"))
             .put(field("#audience","check",true)).put(field("#visibility","select","schedule"))
@@ -172,6 +172,28 @@ public final class Local2BrowserAutomationTest {
         args.put("fields",new JSONArray().put(field("#title","text","Fixture short")));
         assertEquals("schedule_browser_confirmed",browserCall("publication_submit",args).json().getString("status"));
         assertFalse(browserCall("publication_submit",args).ok);assertEquals("1",eval(web,"window.clicks"));
+    }
+    @Test public void uncertainClickCanBeConfirmedLaterWithoutRepeatingIt()throws Exception{
+        WebView web=open("example.com","<html><body><button id='send' onclick='window.clicks=(window.clicks||0)+1'>Envoyer</button><p id='done'></p></body></html>");
+        JSONObject args=new JSONObject().put("expected_host","example.com").put("selector","label:Envoyer")
+            .put("expected_text","Generation ready").put("receipt_id",job).put("timeout_ms",800);
+        Result first=browserCall("click_when_enabled",args);
+        assertFalse(first.ok);assertEquals("1",eval(web,"window.clicks"));
+        assertFalse(browserCall("click_when_enabled",args).ok);
+        assertEquals("1",eval(web,"window.clicks"));
+        eval(web,"document.querySelector('#done').textContent='Generation ready'");
+        assertTrue(browserCall("click_when_enabled",args).ok);
+        assertEquals("1",eval(web,"window.clicks"));
+        app.getSharedPreferences("chk-click-once-v1",0).edit().remove(job).commit();
+    }
+    @Test public void buttonWaitDoesNotConsumePostClickVerificationTime()throws Exception{
+        WebView web=open("example.com","<html><body><button id='send' disabled onclick=\"window.clicks=(window.clicks||0)+1;setTimeout(function(){document.querySelector('#done').textContent='Finished'},1000)\">Envoyer</button><p id='done'></p></body></html>");
+        eval(web,"setTimeout(function(){document.querySelector('#send').disabled=false},900)");
+        JSONObject args=new JSONObject().put("expected_host","example.com").put("selector","#send")
+            .put("expected_text","Finished").put("receipt_id",job).put("timeout_ms",1500);
+        Result result=browserCall("click_when_enabled",args);
+        assertTrue(result.text,result.ok);assertEquals("1",eval(web,"window.clicks"));
+        app.getSharedPreferences("chk-click-once-v1",0).edit().remove(job).commit();
     }
     @Test public void ownerStopDestroysRetainedBrowserAndPreventsFurtherCommands()throws Exception{
         WebView page=open("example.com","<html><body>retained owner session</body></html>");

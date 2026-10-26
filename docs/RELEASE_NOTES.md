@@ -1,3 +1,15 @@
+## Local 3 — compatibilité 1.0.4 et confirmation des actions (26 octobre 2026)
+
+- Synchronisation des capacités : négociation du catalogue exact du serveur 1.0.4 après HTTP 400. Les opérations avancées restent accessibles via le canal desktop existant, sans changer de serveur ni de jumelage.
+- Protocole navigateur 2 dans les diagnostics et les capacités Android.
+- Navigation : confirmation du document interactif par son URL et son état JavaScript, sans attendre les ressources tierces lentes. Erreurs réseau et lecture du DOM sont présentées séparément.
+- Clic avec reçu : une nouvelle demande vérifie le résultat du clic précédent sans le rejouer. Le délai de vérification commence au clic effectif, après l'attente du bouton.
+- Ciblage par libellé exact avec `label:Envoyer`, y compris Shadow DOM et cadres de même origine. Refus des libellés ambigus.
+- Vision : contrôles DOM actuels conservés si PixelCopy est indisponible. Derniers pixels réellement capturés réutilisables pendant 60 secondes sur le même document, avec âge, source et indication explicite qu'ils ne sont pas actuels. Aucun rendu conservé n'est déclaré comme pixels vérifiés.
+- Tests de régression pour le catalogue 1.0.4, les clics différés et les libellés ambigus. Même package et mécanisme de signature persistante, installation par-dessus l'application existante.
+
+Limites : Android ne fournit pas de nouveaux pixels de la WebView cachée ; cette version n'ajoute pas de moteur de lip-sync phonétique ni de validation serveur Grok à partir de la seule sélection d'un fichier.
+
 ## Local 3 — fiabilité des commandes Grok et téléchargements (26 octobre 2026)
 
 - Nouveau clic sécurisé `browser_click_when_enabled` : attend qu'un bouton React/ARIA devienne actif, envoie **un seul** clic et vérifie une condition de navigation ou de DOM. Chaque action garde un `receipt_id` sur Android afin de refuser une seconde soumission par erreur de réseau.
