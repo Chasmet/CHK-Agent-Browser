@@ -58,7 +58,30 @@ public class MainActivity extends Activity {
     private BrowserHome home;
     private View fullScreenVideo;
     private WebChromeClient.CustomViewCallback fullScreenCallback;
-    private final Runnable connectionTick=new Runnable(){public void run(){if(!isFinishing()&&!isDestroyed()){TextView badge=findViewById(R.id.connection_badge);badge.setText(agentClient.shortConnectionStatus());badge.setVisibility(agentClient.isEnabled()||Local2Client.get(MainActivity.this).enabled()?View.VISIBLE:View.GONE);transferHandler.postDelayed(this,3000);}}};
+    private final Runnable connectionTick=new Runnable(){public void run(){
+        if(isFinishing()||isDestroyed())return;
+        TextView badge=findViewById(R.id.connection_badge);
+        Local3Client local3=Local3Client.get(MainActivity.this);
+        boolean local3Active=local3.enabled();
+        String status=agentClient.shortConnectionStatus();
+        if(local3Active){
+            try{
+                JSONObject snapshot=local3.snapshot();
+                String permission=snapshot.optString("permission_sync","");
+                String capabilities=snapshot.optString("capability_sync","");
+                if(permission.startsWith("Serveur à mettre à jour"))
+                    status="Local 3 · autorisations bloquées : serveur PC à actualiser";
+                else if(capabilities.startsWith("Serveur à mettre à jour"))
+                    status="Local 3 · outils non synchronisés avec le serveur PC";
+                else if(snapshot.optString("status","").equals("Commande Android en cours"))
+                    status="Local 3 · action : "+snapshot.optString("last_action","en cours");
+            }catch(Exception ignored){}
+        }
+        badge.setText(status);
+        badge.setContentDescription(status+" ; toucher pour les réglages");
+        badge.setVisibility(local3Active||agentClient.isEnabled()||Local2Client.get(MainActivity.this).enabled()?View.VISIBLE:View.GONE);
+        transferHandler.postDelayed(this,3000);
+    }};
     private ValueCallback<Uri[]> fileCallback;
     private WorkspaceMediaChooser mediaChooser;
     private WebView mediaChooserWeb;
