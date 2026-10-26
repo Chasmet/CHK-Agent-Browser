@@ -124,7 +124,7 @@ public final class VerifiedClick {
                         if(!callback.isActive())return;
                         String state=value(after);
                         if("DONE".equals(state)){
-                            callback.finish(true,"Clic envoyé UNE fois et résultat attendu confirmé.");
+                            callback.finish(true,"Clic confirmé : condition observée sur la page. Un seul clic a été envoyé.");
                         }else if(!"WAIT".equals(state)||
                                 SystemClock.elapsedRealtime()-start>=timeout){
                             callback.finish(false,"Clic envoyé UNE fois ; résultat encore non confirmé ("+
