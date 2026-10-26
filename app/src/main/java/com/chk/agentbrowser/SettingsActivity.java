@@ -176,6 +176,19 @@ public final class SettingsActivity extends Activity {
             local3Status.setText(Local3Client.get(this).diagnostic());
         });
         group.addView(local3Reconnect,localInsert++);
+        Switch persistentLocal3=new Switch(this);
+        persistentLocal3.setText("Local 3 · autorisations persistantes sans validation répétée");
+        persistentLocal3.setChecked(Local3Client.get(this).persistentPermissions());
+        persistentLocal3.setOnCheckedChangeListener((button,on)->{
+            Local3Client.get(this).setPersistentPermissions(on);
+            if(on)AgentService.ensureRunning(this);
+            local3Status.setText(Local3Client.get(this).diagnostic());
+        });
+        group.addView(persistentLocal3,localInsert++);
+        TextView permissionInfo=new TextView(this);
+        permissionInfo.setText("Avec le mode autonome activé, Local 3 peut naviguer, saisir, importer, gérer les fichiers et utiliser Studio sans quota de demandes. Désactive cet interrupteur pour révoquer l’autorisation. L’historique et les résultats réels restent accessibles depuis le serveur.");
+        permissionInfo.setPadding(16,8,16,12);group.addView(permissionInfo,localInsert++);
+
         local3.setOnCheckedChangeListener((b,on)->{
             Local3Client.get(this).setEnabled(on);
             if(on){

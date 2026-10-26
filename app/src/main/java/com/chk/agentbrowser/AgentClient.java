@@ -220,6 +220,7 @@ public final class AgentClient {
     public void setEcoMode(boolean enabled){settings.edit().putBoolean("eco_mode",enabled).apply();}
     public void setAutonomous(boolean allow){
         settings.edit().putBoolean("autonomous_mode",allow).apply();
+        Local3Client.get(app).consentChanged();
         if(!allow)ui.post(this::closeRetainedBrowser);
         deliverPending();
     }
@@ -345,7 +346,7 @@ public final class AgentClient {
                                     DirectMcpServer.Reply finish,int epoch,
                                     java.util.concurrent.atomic.AtomicBoolean completed,boolean third) {
         if (completed.get() || epoch!=localChannelGeneration(third)
-            || !localChannelEnabled(third) || !isAutonomous()) {
+            || !localChannelEnabled(third) || !localAutonomous(third)) {
             finish.finish(false, "Canal Local 2 interrompu."); return;
         }
         if (index >= steps.length()) {
@@ -386,6 +387,10 @@ public final class AgentClient {
             catch(Exception e){reply.finish(false,"Diagnostic Local 3 indisponible");}
             return;
         }
+        try{
+            JSONObject direct=Local3Commands.translate(action,args);
+            if(direct!=null){action="android_action";args=direct;}
+        }catch(Exception e){reply.finish(false,"Paramètres Local 3 invalides");return;}
         if("browser_inspect".equals(action)||"browser_capture".equals(action)){
             try{
                 args=new JSONObject(args.toString()).put("tool","vision")
@@ -406,6 +411,9 @@ public final class AgentClient {
     }
     private boolean localChannelEnabled(boolean third){
         return third?Local3Client.get(app).enabled():Local2Client.get(app).enabled();
+    }
+    private boolean localAutonomous(boolean third){
+        return third?Local3Client.get(app).autonomousAllowed():isAutonomous();
     }
     private int localChannelGeneration(boolean third){
         return third?Local3Client.get(app).sessionGeneration():Local2Client.get(app).sessionGeneration();
@@ -436,7 +444,7 @@ public final class AgentClient {
             if ("browser_status".equals(action)) {
                 reply.finish(true, local2BrowserStatus().toString()); return;
             }
-            if (!isAutonomous()) {
+            if (!localAutonomous(third)) {
                 reply.finish(false, "Mode autonome désactivé · active-le dans Réglages pour exécuter les commandes MCP locales."); return;
             }
             if ("browser_batch".equals(action)) {
@@ -502,7 +510,7 @@ public final class AgentClient {
                         @Override public boolean isLocal3() { return third; }
                         @Override public boolean isActive() {
                             return !completed.get() && epoch==localChannelGeneration(third)
-                                && localChannelEnabled(third) && isAutonomous();
+                                && localChannelEnabled(third) && localAutonomous(third);
                         }
                         @Override public void finish(boolean ok, String message) {
                             reply.finish(ok, message);
@@ -555,7 +563,7 @@ public final class AgentClient {
                         @Override public boolean isLocal3() { return third; }
                     @Override public boolean isActive() {
                         return !completed.get() && epoch==localChannelGeneration(third)
-                            && localChannelEnabled(third) && isAutonomous()
+                            && localChannelEnabled(third) && localAutonomous(third)
                             && local2Browser() == receiver;
                     }
                     @Override public void finish(boolean ok, String message) { reply.finish(ok, message); }

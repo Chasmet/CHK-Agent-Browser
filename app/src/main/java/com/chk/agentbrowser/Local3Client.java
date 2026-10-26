@@ -31,9 +31,10 @@ public final class Local3Client {
     private volatile boolean running, busy;
     private volatile int generation, errors;
     private volatile String status="Désactivé";
-    private volatile long lastContact, nextCapabilitySync;
+    private volatile long lastContact, nextCapabilitySync, nextConsentSync;
     private volatile String capabilityStatus="À synchroniser", lastAction="aucune", lastOutcome="aucun";
     private volatile boolean executing;
+    private volatile String sentConsent="", permissionStatus="À synchroniser";
     private final Runnable loop=this::poll;
 
     public interface PairCallback { void complete(boolean ok,String message); }
@@ -94,18 +95,44 @@ public final class Local3Client {
             +"\nAppels Render / Supabase par ce canal : aucun"
             +"\nÉchecs consécutifs : "+errors
             +"\nDernier contact : "+(lastContact==0?"jamais":((android.os.SystemClock.elapsedRealtime()-lastContact)/1000)+" s")
+            +"\nAutorisations : "+permissionStatus+" · nombre de demandes sans quota"
             +"\nOutils : "+capabilityStatus
             +"\nDernière commande : "+lastAction+" · "+lastOutcome
             +"\nRésultat en attente : "+(!p.getString("outbox","").isEmpty()?"oui":"non");
     }
+    public boolean persistentPermissions(){return p.getBoolean("persistent_permissions",true);}
+    public boolean autonomousAllowed(){return persistentPermissions()&&AgentClient.get(app).isAutonomous();}
+    public void setPersistentPermissions(boolean on){
+        p.edit().putBoolean("persistent_permissions",on).apply();
+        consentChanged();
+    }
+    public void consentChanged(){
+        sentConsent="";nextConsentSync=0;
+        if(!paired()||serverUrl().isEmpty())return;
+        io.execute(()->{try{syncConsent(p.getString("app_id",""),p.getString("secret",""));}
+            catch(Exception e){permissionStatus="Serveur à mettre à jour : "+safe(e);}});
+        reconnect();
+    }
+    private void syncConsent(String id,String secret)throws Exception{
+        boolean allowed=enabled()&&autonomousAllowed();
+        String desired=Boolean.toString(allowed);
+        if(desired.equals(sentConsent))return;
+        long clock=android.os.SystemClock.elapsedRealtime();
+        if(clock<nextConsentSync)return;
+        nextConsentSync=clock+30000L;
+        String version=app.getPackageManager().getPackageInfo(app.getPackageName(),0).versionName;
+        request("PUT","/api/agent/"+id+"/permissions",new JSONObject().put("enabled",allowed).put("version",version),secret);
+        sentConsent=desired;nextConsentSync=0;permissionStatus=allowed?"Autorisations persistantes actives":"Autorisations révoquées";
+    }
     public void setEnabled(boolean on){
         if(!on)stop();
         p.edit().putBoolean("enabled",on).apply();
+        consentChanged();
         if(on){status=paired()?"Connexion à CHK Universal Control":"Association nécessaire";start();}
     }
     public void start(){
         if(!enabled()||!paired()||serverUrl().isEmpty()||running)return;
-        running=true;nextCapabilitySync=0;main.post(loop);
+        running=true;nextCapabilitySync=0;sentConsent="";main.post(loop);
     }
     public void stop(){
         running=false;generation++;main.removeCallbacks(loop);
@@ -115,7 +142,8 @@ public final class Local3Client {
         String version=app.getPackageManager().getPackageInfo(app.getPackageName(),0).versionName;
         return new JSONObject().put("protocol_version",2).put("version",version)
             .put("enabled",enabled()).put("paired",paired()).put("status",status())
-            .put("autonomous",AgentClient.get(app).isAutonomous())
+            .put("autonomous",autonomousAllowed()).put("persistent_permissions",persistentPermissions())
+            .put("permission_sync",permissionStatus).put("request_quota",JSONObject.NULL)
             .put("previews_allowed",AgentClient.get(app).isPreviewAllowed())
             .put("capability_sync",capabilityStatus).put("last_action",lastAction)
             .put("last_outcome",lastOutcome).put("result_pending",!p.getString("outbox","").isEmpty());
@@ -158,6 +186,7 @@ public final class Local3Client {
     static JSONArray capabilities() throws Exception{
         JSONArray a=new JSONArray();
         String[] read={
+            "browser_upload_status","browser_get_page_status","browser_verify_fields","workflow_status",
             "local3_status","browser_inspect","browser_capture","browser_status","browser_read_page","browser_get_form","files_list",
             "files_read_text","files_read_bytes","files_transfer_read","files_stat","files_hash","files_catalog",
             "files_downloads","files_preview","files_detect_format","files_capabilities",
@@ -169,6 +198,7 @@ public final class Local3Client {
             "publication_status"
         };
         String[] write={
+            "browser_upload_file","browser_fill_fields","workflow_run","workflow_resume","workflow_cancel",
             "android_action","browser_tabs","browser_open_url","browser_click",
             "browser_type","browser_scroll","browser_batch","files_write_text",
             "files_edit_text","files_move","files_copy","files_mkdir","files_trash",
@@ -184,7 +214,7 @@ public final class Local3Client {
         for(String name:read)a.put(new JSONObject().put("name",name).put("readOnly",true)
             .put("description","Lire ou inspecter les données CHK Android avec autorisation du propriétaire"));
         for(String name:write)a.put(new JSONObject().put("name",name).put("readOnly",false)
-            .put("description","Contrôler CHK Android après approbation sur le serveur"));
+            .put("description","Contrôler CHK Android selon les autorisations persistantes du propriétaire"));
         return a;
     }
     private JSONObject request(String method,String route,JSONObject payload,String secret)throws Exception{
@@ -220,10 +250,6 @@ public final class Local3Client {
         if(result.getBytes(StandardCharsets.UTF_8).length<=240000
             &&new JSONObject().put("message",result).toString().getBytes(StandardCharsets.UTF_8).length<=330000)return result;
         byte[] bytes=result.getBytes(StandardCharsets.UTF_8);
-        if(bytes.length>2*1024*1024)
-            return new JSONObject().put("result_too_large",true)
-                .put("max_bytes",2*1024*1024).put("next","Utiliser la lecture paginée de fichiers")
-                .toString();
         WorkspaceStore store=new WorkspaceStore(app);
         java.io.File directory=store.file("AgentResults");
         if(!directory.exists())store.mkdir("AgentResults");
@@ -265,6 +291,16 @@ public final class Local3Client {
             long delay=2500L;
             try{
                 if(session!=generation||!running||idLength!=36)return;
+                try{syncConsent(id,secret);}catch(Exception e){permissionStatus="Serveur à mettre à jour : "+safe(e);}
+                // A process interruption after leasing must never silently repeat an effect.
+                String interrupted=p.getString("leased_task","");
+                if(!interrupted.isEmpty()&&p.getString("outbox","").isEmpty()){
+                    JSONObject unknown=new JSONObject().put("task_id",interrupted).put("result",new JSONObject()
+                        .put("ok",false).put("execution_state","unknown").put("retry_command",false)
+                        .put("message","Android a été interrompu pendant cette commande. Vérifier son effet avant de la relancer."));
+                    if(!p.edit().putString("outbox",unknown.toString()).remove("leased_task").commit())
+                        throw new java.io.IOException("Journal d’interruption non enregistré");
+                }
                 // An already executed action is acknowledged first. Never replay it.
                 String queued=p.getString("outbox","");
                 if(!queued.isEmpty()){
@@ -276,7 +312,7 @@ public final class Local3Client {
                 // Older servers may reject this route; keep polling existing tools.
                 long clock=android.os.SystemClock.elapsedRealtime();
                 if(clock>=nextCapabilitySync){
-                    nextCapabilitySync=clock+3600000L;
+                    nextCapabilitySync=clock+30000L;
                     try{
                         request("PUT","/api/agent/"+id+"/capabilities",new JSONObject()
                             .put("capabilities",capabilities()).put("diagnostic",snapshot()),secret);

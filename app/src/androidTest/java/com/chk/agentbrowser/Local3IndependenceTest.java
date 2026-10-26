@@ -66,7 +66,10 @@ public final class Local3IndependenceTest {
             org.json.JSONObject c=caps.getJSONObject(i);
             assertNull(found.put(c.getString("name"),c.getBoolean("readOnly")));
         }
-        assertTrue(caps.length()<=80);
+        assertTrue(caps.length()>80);
+        assertEquals(Boolean.FALSE,found.get("browser_upload_file"));
+        assertEquals(Boolean.TRUE,found.get("workflow_status"));
+        assertEquals(Boolean.FALSE,found.get("workflow_run"));
         assertEquals(Boolean.TRUE,found.get("files_transfer_read"));
         assertEquals(Boolean.TRUE,found.get("browser_capture"));
         assertEquals(Boolean.TRUE,found.get("browser_inspect"));
@@ -89,4 +92,46 @@ public final class Local3IndependenceTest {
         assertEquals(chunk,Local3Client.compactResult(app,chunk));
     }
 
+
+    @Test public void local3PermissionRevocationIsIndependentAndPersistent(){
+        Context app=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Local3Client third=Local3Client.get(app);
+        boolean before=third.persistentPermissions(),autonomous=AgentClient.get(app).isAutonomous();
+        boolean second=Local2Client.get(app).enabled(),render=AgentClient.get(app).isEnabled();
+        try{
+            third.setPersistentPermissions(false);
+            assertFalse(third.autonomousAllowed());
+            assertFalse(app.getSharedPreferences("chk_local3_v1",Context.MODE_PRIVATE).getBoolean("persistent_permissions",true));
+            assertEquals(autonomous,AgentClient.get(app).isAutonomous());
+            assertEquals(second,Local2Client.get(app).enabled());assertEquals(render,AgentClient.get(app).isEnabled());
+            third.setPersistentPermissions(true);assertEquals(autonomous,third.autonomousAllowed());
+        }finally{third.setPersistentPermissions(before);}
+    }
+    @Test public void local3DirectToolsReuseExistingHandlersWithoutChangingArguments()throws Exception{
+        org.json.JSONObject original=new org.json.JSONObject().put("id","cut-02").put("expected_host","grok.com");
+        org.json.JSONObject upload=Local3Commands.translate("browser_upload_file",original);
+        assertEquals("desktop",upload.getString("action"));
+        assertEquals("browser",upload.getJSONObject("args").getString("tool"));
+        assertEquals("upload_file",upload.getJSONObject("args").getString("operation"));
+        assertEquals("cut-02",upload.getJSONObject("args").getString("id"));
+        assertFalse(original.has("tool"));
+        for(String[] pair:new String[][]{{"workflow_run","submit"},{"workflow_status","status"},{"workflow_resume","resume"},{"workflow_cancel","cancel"}}){
+            org.json.JSONObject args=Local3Commands.translate(pair[0],original).getJSONObject("args");
+            assertEquals("tasks",args.getString("tool"));assertEquals(pair[1],args.getString("operation"));
+        }
+        assertNull(Local3Commands.translate("unknown",original));
+    }
+    @Test public void workflowsBeyondFiftyStepsRemainValidAndTheirProgressIsPaged()throws Exception{
+        Context app=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        org.json.JSONArray steps=new org.json.JSONArray();
+        for(int i=0;i<65;i++)steps.put(new org.json.JSONObject().put("id","read-"+i).put("action","workspace_status").put("args",new org.json.JSONObject()).put("state","done"));
+        AgentTasks.validate(steps);
+        String id="local3-many-"+java.util.UUID.randomUUID();java.io.File file=AgentFiles.journal(app,"tasks",id);
+        try{
+            AgentFiles.save(file,new org.json.JSONObject().put("id",id).put("state","completed").put("steps",steps));
+            org.json.JSONObject page=AgentTasks.command(app,new org.json.JSONObject().put("id",id).put("operation","status").put("offset",60),true,true);
+            assertEquals(65,page.getInt("total"));assertEquals(65,page.getInt("completed"));
+            assertEquals(5,page.getJSONArray("steps").length());assertEquals(-1,page.getInt("next_offset"));
+        }finally{file.delete();}
+    }
 }

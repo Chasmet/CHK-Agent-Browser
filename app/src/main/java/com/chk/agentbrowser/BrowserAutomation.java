@@ -125,7 +125,7 @@ final class BrowserAutomation {
         if(raw.isEmpty())throw new Exception("Importation inconnue.");
         JSONObject state=new JSONObject(raw);
         if("preparing".equals(state.optString("state"))&&(!PROCESS.equals(state.optString("process"))
-                ||state.optBoolean("local2")&&(!AgentClient.get(c).isAutonomous()
+                ||state.optBoolean("local2")&&(!(state.optBoolean("local3")?Local3Client.get(c).autonomousAllowed():AgentClient.get(c).isAutonomous())
                     ||(state.optBoolean("local3")?!Local3Client.get(c).enabled()||state.optInt("generation",-1)!=Local3Client.get(c).sessionGeneration():!Local2Client.get(c).enabled()||state.optInt("generation",-1)!=Local2Client.get(c).sessionGeneration())))){
             state.put("state","interrupted").put("message","Session Android interrompue : réception inconnue. Inspecter le site avant une nouvelle sélection.");
             save(c,id,state);
@@ -173,7 +173,7 @@ final class BrowserAutomation {
                 @Override public boolean isLocal2(){return cb.isLocal2();}
                         public boolean isLocal3(){return cb.isLocal3();}
                 @Override public boolean isActive(){return BrowserWebState.alive(web)&&AgentClient.get(app).commandEnabled(cb)
-                    &&(!cb.isLocal2()||AgentClient.get(app).isAutonomous());}
+                    &&(!cb.isLocal2()||(cb.isLocal3()?Local3Client.get(app).autonomousAllowed():AgentClient.get(app).isAutonomous()));}
                 @Override public void finish(boolean ok,String message){
                     try{
                         state.put("state",ok?"selected":"unconfirmed").put("message",(message==null?"":message.substring(0,Math.min(1800,message.length()))))

@@ -1,3 +1,14 @@
+## Local 3 — autorisations persistantes et workflows autonomes (26 octobre 2026)
+
+- Réglages : interrupteur propre à Local 3 pour autoriser ou révoquer les commandes automatiques, sous le mode autonome déjà accepté. Aucun changement de l’activation Local 2 ou Render.
+- Synchronisation authentifiée de cette autorisation avec le serveur PC : navigation, saisie, fichiers et Studio ne demandent plus une validation serveur à chaque commande autorisée.
+- 83 capacités déclarées : outils directs pour l’import web, l’état d’import, la relecture des formulaires et les workflows durables (démarrer, suivre, reprendre, annuler).
+- Workflows sans le précédent plafond de 50 étapes, progression paginée et arrêt effectif lors d’une révocation Local 3.
+- Une commande interrompue sur Android est signalée comme résultat inconnu, sans rejouer son effet. Les résultats volumineux sont conservés comme fichiers lisibles par blocs.
+- Nécessite le serveur PC 1.0.4 pour les autorisations persistantes et les nouveaux outils MCP. Aucun quota de nombre total de demandes ; les formats, tailles des paquets et autorisations du système restent techniques.
+- L’alignement des WAV dans Studio n’est pas un moteur de synchronisation labiale ; cette mise à jour n’ajoute pas de moteur lip-sync.
+- Même package, même signature permanente, conservation des associations, fichiers, notes et projets.
+
 ## Local 3 — vision et liaison Android fiables (26 octobre 2026)
 
 - Vision web/native accessible par browser_inspect et browser_capture, sous le contrôle du partage d’aperçus existant.

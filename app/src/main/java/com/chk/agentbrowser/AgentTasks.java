@@ -14,7 +14,7 @@ final class AgentTasks {
     private AgentTasks(){}
     static void requestCancel(String id){active.put(id,false);}
     static void validate(JSONArray steps)throws Exception{
-        if(steps==null||steps.length()<1||steps.length()>50)throw new Exception("Une tâche contient de 1 à 50 étapes.");
+        if(steps==null||steps.length()<1)throw new Exception("Une tâche doit contenir au moins une étape.");
         HashSet<String> ids=new HashSet<>();
         for(int i=0;i<steps.length();i++){
             JSONObject step=steps.getJSONObject(i);String id=step.getString("id");if(!id.matches("[A-Za-z0-9_-]{1,45}")||!ids.add(id))throw new Exception("Chaque étape doit avoir un identifiant unique.");
@@ -103,11 +103,11 @@ final class AgentTasks {
         return summary(state,p.optInt("offset",0));
     }
     private static void start(Context c,File file,JSONObject state,boolean local2,boolean local3)throws Exception{
-        if(!(local3?Local3Client.get(c).enabled():local2?Local2Client.get(c).enabled():AgentClient.get(c).isEnabled())||!AgentClient.get(c).isAutonomous())throw new Exception("Active le canal MCP demandé et le mode autonome pour une tâche à étapes.");
+        if(!(local3?Local3Client.get(c).enabled():local2?Local2Client.get(c).enabled():AgentClient.get(c).isEnabled())||!(local3?Local3Client.get(c).autonomousAllowed():AgentClient.get(c).isAutonomous()))throw new Exception("Active le canal MCP demandé et le mode autonome pour une tâche à étapes.");
         String id=state.getString("id");if(!running.add(id))return;active.put(id,true);state.put("state","running").put("transport",local3?"local3":local2?"local2":"render");AgentFiles.save(file,state);WorkspaceCommands.IO.execute(()->new Runner(c,file,id,local2,local3).next());
     }
     private static JSONObject summary(JSONObject state,int offset)throws Exception{
-        JSONArray rows=state.getJSONArray("steps"),page=new JSONArray();if(offset<0||offset>50)throw new Exception("Pagination invalide.");int done=0;
+        JSONArray rows=state.getJSONArray("steps"),page=new JSONArray();if(offset<0||offset>rows.length())throw new Exception("Pagination invalide.");int done=0;
         for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);if(row.optString("state").equals("done"))done++;if(i>=offset&&i<offset+10){JSONObject shown=new JSONObject().put("id",row.getString("id")).put("state",row.getString("state"));if(row.has("error"))shown.put("error",row.get("error"));if(row.has("result")){String result=row.get("result").toString();shown.put("result_excerpt",result.length()>900?result.substring(0,900):result).put("result_truncated",result.length()>900);}page.put(shown);}}
         return new JSONObject().put("ok",!state.optString("state").equals("failed")).put("id",state.getString("id")).put("state",state.getString("state")).put("completed",done).put("total",rows.length()).put("steps",page).put("next_offset",offset+10<rows.length()?offset+10:-1);
     }
@@ -127,7 +127,7 @@ final class AgentTasks {
     private static final class Runner {
         final Context app;final File file;final String id;final boolean local2,local3;final int epoch;
         Runner(Context c,File f,String id,boolean local2,boolean local3){app=c.getApplicationContext();file=f;this.id=id;this.local2=local2;this.local3=local3;epoch=local3?Local3Client.get(app).sessionGeneration():Local2Client.get(app).sessionGeneration();}
-        boolean allowed(){try{return (local3?Local3Client.get(app).enabled()&&epoch==Local3Client.get(app).sessionGeneration():local2?Local2Client.get(app).enabled()&&epoch==Local2Client.get(app).sessionGeneration():AgentClient.get(app).isEnabled())&&AgentClient.get(app).isAutonomous()&&Boolean.TRUE.equals(active.get(id));}catch(Exception e){return false;}}
+        boolean allowed(){try{return (local3?Local3Client.get(app).enabled()&&epoch==Local3Client.get(app).sessionGeneration():local2?Local2Client.get(app).enabled()&&epoch==Local2Client.get(app).sessionGeneration():AgentClient.get(app).isEnabled())&&(local3?Local3Client.get(app).autonomousAllowed():AgentClient.get(app).isAutonomous())&&Boolean.TRUE.equals(active.get(id));}catch(Exception e){return false;}}
         void stop(JSONObject state,String reason){try{if(!state.optString("state").equals("cancelled"))state.put("state","paused").put("error",reason);AgentFiles.save(file,state);}catch(Exception ignored){}running.remove(id);}
         void next(){
             JSONObject state=null;try{
