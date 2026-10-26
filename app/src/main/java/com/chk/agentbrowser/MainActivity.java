@@ -229,6 +229,7 @@ public class MainActivity extends Activity {
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
                 if(request.isForMainFrame())pageError(view,"Page inaccessible. Vérifie la connexion. Toucher pour réessayer.",request.getUrl().toString());
             }
+            @Override public void onPageCommitVisible(WebView view,String url){BrowserWebState.committed(view,url);}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,android.webkit.WebResourceResponse response){
                 if(request.isForMainFrame())pageError(view,"Page inaccessible · HTTP "+response.getStatusCode(),request.getUrl().toString());
             }
@@ -492,7 +493,7 @@ public class MainActivity extends Activity {
                 if(android.os.SystemClock.elapsedRealtime()>=deadline){
                     finish(false,"Chargement non confirmé dans le délai. Relis la page avant une nouvelle navigation.");return;
                 }
-                if(BrowserWebState.documentVersion(target)<=before){
+                if(BrowserWebState.documentVersion(target)<=before||!BrowserWebState.committed(target)){
                     transferHandler.postDelayed(this,150L);return;
                 }
                 long document=BrowserWebState.documentVersion(target);

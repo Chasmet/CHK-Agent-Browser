@@ -31,6 +31,7 @@ final class WebFixture {
         }
         @Override public void onPageStarted(WebView view,String url,Bitmap icon){delegate.onPageStarted(view,url,icon);}
         @Override public void onPageFinished(WebView view,String url){delegate.onPageFinished(view,url);}
+        @Override public void onPageCommitVisible(WebView view,String url){delegate.onPageCommitVisible(view,url);}
         @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){delegate.onReceivedHttpError(view,request,response);}
         @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){delegate.onReceivedError(view,request,error);}
         @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){return delegate.shouldOverrideUrlLoading(view,request);}

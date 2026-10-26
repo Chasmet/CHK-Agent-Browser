@@ -104,6 +104,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             @Override public void onReceivedError(WebView web,WebResourceRequest request,android.webkit.WebResourceError error){
                 if(request.isForMainFrame())failures.put(web,"Page inaccessible : erreur réseau Android.");
             }
+            @Override public void onPageCommitVisible(WebView view,String url){BrowserWebState.committed(view,url);}
             @Override public void onReceivedHttpError(WebView web,WebResourceRequest request,android.webkit.WebResourceResponse response){
                 if(request.isForMainFrame())failures.put(web,"Page inaccessible : HTTP "+response.getStatusCode());
             }
@@ -189,7 +190,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         if(!BrowserWebState.alive(web)){cb.finish(false,"Onglet fermé pendant la navigation.");return;}
         if(failures.containsKey(web)){cb.finish(false,failures.get(web));return;}
         if(android.os.SystemClock.elapsedRealtime()>=deadline){cb.finish(false,"Navigation non confirmée avant le délai. Lire la page avant de recommencer.");return;}
-        if(BrowserWebState.documentVersion(web)<=before){
+        if(BrowserWebState.documentVersion(web)<=before||!BrowserWebState.committed(web)){
             main.postDelayed(()->confirmNavigation(web,before,deadline,cb),250L);return;
         }
         long document=BrowserWebState.documentVersion(web);

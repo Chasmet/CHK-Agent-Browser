@@ -173,6 +173,23 @@ public final class Local2BrowserAutomationTest {
         assertEquals("schedule_browser_confirmed",browserCall("publication_submit",args).json().getString("status"));
         assertFalse(browserCall("publication_submit",args).ok);assertEquals("1",eval(web,"window.clicks"));
     }
+    @Test public void sameUrlReloadCannotConfirmThePreviousDocument()throws Exception{
+        WebView web=open("example.com","<html><body>Previous document still in renderer</body></html>");
+        CountDownLatch done=new CountDownLatch(1);Result result=new Result();
+        java.lang.reflect.Method verify=MainActivity.class.getDeclaredMethod("verifyNavigation",WebView.class,String.class,long.class,int.class,AgentClient.ResultCallback.class);
+        verify.setAccessible(true);
+        instrument.runOnMainSync(()->{
+            long before=BrowserWebState.documentVersion(web);String url=web.getUrl();
+            // Chromium signals page-start before replacing the old DOM, including
+            // a reload with exactly the same location and readyState=complete.
+            BrowserWebState.remember(web,url);
+            try{verify.invoke(browser,web,url,before,1000,(AgentClient.ResultCallback)(ok,text)->{
+                result.ok=ok;result.text=text;done.countDown();
+            });}catch(Exception e){throw new RuntimeException(e);}
+        });
+        assertTrue(done.await(5,TimeUnit.SECONDS));assertFalse(result.text,result.ok);
+        assertTrue(result.text,result.text.contains("Chargement non confirmé"));
+    }
     @Test public void legacyDesktopDownloadUsesNativeHandlerAndRejectsNonHttps()throws Exception{
         open("example.com","<html><body>Download fixture</body></html>");
         Result result=browserCall("download_file",new JSONObject().put("expected_host","example.com").put("url","http://example.com/file.mp4"));

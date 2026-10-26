@@ -4,6 +4,7 @@
 - Téléchargement natif également accessible par `desktop` → `browser` → `download_file` sur le serveur 1.0.4, avec vérification du domaine et transport HTTPS.
 - Protocole navigateur 2 dans les diagnostics et les capacités Android.
 - Navigation : confirmation du document interactif par son URL et son état JavaScript, sans attendre les ressources tierces lentes. Erreurs réseau et lecture du DOM sont présentées séparément.
+- Rechargement de la même adresse : attente de la confirmation Chromium du nouveau document avant toute validation, pour ne pas confondre l'ancienne page avec la nouvelle.
 - Clic avec reçu : une nouvelle demande vérifie le résultat du clic précédent sans le rejouer. Le délai de vérification commence au clic effectif, après l'attente du bouton.
 - Ciblage par libellé exact avec `label:Envoyer`, y compris Shadow DOM et cadres de même origine. Refus des libellés ambigus.
 - Vision : contrôles DOM actuels conservés si PixelCopy est indisponible. Derniers pixels réellement capturés réutilisables pendant 60 secondes sur le même document, avec âge, source et indication explicite qu'ils ne sont pas actuels. Aucun rendu conservé n'est déclaré comme pixels vérifiés.
