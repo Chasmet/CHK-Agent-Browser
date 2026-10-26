@@ -1,6 +1,7 @@
 ## Local 3 — compatibilité 1.0.4 et confirmation des actions (26 octobre 2026)
 
 - Synchronisation des capacités : négociation du catalogue exact du serveur 1.0.4 après HTTP 400. Les opérations avancées restent accessibles via le canal desktop existant, sans changer de serveur ni de jumelage.
+- Téléchargement natif également accessible par `desktop` → `browser` → `download_file` sur le serveur 1.0.4, avec vérification du domaine et transport HTTPS.
 - Protocole navigateur 2 dans les diagnostics et les capacités Android.
 - Navigation : confirmation du document interactif par son URL et son état JavaScript, sans attendre les ressources tierces lentes. Erreurs réseau et lecture du DOM sont présentées séparément.
 - Clic avec reçu : une nouvelle demande vérifie le résultat du clic précédent sans le rejouer. Le délai de vérification commence au clic effectif, après l'attente du bouton.

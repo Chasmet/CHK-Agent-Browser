@@ -173,6 +173,11 @@ public final class Local2BrowserAutomationTest {
         assertEquals("schedule_browser_confirmed",browserCall("publication_submit",args).json().getString("status"));
         assertFalse(browserCall("publication_submit",args).ok);assertEquals("1",eval(web,"window.clicks"));
     }
+    @Test public void legacyDesktopDownloadUsesNativeHandlerAndRejectsNonHttps()throws Exception{
+        open("example.com","<html><body>Download fixture</body></html>");
+        Result result=browserCall("download_file",new JSONObject().put("expected_host","example.com").put("url","http://example.com/file.mp4"));
+        assertFalse(result.ok);assertTrue(result.text,result.text.contains("HTTPS"));
+    }
     @Test public void uncertainClickCanBeConfirmedLaterWithoutRepeatingIt()throws Exception{
         WebView web=open("example.com","<html><body><button id='send' onclick='window.clicks=(window.clicks||0)+1'>Envoyer</button><p id='done'></p></body></html>");
         JSONObject args=new JSONObject().put("expected_host","example.com").put("selector","label:Envoyer")
