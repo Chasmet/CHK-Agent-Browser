@@ -203,7 +203,7 @@ public final class Local2BrowserAutomationTest {
         assertFalse(first.ok);assertEquals("1",eval(web,"window.clicks"));
         assertFalse(browserCall("click_when_enabled",args).ok);
         assertEquals("1",eval(web,"window.clicks"));
-        eval(web,"document.querySelector('#done').textContent='Generation ready'");
+        eval(web,"history.pushState({},'', '/confirmed');document.querySelector('#done').textContent='Generation ready'");
         assertTrue(browserCall("click_when_enabled",args).ok);
         assertEquals("1",eval(web,"window.clicks"));
         app.getSharedPreferences("chk-click-once-v1",0).edit().remove(job).commit();

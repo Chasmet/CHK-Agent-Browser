@@ -53,12 +53,15 @@ public final class VerifiedClick {
         final String originalUrl=web.getUrl()==null?"":web.getUrl();
         final SharedPreferences receipts=waitEnabled
                 ?web.getContext().getApplicationContext().getSharedPreferences("chk-click-once-v1",0):null;
-        final String fingerprint=(originalUrl==null?"":originalUrl)+"|"+selector+"|"+
-                expectedSelector+"|"+expectedText+"|"+expectedUrl;
+        final String actionFingerprint="|"+selector+"|"+expectedSelector+"|"+expectedText+"|"+expectedUrl;
+        final String fingerprint=originalUrl+actionFingerprint;
         if(waitEnabled){
             String prior=receipts.getString(receiptId,"");
             if(!prior.isEmpty()){
-                if(!prior.equals(fingerprint)){
+                // The accepted click can legitimately navigate to a new URL.
+                // Its target/postcondition must still match the original receipt;
+                // only read the postcondition here, never click again.
+                if(!prior.endsWith(actionFingerprint)){
                     callback.finish(false,"receipt_id déjà utilisé pour une autre action. Aucun clic.");return;
                 }
                 // A delayed site response may have completed since the timeout.

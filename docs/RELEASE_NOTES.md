@@ -6,6 +6,7 @@
 - Navigation : confirmation du document interactif par son URL et son état JavaScript, sans attendre les ressources tierces lentes. Erreurs réseau et lecture du DOM sont présentées séparément.
 - Rechargement de la même adresse : attente de la confirmation Chromium du nouveau document avant toute validation, pour ne pas confondre l'ancienne page avec la nouvelle.
 - Clic avec reçu : une nouvelle demande vérifie le résultat du clic précédent sans le rejouer. Le délai de vérification commence au clic effectif, après l'attente du bouton.
+- Le reçu reste vérifiable après un changement d'URL consécutif au clic : les paramètres de l'action restent contrôlés, et aucun clic supplémentaire n'est envoyé.
 - Ciblage par libellé exact avec `label:Envoyer`, y compris Shadow DOM et cadres de même origine. Refus des libellés ambigus.
 - Vision : contrôles DOM actuels conservés si PixelCopy est indisponible. Derniers pixels réellement capturés réutilisables pendant 60 secondes sur le même document, avec âge, source et indication explicite qu'ils ne sont pas actuels. Aucun rendu conservé n'est déclaré comme pixels vérifiés.
 - Tests de régression pour le catalogue 1.0.4, les clics différés et les libellés ambigus. Même package et mécanisme de signature persistante, installation par-dessus l'application existante.
