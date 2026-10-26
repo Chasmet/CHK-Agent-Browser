@@ -46,4 +46,17 @@ public final class Local3IndependenceTest {
         assertTrue(called[0]);
         assertEquals(wasPaired,third.paired());
     }
+    @Test public void local3EndpointIsExplicitAndHTTPSOnly() {
+        assertEquals("https://mcp.example.org",Local3Client.normalizeUrl("https://mcp.example.org/mcp"));
+        assertEquals("https://my-host.example.org:8443",Local3Client.normalizeUrl("https://my-host.example.org:8443/"));
+        for(String bad:new String[]{"http://mcp.example.org/mcp",
+            "https://user:pass@mcp.example.org/mcp",
+            "https://mcp.example.org/mcp/private-token",
+            "https://mcp.example.org/mcp?token=secret",
+            "https://mcp.example.org/mcp#fragment"}){
+            try {Local3Client.normalizeUrl(bad);fail("Accepted insecure MCP URL");}
+            catch(IllegalArgumentException expected){}
+        }
+    }
+
 }
