@@ -1,3 +1,11 @@
+## CHK Browser Local 3 — troisième connecteur MCP et mise à jour automatique (26 octobre 2026)
+
+- Troisième connexion MCP indépendante dans Réglages : activation/désactivation sans toucher à Render ni Local 2.
+- Association à CHK Universal Control par URL HTTPS réelle du serveur personnel et invitation temporaire, sans jeton dans l’APK ni dans les sauvegardes.
+- Commandes natives CHK : navigateur/onglets, clavier, pointeur virtuel, fichiers, documents PDF, médias MP3/MP4, Notes et Studio, dans les limites des autorisations Android.
+- Diagnostic du canal, reprise après redémarrage, confirmations des commandes, protection contre leur répétition en cas de panne réseau.
+- Conservation de la mise à jour intégrée à CHK : Release GitHub signée avec la même identité Android, installation par-dessus et conservation des données.
+
 ## Studio — calques et aperçu rendu sur Android (24 octobre 2026)
 
 - Jusqu’à trois incrustations image/vidéo au-dessus de la piste principale, avec début, durée, position, largeur relative et opacité. Sons des incrustations coupés. Les plans et sources restent intacts.

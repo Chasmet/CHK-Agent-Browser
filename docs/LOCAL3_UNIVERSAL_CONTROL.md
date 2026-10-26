@@ -2,7 +2,7 @@
 
 ## Architecture sans Render/Supabase
 
-CHK Android se connecte directement à `https://chk-universal-1.taild9e4de.ts.net` (serveur CHK Universal Control du propriétaire) avec son propre identifiant et une clé d'application privée. Ce canal utilise exclusivement les routes existantes du serveur universel :
+CHK Android se connecte directement à l’adresse HTTPS réelle du serveur CHK Universal Control du propriétaire, renseignée au moment de l'association avec son propre identifiant et une clé d'application privée. Ce canal utilise exclusivement les routes existantes du serveur universel :
 
 - `POST /api/onboard` : association à usage unique.
 - `GET /api/agent/{id}/poll` : récupération d'une tâche autorisée par le serveur.
@@ -15,7 +15,7 @@ Le connecteur ChatGPT est `CHK Browser Local 3`, déjà installé séparément. 
 1. Installer une Release GitHub signée par la clé habituelle depuis le bouton **Mise à jour** de CHK.
 2. Ouvrir **CHK > Réglages > MCP Local 3**.
 3. Dans ChatGPT, appeler l'outil `app_invite` du connecteur `CHK Browser Local 3`. Une invitation expire après 15 minutes.
-4. Dans CHK, appuyer sur **Associer Local 3 avec une invitation**, coller le code `chkinvite_...`, confirmer.
+4. Dans CHK, appuyer sur **Associer Local 3 avec une invitation**, renseigner l’URL HTTPS du serveur (ou celle de son endpoint `/mcp`), coller le code `chkinvite_...`, confirmer. L’URL ne doit pas contenir de jeton dans son chemin, ses paramètres ou son fragment.
 5. Activer **CHK Browser Local 3** et le **Mode autonome** pour autoriser les commandes natives dans CHK.
 6. Dans ChatGPT, utiliser `apps_list` (réponse structurée `{apps:[...]}`) pour retrouver l'identifiant de CHK Android, puis `task_submit` avec cet `app_id`. Les écritures passent obligatoirement par l'approbation du serveur ; `task_get` confirme le résultat effectif.
 

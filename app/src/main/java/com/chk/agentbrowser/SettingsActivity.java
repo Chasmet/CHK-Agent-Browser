@@ -153,7 +153,7 @@ public final class SettingsActivity extends Activity {
         group.addView(local3,localInsert++);
         TextView local3Help=new TextView(this);
         local3Help.setText("Serveur sur ton PC, sans requêtes Render ou Supabase. "
-            +"Pour la première association, crée une invitation avec app_invite dans le connecteur "
+            +"Pour la première association, colle l’adresse HTTPS réelle du serveur et crée une invitation avec app_invite dans le connecteur "
             +"CHK Browser Local 3 de ChatGPT, puis colle-la ici. Elle expire après 15 minutes. "
             +"La clé privée de l'application reste uniquement sur ton téléphone. "
             +"Les actions sensibles nécessitent l'approbation prévue sur le serveur.");
@@ -177,17 +177,34 @@ public final class SettingsActivity extends Activity {
             local3Status.setText(Local3Client.get(this).status());
         });
         local3Pair.setOnClickListener(v->{
-            android.widget.EditText input=new android.widget.EditText(this);
-            input.setSingleLine(true);
-            input.setHint("chkinvite_…");
+            android.widget.LinearLayout fields=new android.widget.LinearLayout(this);
+            fields.setPadding(24,10,24,0);
+            fields.setOrientation(android.widget.LinearLayout.VERTICAL);
+            android.widget.EditText endpoint=new android.widget.EditText(this);
+            endpoint.setSingleLine(true);
+            endpoint.setHint("https://ton-serveur/mcp");
+            endpoint.setText(Local3Client.get(this).serverUrl());
+            endpoint.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                |android.text.InputType.TYPE_TEXT_VARIATION_URI);
+            fields.addView(endpoint);
+            android.widget.EditText invitation=new android.widget.EditText(this);
+            invitation.setSingleLine(true);
+            invitation.setHint("chkinvite_…");
+            fields.addView(invitation);
             new AgentDialog.Builder(this).setTitle("Association sécurisée · Local 3")
-                .setMessage("Crée une invitation avec app_invite dans ChatGPT Local 3. "
-                    +"Colle son code ici. Elle sera utilisée une seule fois.")
-                .setView(input)
+                .setMessage("Colle l'adresse HTTPS réelle de ton serveur MCP (ou son lien /mcp), "
+                    +"puis l'invitation app_invite à usage unique créée dans ChatGPT.")
+                .setView(fields)
                 .setNegativeButton("Annuler",null)
                 .setPositiveButton("Associer", (dialog,which)->{
+                    try {
+                        Local3Client.get(this).configureBase(endpoint.getText().toString());
+                    } catch(IllegalArgumentException error) {
+                        Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();
+                        return;
+                    }
                     local3Status.setText("Association au serveur personnel en cours…");
-                    Local3Client.get(this).pair(input.getText().toString(),(ok,message)->{
+                    Local3Client.get(this).pair(invitation.getText().toString(),(ok,message)->{
                         if(isFinishing()||isDestroyed())return;
                         if(ok){
                             local3.setChecked(true);
