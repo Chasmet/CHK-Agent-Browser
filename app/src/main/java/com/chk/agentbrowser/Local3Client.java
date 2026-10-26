@@ -198,7 +198,7 @@ public final class Local3Client {
             "publication_status"
         };
         String[] write={
-            "browser_upload_file","browser_fill_fields","workflow_run","workflow_resume","workflow_cancel",
+            "browser_upload_file","browser_download_file","browser_click_when_enabled","browser_fill_fields","workflow_run","workflow_resume","workflow_cancel",
             "android_action","browser_tabs","browser_open_url","browser_click",
             "browser_type","browser_scroll","browser_batch","files_write_text",
             "files_edit_text","files_move","files_copy","files_mkdir","files_trash",
