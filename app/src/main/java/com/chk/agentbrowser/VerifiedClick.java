@@ -50,7 +50,7 @@ public final class VerifiedClick {
         final String condition=BrowserScripts.condition(JSONObject.quote(expectedSelector),
                 JSONObject.quote(expectedText),JSONObject.quote(expectedUrl));
         final long start=SystemClock.elapsedRealtime();
-        final String originalUrl=web.getUrl();
+        final String originalUrl=web.getUrl()==null?"":web.getUrl();
         final SharedPreferences receipts=waitEnabled
                 ?web.getContext().getApplicationContext().getSharedPreferences("chk-click-once-v1",0):null;
         final String fingerprint=(originalUrl==null?"":originalUrl)+"|"+selector+"|"+
