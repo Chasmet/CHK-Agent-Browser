@@ -101,17 +101,54 @@ final class AgentVision {
         try{
             if(!p.optBoolean("capture",false)){cb.finish(true,info.toString());return;}
             if(!AgentClient.get(app).isPreviewAllowed())throw new Exception("Active le partage d’aperçus dans Réglages.");
-            Window window=root instanceof WebView?null:NativeKeyboard.window();
-            if(window!=null&&(window.getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)throw new Exception("Cette fenêtre protège sa capture.");
-            Bitmap bitmap=Bitmap.createBitmap(info.getInt("image_width"),info.getInt("image_height"),Bitmap.Config.ARGB_8888);
-            if(Build.VERSION.SDK_INT>=26&&window!=null&&NativeKeyboard.foreground()&&root.isAttachedToWindow()){
-                try{PixelCopy.request(window,bitmap,status->{
-                    if(!cb.isActive()){bitmap.recycle();return;}
-                    try{if(target(p,web)!=root||!context(root).equals(info.getString("context")))throw new Exception("Écran remplacé pendant la capture.");
-                        if(status==PixelCopy.SUCCESS)finish(bitmap,info,"window_pixels",cb);else draw(root,bitmap,info,cb);
-                    }catch(Exception e){bitmap.recycle();cb.finish(false,e.getMessage());}
-                },WorkspaceCommands.UI);return;}catch(IllegalArgumentException ignored){}
+            // A retained Android WebView can expose a complete DOM while its GPU
+            // content is absent from View.draw(). Never present skeleton placeholders
+            // as a verified visual preview.
+            final boolean isWeb=root instanceof WebView;
+            final Window window=NativeKeyboard.window();
+            final boolean foreground=NativeKeyboard.foreground();
+            if(isWeb&&!foreground){
+                info.put("capture_source","unavailable_background_webview")
+                    .put("visual_verified",false)
+                    .put("reason","WebView en arrière-plan : ouvrir CHK > Web pour afficher et vérifier les vrais pixels.");
+                cb.finish(true,info.toString());
+                return;
             }
+            if(window!=null&&(window.getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)
+                throw new Exception("Cette fenêtre protège sa capture.");
+            Bitmap bitmap=Bitmap.createBitmap(info.getInt("image_width"),info.getInt("image_height"),Bitmap.Config.ARGB_8888);
+            if(Build.VERSION.SDK_INT>=26&&window!=null&&foreground&&root.isAttachedToWindow()){
+                try{
+                    PixelCopy.OnPixelCopyFinishedListener listener=status->{
+                        if(!cb.isActive()){bitmap.recycle();return;}
+                        try{
+                            if(target(p,web)!=root||!context(root).equals(info.getString("context")))
+                                throw new Exception("Écran remplacé pendant la capture.");
+                            if(status==PixelCopy.SUCCESS){
+                                info.put("visual_verified",true);
+                                finish(bitmap,info,isWeb?"webview_window_pixels":"window_pixels",cb);
+                            }else if(isWeb){
+                                bitmap.recycle();
+                                cb.finish(false,"PixelCopy WebView indisponible ("+status+"). Revenir dans CHK > Web et réessayer la capture.");
+                            }else draw(root,bitmap,info,cb);
+                        }catch(Exception e){if(!bitmap.isRecycled())bitmap.recycle();cb.finish(false,e.getMessage());}
+                    };
+                    if(isWeb){
+                        int[] location=new int[2];root.getLocationInWindow(location);
+                        Rect bounds=new Rect(location[0],location[1],
+                            location[0]+root.getWidth(),location[1]+root.getHeight());
+                        if(bounds.left<0||bounds.top<0||bounds.isEmpty())
+                            throw new IllegalArgumentException("WebView partiellement hors écran");
+                        PixelCopy.request(window,bounds,bitmap,listener,WorkspaceCommands.UI);
+                    }else PixelCopy.request(window,bitmap,listener,WorkspaceCommands.UI);
+                    return;
+                }catch(IllegalArgumentException ignored){
+                    if(isWeb){bitmap.recycle();
+                        cb.finish(false,"WebView hors zone capturable : ouvrir CHK > Web et relancer la capture.");return;}
+                }
+            }
+            if(isWeb){bitmap.recycle();
+                cb.finish(false,"Capture WebView réelle indisponible : CHK doit être visible au premier plan.");return;}
             draw(root,bitmap,info,cb);
         }catch(Exception e){cb.finish(false,e.getMessage()==null?"Vision indisponible.":e.getMessage());}
     }
