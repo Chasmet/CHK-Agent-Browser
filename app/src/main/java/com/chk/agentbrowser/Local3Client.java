@@ -21,7 +21,7 @@ import java.util.concurrent.Executors;
  * App secret is provisioned once with the Universal Control invitation.
  */
 public final class Local3Client {
-    public static final String DEFAULT_BASE="https://chk-universal-1.taild9e4de.ts.net";
+    // Real owner-provided HTTPS endpoint, never a fabricated hostname.
     private static final String PREF="chk_local3_v1";
     private static Local3Client instance;
     private final Context app;
@@ -47,6 +47,37 @@ public final class Local3Client {
     public boolean isExecuting(){return executing || !p.getString("outbox","").isEmpty();}
     public int sessionGeneration(){return generation;}
     public boolean paired(){return !p.getString("app_id","").isEmpty()&&!p.getString("secret","").isEmpty();}
+    public String serverUrl(){return p.getString("server_url","");}
+    /** Accept a secure server base URL or its /mcp endpoint; refuse tokenized links. */
+    public static String normalizeUrl(String raw){
+        try{
+            java.net.URI uri=new java.net.URI(raw==null?"":raw.trim());
+            if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null
+                ||uri.getHost().trim().isEmpty()||uri.getRawUserInfo()!=null
+                ||uri.getRawQuery()!=null||uri.getRawFragment()!=null)
+                throw new IllegalArgumentException("Adresse HTTPS MCP invalide.");
+            String path=uri.getPath();
+            if(!("".equals(path)||"/".equals(path)||"/mcp".equals(path)||"/mcp/".equals(path)))
+                throw new IllegalArgumentException("Colle l'adresse racine du serveur ou son lien /mcp.");
+            int port=uri.getPort();
+            if(port==0||port>65535||port < -1)
+                throw new IllegalArgumentException("Port HTTPS invalide.");
+            return "https://"+uri.getRawAuthority();
+        }catch(java.net.URISyntaxException e){
+            throw new IllegalArgumentException("Adresse HTTPS MCP invalide.");
+        }
+    }
+    public void configureBase(String provided){
+        String normalized=normalizeUrl(provided);
+        if(normalized.equals(serverUrl()))return;
+        stop();
+        // Never send a previous server's credentials or unacknowledged results elsewhere.
+        if(!p.edit().putString("server_url",normalized).remove("app_id").remove("secret")
+            .remove("outbox").remove("leased_task").putBoolean("enabled",false).commit())
+            throw new IllegalStateException("Enregistrement sécurisé impossible.");
+        lastContact=0;
+        status="Serveur configuré · association nécessaire";
+    }
     public String status(){
         if(!enabled())return "Désactivé";
         if(!paired())return "Activé · association sécurisée nécessaire";
@@ -57,7 +88,7 @@ public final class Local3Client {
     }
     public String diagnostic(){
         String id=p.getString("app_id","");
-        return "Local 3 : "+status()+"\nHôte : "+DEFAULT_BASE.replace("https://","")
+        return "Local 3 : "+status()+"\nHôte : "+(serverUrl().isEmpty()?"non configuré":serverUrl().replace("https://",""))
             +"\nIdentifiant : "+(id.isEmpty()?"non associé":id)
             +"\nAppels Render / Supabase par ce canal : aucun"
             +"\nÉchecs consécutifs : "+errors
@@ -70,7 +101,7 @@ public final class Local3Client {
         if(on){status=paired()?"Connexion à CHK Universal Control":"Association nécessaire";start();}
     }
     public void start(){
-        if(!enabled()||!paired()||running)return;
+        if(!enabled()||!paired()||serverUrl().isEmpty()||running)return;
         running=true;main.post(loop);
     }
     public void stop(){
@@ -89,6 +120,9 @@ public final class Local3Client {
         String code=invitation==null?"":invitation.trim();
         if(!code.matches("chkinvite_[A-Za-z0-9_-]{20,}")){
             callback.complete(false,"Invitation invalide. Crée une invitation avec app_invite dans Local 3.");return;
+        }
+        if(serverUrl().isEmpty()){
+            callback.complete(false,"Configure d’abord le lien HTTPS du serveur Local 3.");return;
         }
         io.execute(()->{
             try{
@@ -141,7 +175,9 @@ public final class Local3Client {
         return a;
     }
     private JSONObject request(String method,String route,JSONObject payload,String secret)throws Exception{
-        URL u=new URL(DEFAULT_BASE+route);
+        String base=serverUrl();
+        if(base.isEmpty())throw new java.io.IOException("Serveur Local 3 non configuré");
+        URL u=new URL(base+route);
         HttpURLConnection c=(HttpURLConnection)u.openConnection();
         try{
             c.setRequestMethod(method);c.setConnectTimeout(9000);c.setReadTimeout(25000);
