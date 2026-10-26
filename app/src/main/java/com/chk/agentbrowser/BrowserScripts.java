@@ -94,7 +94,7 @@ public final class BrowserScripts {
 
     public static String click(String selectorLiteral) {
         return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");if(!el)return 'Élément introuvable';"
-            +"if(el.disabled)return 'Élément désactivé';el.scrollIntoView({block:'center',inline:'center'});mark(el);el.click();return 'Clic effectué';"
+            +"if(el.disabled||el.getAttribute('aria-disabled')==='true'||(el.closest&&el.closest('[inert]')))return 'Élément désactivé';el.scrollIntoView({block:'center',inline:'center'});mark(el);el.click();return 'Clic effectué';"
             +"}catch(e){return 'Erreur : '+e.message;}})()";
     }
     /** Inspects a live button without clicking it; disabled is not a failure. */
