@@ -17,6 +17,10 @@ public final class WorkspaceCommands {
     public static void run(Context context,String action,JSONObject args,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
         Context app=context.getApplicationContext();
+        if(action.equals("media_analyze_audio")||action.equals("media_listen")||action.equals("media_audio_capabilities")){
+            try{AgentHearing.execute(app,new JSONObject(args.toString()).put("operation",action.equals("media_listen")?"listen":action.equals("media_analyze_audio")?"analyze":"capabilities"),cb);}
+            catch(Exception e){finish(cb,false,e.getMessage());}return;
+        }
         if(action.equals("files_browser_capabilities")){finish(cb,true,BrowserAutomation.capabilities().toString());return;}
         if(action.equals("files_browser_upload_status")){
             try{finish(cb,true,BrowserAutomation.uploadStatus(app,args.getString("id")).toString());}
@@ -62,7 +66,7 @@ public final class WorkspaceCommands {
                 try{
                     if(!cb.isActive())return;
                     JSONObject result=MediaTranscriber.transcribe(app,request.getString("path"),
-                        request.optString("language","fr"),request.optInt("max_seconds",120));
+                        request.optString("language","fr"),request.optInt("max_seconds",120),request.optLong("start_ms",0),cb);
                     finish(cb,true,result.toString());
                 }catch(Exception e){finish(cb,false,e.getMessage()==null?"Transcription impossible.":e.getMessage());}
             });

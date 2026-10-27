@@ -43,7 +43,7 @@ public final class AgentControlIntegrationTest {
     }
     @After public void cleanup()throws Exception{
         for(String id:jobs){AgentTasks.requestCancel(id);try{AgentFiles.journal(app,"tasks",id).delete();}catch(Exception ignored){}}
-        ins.runOnMainSync(()->{if(dialog!=null)dialog.dismiss();if(activity!=null)activity.finish();});ins.waitForIdleSync();
+        ins.runOnMainSync(()->{if(activity!=null){android.view.inputmethod.InputMethodManager ime=(android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE);ime.hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0);}if(dialog!=null)dialog.dismiss();if(activity!=null)activity.finish();});ins.waitForIdleSync();
         ins.runOnMainSync(()->AgentClient.get(app).closeRetainedBrowser());app.stopService(new Intent(app,AgentService.class));
         for(String id:receipts)AgentFiles.journal(app,"control",id).delete();
         prefs.edit().putBoolean("enabled",oldEnabled).putBoolean("autonomous_mode",oldAuto).commit();local.edit().putBoolean("enabled",oldLocal).commit();

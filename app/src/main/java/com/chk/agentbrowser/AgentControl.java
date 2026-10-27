@@ -68,7 +68,7 @@ final class AgentControl {
         for(String lane:LOCKS.keySet())locks.put(new JSONObject().put("target",lane).put("request_id",LOCKS.get(lane)));
         return out.put("tabs",tabs).put("active_inputs",locks);
     }
-    private static WebView resolveWeb(Context app,JSONObject p,AgentClient.ResultCallback cb)throws Exception{
+    static WebView resolveWeb(Context app,JSONObject p,AgentClient.ResultCallback cb)throws Exception{
         AgentClient.CommandHandler browser=AgentClient.get(app).controlBrowser(cb);
         if(browser==null)throw new Exception("Ouvre le navigateur CHK ; aucun onglet conservé.");
         String tab=p.optString("tab_id","");
@@ -235,9 +235,9 @@ final class AgentControl {
         AgentClient.ResultCallback leased=new AgentClient.ResultCallback(){
             public boolean isLocal2(){return parent.isLocal2();}public boolean isLocal3(){return parent.isLocal3();}
             public String inputLease(){return owner;}public boolean isActive(){return !ended.get()&&parent.isActive();}
-            public void finish(boolean ok,String text){if(!ended.compareAndSet(false,true))return;WorkspaceCommands.UI.postDelayed(()->{release(lane,owner);if(parent.isActive())parent.finish(ok,text);},32L);}
+            public void finish(boolean ok,String text){if(!ended.compareAndSet(false,true))return;release(lane,owner);if(parent.isActive())parent.finish(ok,text);}
         };
-        WorkspaceCommands.UI.postDelayed(()->leased.finish(false,"Entrée interrompue : vérifier l'écran avant de la répéter."),30000L);return leased;
+        WorkspaceCommands.UI.postDelayed(()->{if(!ended.compareAndSet(false,true))return;WorkspaceCommands.UI.postDelayed(()->{release(lane,owner);if(parent.isActive())parent.finish(false,"Entrée interrompue : vérifier l'écran avant de la répéter.");},32L);},30000L);return leased;
     }
     private static void parallel(Context app,JSONObject p,AgentClient.ResultCallback cb)throws Exception{
         JSONArray jobs=p.getJSONArray("jobs");if(jobs.length()<1||jobs.length()>4)throw new Exception("Entre 1 et 4 workflows parallèles par demande.");

@@ -57,7 +57,10 @@ final class WorkspaceCapabilities {
         add(all,"media_info","Durée, pistes, résolution et métadonnées locales.","path:string");
         add(all,"media_frame","Image vidéo à time_ms (image clé la plus proche).","path:string","time_ms:integer?");
         add(all,"media_codecs","Codecs réellement disponibles sur cet Android.");
-        add(all,"media_transcribe","Transcription locale fr/en, modèle local requis.","path:string","language:string?","max_seconds:integer?");
+        add(all,"media_transcribe","Transcription locale fr/en, modèle local requis.","path:string","language:string?","max_seconds:integer?","start_ms:integer?");
+        add(all,"media_listen","Véritable extrait WAV PCM16 mono 16 kHz, 1..5 secondes ; transmettre audio_base64 comme AudioContent audio/wav, pas comme texte.","path:string","start_ms:integer?","max_seconds:integer?");
+        add(all,"media_analyze_audio","Mesure PCM par passage 1..120 secondes : niveaux dBFS, silences et maximum numérique suspect ; ni LUFS ni identité vocale.","path:string","start_ms:integer?","max_seconds:integer?","silence_dbfs:number?");
+        add(all,"media_audio_capabilities","Formats, limites et moteurs d'écoute disponibles.");
         add(all,"video_editor_capabilities","Fonctions Studio réellement disponibles sur ce téléphone.");
         add(all,"video_editor_project_import","Valide puis ouvre un montage JSON depuis Fichiers, sans perdre le projet précédent.","path:string");
         add(all,"video_editor_timeline","Modifications atomiques du projet visible : add/update/move/delete/settings. Photos 1..60 s, maximum 100 plans.","expected_revision:integer","operations:array");

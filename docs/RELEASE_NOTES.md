@@ -1,5 +1,7 @@
 ## Local 3 — contrôle unifié, vision après action et tâches concurrentes (27 octobre 2026)
 
+- Écoute ajoutée via desktop/tool=hearing : vrais extraits WAV de 1 à 5 secondes, mesure des niveaux/silences par passage de 120 secondes maximum, transcription locale fr/en avec position de départ. Les extraits choisis sont transmis au connecteur ; la transcription locale ne téléverse pas le fichier source. Aucun enregistrement automatique du microphone.
+- Décodage PCM WAV direct et extraction audio des MP4/compressions prises en charge par Android ; même moteur borné pour les transcriptions.
 - Nouveau contrôle intégré via desktop/tool=control : status, observe, act et parallel, utilisables avec le serveur PC 1.0.4 existant sans nouveau jumelage.
 - Chaque observation réunit vision et clavier, cible un onglet précis sans changer celui qui est affiché et fournit un identifiant temporaire. La révision est relue avant chaque entrée ; la vision et les champs sont relus après.
 - Reçus persistants pour les actions souris/clavier : relire une demande ne rejoue pas le geste ; une interruption reste inconnue jusqu’à inspection. Le geste envoyé et le résultat attendu confirmé sont distincts.

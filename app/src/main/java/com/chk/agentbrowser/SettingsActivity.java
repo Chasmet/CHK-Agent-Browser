@@ -166,6 +166,9 @@ public final class SettingsActivity extends Activity {
         TextView controlHelp=new TextView(this);
         controlHelp.setText("Contrôle dans CHK : vision, souris visible et clavier avec relecture du résultat. Jusqu’à 4 workflows peuvent avancer sur des onglets distincts, pendant les téléchargements ou un export Studio. Les gestes sur le même écran sont coordonnés. Les pixels cachés ne sont jamais annoncés comme une capture actuelle.");
         controlHelp.setPadding(16,8,16,12);group.addView(controlHelp,localInsert++);
+        TextView hearingHelp=new TextView(this);
+        hearingHelp.setText("Écoute des fichiers CHK : vrais extraits audio de 5 secondes, analyse des niveaux et silences par passage, transcription locale français/anglais. Le partage des aperçus autorise l'envoi des extraits choisis au connecteur ; le microphone n'est pas enregistré par cet outil.");
+        hearingHelp.setPadding(16,8,16,12);group.addView(hearingHelp,localInsert++);
         Button local3Pair=new Button(this);
         local3Pair.setAllCaps(false);
         local3Pair.setText("Associer Local 3 avec une invitation");

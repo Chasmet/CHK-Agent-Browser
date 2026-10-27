@@ -45,3 +45,23 @@ Les entrées d’onglets distincts peuvent se chevaucher. La souris et le clavie
 ## Validation
 
 Les tests instrumentés couvrent la saisie web et native avec relecture, un clic natif suivi de vision, la relecture sans double clic, un journal interrompu, une observation périmée, une collision sur la même cible, une saisie d’un autre onglet pendant un geste long et deux workflows durables indépendants. La suite complète et la signature sont vérifiées par le workflow APK existant avant publication.
+
+## Écouter les fichiers et les voix
+
+Le même `task_submit(action=desktop)` accepte `args.tool=hearing`. `local3_status.agent_hearing` et `hearing/status` indiquent les capacités et les modèles de transcription réellement installés.
+
+```json
+{"tool":"hearing","operation":"listen","path":"Audio/Voix.wav","start_ms":12000,"max_seconds":5}
+```
+
+`listen` décode un vrai passage et fournit `audio_base64`, `mime_type=audio/wav` et son SHA-256. Le client agent doit transmettre ces octets comme bloc MCP AudioContent (`type=audio`, `mimeType=audio/wav`) pour écouter le signal ; ne pas imprimer la chaîne Base64 comme texte ni affirmer avoir écouté une simple transcription. Le client d’orchestration peut extraire la réponse de `task_get` et utiliser son rendu audio. Si ce client ne sait pas recevoir de son, signaler cette limite, même si l’extrait a été produit.
+
+Les extraits sont PCM16 mono 16 kHz, bornés à 5 secondes pour le transport MCP ; choisir `start_ms` pour écouter d’autres passages. Seul le passage choisi est transmis, sous l’autorisation existante de partage d’aperçus. Le fichier source n’est pas modifié. Les sources Android jusqu’à 6 Go restent lues progressivement ; tous les formats et codecs propriétaires ne sont pas garantis.
+
+`hearing/analyze` accepte le même chemin, `start_ms`, `max_seconds` de 1 à 120 et `silence_dbfs` facultatif. Il mesure les niveaux RMS/crête en dBFS par canal, une enveloppe de 100 ms, les plages silencieuses et les échantillons proches du maximum numérique. Ce dernier indicateur suggère une saturation possible ; ce n’est pas une mesure LUFS ni une preuve de distorsion audible. Les mesures proviennent des échantillons décodés.
+
+`hearing/transcribe` accepte `language=fr|en`, `start_ms` et `max_seconds`. Le moteur Vosk s’exécute localement, après installation du modèle linguistique HTTPS au premier usage. La parole chantée ou bruitée peut être mal reconnue ; aucune identité du locuteur ou synchronisation phonétique n’est déduite. Le décodage direct WAV évite de demander un décodeur Android audio/raw inexistant.
+
+`hearing/media`, avec `tab_id` et `expected_host` facultatifs, lit les sources des éléments audio/vidéo du véritable onglet CHK. Cette découverte n’est pas une capture sonore. Pour une source HTTP/HTTPS accessible, utiliser le téléchargement durable vers CHK, puis écouter le fichier. Les flux blob, les contenus DRM et le son d’autres applications ne sont pas extraits automatiquement. Aucun microphone n’est enregistré.
+
+Les actions natives équivalentes `media_listen`, `media_analyze_audio`, `media_transcribe` et `media_audio_capabilities` passent également par android_action. Les analyses/transcriptions peuvent faire partie des workflows ; les extraits audio volumineux s’écoutent séparément.

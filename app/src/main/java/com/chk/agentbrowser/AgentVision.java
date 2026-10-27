@@ -81,7 +81,7 @@ final class AgentVision {
         web.layout(0,0,width,height);
     }
     static void guard(View root,JSONObject p)throws Exception{
-        if(!context(root).equals(p.optString("expected_context")))throw new Exception("Écran absent ou remplacé : observe l’écran avant le geste.");
+        if(!context(root).equals(p.optString("expected_context")))throw new Exception("Écran absent ou remplacé : observe l’écran avant le geste. Attendu="+p.optString("expected_context")+" ; actuel="+context(root));
         String revision=root instanceof WebView?webRevisions.get((WebView)root):inspect(root).getString("revision");
         if(!p.optString("expected_revision").isEmpty()&&!p.optString("expected_revision").equals(revision))throw new Exception("L’interface a changé : observe à nouveau avant le geste.");
     }

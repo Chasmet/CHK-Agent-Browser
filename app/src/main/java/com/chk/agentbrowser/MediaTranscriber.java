@@ -35,6 +35,9 @@ final class MediaTranscriber {
     private MediaTranscriber(){}
 
     static JSONObject transcribe(Context app,String path,String language,int maxSeconds)throws Exception{
+        return transcribe(app,path,language,maxSeconds,0,null);
+    }
+    static JSONObject transcribe(Context app,String path,String language,int maxSeconds,long startMs,AgentClient.ResultCallback active)throws Exception{
         String lang=language==null?"fr":language.trim().toLowerCase(Locale.ROOT);
         if(!lang.equals("fr")&&!lang.equals("en"))throw new IOException("Langue disponible: fr ou en.");
         int seconds=Math.max(1,Math.min(180,maxSeconds));
@@ -44,9 +47,10 @@ final class MediaTranscriber {
         if(media.length()>WorkspaceStore.MAX_IMPORT)throw new IOException("Média trop volumineux.");
         File modelDir=ensureModel(app,lang);
         long start=SystemClock.elapsedRealtime();
-        String transcript=decode(media,modelDir,seconds);
+        String transcript=decode(media,modelDir,seconds,startMs,active);
         return new JSONObject().put("path",path).put("format","speech_to_text").put("language",lang)
             .put("text",transcript).put("max_seconds",seconds).put("engine","vosk_local")
+            .put("source_start_ms",startMs)
             .put("model",lang.equals("fr")?FR:EN).put("audio_uploaded",false)
             .put("elapsed_ms",SystemClock.elapsedRealtime()-start)
             .put("warning",transcript.isEmpty()?"Parole non détectée ou non intelligible.":"Transcription automatique à vérifier.");
@@ -63,7 +67,7 @@ final class MediaTranscriber {
         return folder.isDirectory()&&new File(folder,"am").isDirectory()
             &&new File(folder,"conf").isDirectory()&&new File(folder,"graph").isDirectory();
     }
-    private static File ensureModel(Context app,String lang)throws Exception{
+    private static synchronized File ensureModel(Context app,String lang)throws Exception{
         String name=lang.equals("fr")?FR:EN;
         File parent=new File(app.getFilesDir(),"speech_models");
         if(!parent.exists()&&!parent.mkdirs())throw new IOException("Stockage des modèles indisponible.");
@@ -133,89 +137,19 @@ final class MediaTranscriber {
         if(f.isDirectory()){File[] a=f.listFiles();if(a!=null)for(File child:a)deleteTree(child);}
         f.delete();
     }
-    private static String decode(File media,File modelDir,int seconds)throws Exception{
-        MediaExtractor extractor=new MediaExtractor();
-        MediaCodec codec=null;
-        try{
-            extractor.setDataSource(media.getAbsolutePath());
-            int index=-1;
-            MediaFormat format=null;
-            for(int i=0;i<extractor.getTrackCount();i++){
-                MediaFormat candidate=extractor.getTrackFormat(i);
-                if(candidate.getString(MediaFormat.KEY_MIME).startsWith("audio/")){index=i;format=candidate;break;}
-            }
-            if(index<0||format==null)throw new IOException("Aucune piste audio décodable.");
-            extractor.selectTrack(index);
-            codec=MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));
-            codec.configure(format,null,null,0);
-            codec.start();
-            try(Model model=new Model(modelDir.getAbsolutePath());Recognizer recognizer=new Recognizer(model,OUTPUT_RATE)){
-                return pump(extractor,codec,recognizer,format,seconds);
-            }
-        }finally{
-            if(codec!=null){try{codec.stop();}catch(Exception ignored){}codec.release();}
-            extractor.release();
-        }
-    }
-    private static String pump(MediaExtractor extractor,MediaCodec codec,Recognizer recognizer,MediaFormat initial,int maxSeconds)throws Exception{
-        MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();
+    private static String decode(File media,File modelDir,int seconds,long startMs,AgentClient.ResultCallback active)throws Exception{
         StringBuilder all=new StringBuilder();
-        int rate=initial.containsKey(MediaFormat.KEY_SAMPLE_RATE)?initial.getInteger(MediaFormat.KEY_SAMPLE_RATE):OUTPUT_RATE;
-        int channels=initial.containsKey(MediaFormat.KEY_CHANNEL_COUNT)?initial.getInteger(MediaFormat.KEY_CHANNEL_COUNT):1;
-        PcmResampler resampler=new PcmResampler(rate,channels);
-        boolean inputDone=false,outputDone=false;
-        long processedSamples=0;
-        long deadline=SystemClock.elapsedRealtime()+145000L;
-        int idle=0;
-        while(!outputDone&&SystemClock.elapsedRealtime()<deadline){
-            if(!inputDone){
-                int slot=codec.dequeueInputBuffer(10000);
-                if(slot>=0){
-                    ByteBuffer input=codec.getInputBuffer(slot);
-                    if(input==null)throw new IOException("Buffer d'entrée audio indisponible.");
-                    input.clear();
-                    int size=extractor.readSampleData(input,0);
-                    if(size<0){
-                        codec.queueInputBuffer(slot,0,0,0,MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                        inputDone=true;
-                    }else{
-                        codec.queueInputBuffer(slot,0,size,Math.max(0,extractor.getSampleTime()),0);
-                        extractor.advance();
-                    }
+        try(Model model=new Model(modelDir.getAbsolutePath());Recognizer recognizer=new Recognizer(model,OUTPUT_RATE)){
+            final PcmResampler[] resampler={null};final int[] previous={0,0};
+            AudioDecoder.read(media,startMs,seconds,(data,rate,channels,time)->{
+                if(resampler[0]==null||previous[0]!=rate||previous[1]!=channels){resampler[0]=new PcmResampler(rate,channels);previous[0]=rate;previous[1]=channels;}
+                byte[] converted=resampler[0].convert(data);
+                if(converted.length>0&&recognizer.acceptWaveForm(converted,converted.length)){
+                    String segment=new JSONObject(recognizer.getResult()).optString("text","");if(!segment.isEmpty())all.append(segment).append(' ');
                 }
-            }
-            int output=codec.dequeueOutputBuffer(info,10000);
-            if(output==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){
-                MediaFormat decoded=codec.getOutputFormat();
-                int encoding=decoded.containsKey(MediaFormat.KEY_PCM_ENCODING)?decoded.getInteger(MediaFormat.KEY_PCM_ENCODING):2;
-                if(encoding!=2)throw new IOException("Codec PCM non 16 bits.");
-                rate=decoded.getInteger(MediaFormat.KEY_SAMPLE_RATE);
-                channels=decoded.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
-                resampler=new PcmResampler(rate,channels);
-            }else if(output>=0){
-                idle=0;
-                try{
-                    if(info.size>0){
-                        ByteBuffer data=codec.getOutputBuffer(output);
-                        if(data==null)throw new IOException("Buffer audio manquant.");
-                        data.position(info.offset);data.limit(info.offset+info.size);
-                        byte[] converted=resampler.convert(data);
-                        if(converted.length>0){
-                            processedSamples+=converted.length/2;
-                            if(recognizer.acceptWaveForm(converted,converted.length)){
-                                String segment=new JSONObject(recognizer.getResult()).optString("text","");
-                                if(!segment.isEmpty())all.append(segment).append(' ');
-                            }
-                        }
-                        if(processedSamples>=maxSeconds*OUTPUT_RATE)outputDone=true;
-                    }
-                    if((info.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0)outputDone=true;
-                }finally{codec.releaseOutputBuffer(output,false);}
-            }else if(++idle>200)throw new IOException("Décodage audio bloqué.");
+            },active);
+            String tail=new JSONObject(recognizer.getFinalResult()).optString("text","");if(!tail.isEmpty())all.append(tail);
         }
-        if(SystemClock.elapsedRealtime()>=deadline)throw new IOException("Transcription trop longue; réduire la durée.");
-        String tail=new JSONObject(recognizer.getFinalResult()).optString("text","");
-        if(!tail.isEmpty())all.append(tail);
         return all.toString().trim();
     }
     private static final class PcmResampler{
