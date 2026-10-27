@@ -66,17 +66,25 @@ final class AudioDecoder {
             for(int part=0;part<128&&in.getFilePointer()+8<=in.length();part++){
                 in.readFully(tag);String chunk=new String(tag,java.nio.charset.StandardCharsets.US_ASCII);long size=((long)Integer.reverseBytes(in.readInt()))&0xffffffffL,next=in.getFilePointer()+size+(size&1);
                 if(next<0||next>in.length()+1)throw new IOException("WAV tronqué ou taille invalide.");
-                if(chunk.equals("fmt ")){if(size<16)throw new IOException("Format WAV invalide.");type=Short.reverseBytes(in.readShort())&0xffff;channels=Short.reverseBytes(in.readShort())&0xffff;rate=Integer.reverseBytes(in.readInt());in.skipBytes(6);bits=Short.reverseBytes(in.readShort())&0xffff;}
+                if(chunk.equals("fmt ")){if(size<16)throw new IOException("Format WAV invalide.");type=Short.reverseBytes(in.readShort())&0xffff;channels=Short.reverseBytes(in.readShort())&0xffff;rate=Integer.reverseBytes(in.readInt());in.skipBytes(6);bits=Short.reverseBytes(in.readShort())&0xffff;if(type==65534&&size>=40){in.skipBytes(8);type=Short.reverseBytes(in.readShort())&0xffff;}}
                 if(chunk.equals("data")){offset=in.getFilePointer();length=size;if(rate>0)break;}
                 in.seek(next);
             }
-            if(type!=1||bits!=16)return false;
+            if(!(type==1&&(bits==8||bits==16||bits==24||bits==32)||type==3&&bits==32))return false;
             if(offset<0||channels<1||channels>8||rate<8000||rate>192000)throw new IOException("PCM WAV non pris en charge.");
-            long frameBytes=channels*2L,total=length/frameBytes;info.durationUs=total*1000000L/rate;
+            int sampleBytes=bits/8;long frameBytes=channels*(long)sampleBytes,total=length/frameBytes;info.durationUs=total*1000000L/rate;
             long first=start*rate/1000000L,last=Math.min(total,(long)Math.ceil(end*rate/1000000d));
-            if(first>=last)throw new IOException("Passage hors de l'audio.");in.seek(offset+first*frameBytes);byte[] buffer=new byte[65536-channels*2];int block=(buffer.length/(channels*2))*(channels*2);
+            if(first>=last)throw new IOException("Passage hors de l'audio.");in.seek(offset+first*frameBytes);byte[] buffer=new byte[65536];int block=(buffer.length/(int)frameBytes)*(int)frameBytes;
             for(long frame=first;frame<last;){if(active!=null&&!active.isActive())throw new IOException("Écoute interrompue.");int count=(int)Math.min(block,(last-frame)*frameBytes);in.readFully(buffer,0,count);
-                emit(ByteBuffer.wrap(buffer,0,count).order(ByteOrder.LITTLE_ENDIAN),rate,channels,frame*1000000L/rate,start,end,sink,info);frame+=count/frameBytes;}
+                ByteBuffer pcm=ByteBuffer.wrap(buffer,0,count).order(ByteOrder.LITTLE_ENDIAN);
+                if(type!=1||bits!=16){ByteBuffer converted=ByteBuffer.allocate(count/sampleBytes*2).order(ByteOrder.LITTLE_ENDIAN);while(pcm.remaining()>=sampleBytes){int value;
+                    if(type==3){float f=pcm.getFloat();if(Float.isNaN(f)||Float.isInfinite(f))throw new IOException("WAV contenant un échantillon non fini.");value=Math.max(-32768,Math.min(32767,Math.round(f*32768f)));}
+                    else if(bits==8)value=((pcm.get()&255)-128)<<8;
+                    else if(bits==24){int n=(pcm.get()&255)|((pcm.get()&255)<<8)|(pcm.get()<<16);value=n>>8;}
+                    else value=pcm.getInt()>>16;
+                    converted.putShort((short)value);
+                }converted.flip();pcm=converted;}
+                emit(pcm,rate,channels,frame*1000000L/rate,start,end,sink,info);frame+=count/frameBytes;}
             return true;
         }
     }

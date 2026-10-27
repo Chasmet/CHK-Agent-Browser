@@ -24,6 +24,8 @@ final class AgentVision {
     private static final java.util.WeakHashMap<WebView,String> webRevisions=new java.util.WeakHashMap<>();
     private static final java.util.WeakHashMap<WebView,JSONObject> webFrames=new java.util.WeakHashMap<>();
     private static String script;
+    private static final java.util.WeakHashMap<WebView,String> settledContexts=new java.util.WeakHashMap<>();
+    private static final java.util.WeakHashMap<WebView,Long> settledSince=new java.util.WeakHashMap<>();
     private AgentVision(){}
     static String digest(String s)throws Exception{
         byte[] bytes=MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
@@ -87,6 +89,19 @@ final class AgentVision {
     }
     interface Observation{void ready(JSONObject info);void failed(String error);}
     static void observeWeb(Context app,WebView web,Observation cb){
+        settleWeb(app,web,cb,0);
+    }
+    private static void settleWeb(Context app,WebView web,Observation cb,int attempt){
+        if(!BrowserWebState.alive(web)){cb.failed("Onglet fermé pendant l'observation.");return;}
+        ensureMeasured(web);String current=context(web);long now=android.os.SystemClock.elapsedRealtime();
+        if(!current.equals(settledContexts.get(web))){settledContexts.put(web,current);settledSince.put(web,now);}
+        if(now-settledSince.get(web)<180L){
+            if(attempt>=40){cb.failed("La taille de l'onglet change encore : attendre la fin du clavier ou de l'animation.");return;}
+            WorkspaceCommands.UI.postDelayed(()->settleWeb(app,web,cb,attempt+1),30L);return;
+        }
+        observeWebNow(app,web,cb);
+    }
+    private static void observeWebNow(Context app,WebView web,Observation cb){
         try{
             JSONObject initial=inspect(web);String expected=initial.getString("context");
             if(script==null){try(java.io.InputStream in=app.getAssets().open("agent_vision.js");ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[4096];int n;while((n=in.read(b))!=-1)out.write(b,0,n);script=new String(out.toByteArray(),StandardCharsets.UTF_8);}}

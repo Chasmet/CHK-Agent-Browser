@@ -53,6 +53,16 @@ public final class AgentHearingTest {
         try{AgentHearing.process(app,new JSONObject().put("path",path),false,new AgentClient.ResultCallback(){public boolean isActive(){return false;}public void finish(boolean ok,String text){fail();}});fail("Cancellation must stop PCM analysis");}
         catch(IOException expected){assertTrue(expected.getMessage().contains("interrompue"));}
     }
+    @Test public void studioPcm24AndFloat32WavAreDecodedWithoutAnAudioRawCodec()throws Exception{
+        for(int bits:new int[]{24,32}){
+            int bytes=bits/8;ByteBuffer data=ByteBuffer.allocate(16000*bytes+44).order(ByteOrder.LITTLE_ENDIAN);
+            data.put("RIFF".getBytes("US-ASCII")).putInt(data.capacity()-8).put("WAVEfmt ".getBytes("US-ASCII")).putInt(16).putShort((short)(bits==32?3:1)).putShort((short)1).putInt(16000).putInt(16000*bytes).putShort((short)bytes).putShort((short)bits).put("data".getBytes("US-ASCII")).putInt(data.capacity()-44);
+            for(int i=0;i<16000;i++)if(bits==32)data.putFloat(.25f);else data.put((byte)0).put((byte)0).put((byte)32);
+            try(FileOutputStream out=new FileOutputStream(source)){out.write(data.array());}
+            JSONObject result=AgentHearing.process(app,new JSONObject().put("path",path).put("max_seconds",1),false,null);
+            assertEquals(-12.041,result.getDouble("rms_dbfs"),.01);assertEquals(16000,result.getLong("frames"));
+        }
+    }
     @Test public void compressedAacAudioIsDecodedFromARealMp4()throws Exception{
         File video=new WorkspaceStore(app).file("silent-"+java.util.UUID.randomUUID()+".mp4");
         try(InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("editor-fixture.mp4");FileOutputStream out=new FileOutputStream(video)){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}
