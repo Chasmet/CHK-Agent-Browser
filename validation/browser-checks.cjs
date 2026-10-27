@@ -146,3 +146,29 @@ assert.equal(JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/form-verify.js
 field.type='password';
 assert.equal(JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/form-fill.js','utf8'),formContext)).ok,false);
 console.log('PASS: form readback, sensitive-field rejection and file-change receipt survives input reset');
+
+
+// Regression: Suno-style voice picker scrolls inside its own modal, never the page.
+const rect=()=>({left:25,right:680,top:180,bottom:850,width:655,height:670});
+const cards=[{innerText:'Paname offi',getBoundingClientRect:()=>rect()}];
+const innerList={scrollHeight:1600,clientHeight:350,scrollTop:0,getBoundingClientRect:()=>rect(),
+  querySelectorAll:(selector)=>selector==='*'?[]:selector.includes('article')?cards:[],
+  getAttribute:()=>null,hasAttribute:()=>false};
+const modal={scrollHeight:700,clientHeight:700,scrollTop:0,getBoundingClientRect:()=>rect(),
+  querySelectorAll:(selector)=>selector==='*'?[innerList]:[],
+  contains:element=>element===innerList,getAttribute:()=>null,hasAttribute:()=>false};
+const backgroundPage={scrollHeight:2300,clientHeight:700,scrollTop:0,getBoundingClientRect:()=>rect()};
+const scrollDoc={querySelector:(selector)=>selector.includes('dialog')?modal:null,
+  querySelectorAll:()=>[],scrollingElement:backgroundPage,documentElement:backgroundPage};
+const scrollContext={document:scrollDoc,innerWidth:900,innerHeight:1400,
+  getComputedStyle:e=>({display:'block',visibility:'visible',overflowY:e===innerList?'auto':'visible'})};
+const scrollOutcome=JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/scroll-list.js','utf8'),scrollContext));
+assert.equal(scrollOutcome.ok,true,JSON.stringify(scrollOutcome));
+assert.equal(scrollOutcome.moved,true);
+assert.equal(innerList.scrollTop,420);
+assert.equal(backgroundPage.scrollTop,0);
+const matched=JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/scroll-until.js','utf8'),scrollContext));
+assert.equal(matched.found,true,JSON.stringify(matched));
+assert.equal(matched.moved,false);
+assert.equal(innerList.scrollTop,420);
+console.log('PASS: nested voice picker moved 420 px, page unchanged, target visible without redundant scroll');
