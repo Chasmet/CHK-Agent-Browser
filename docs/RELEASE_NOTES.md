@@ -1,3 +1,19 @@
+## Local 3 principal — fichiers 6 Go et corrections du navigateur (27 octobre 2026)
+
+- Capacité de fichiers : 6 000 000 000 octets, offsets et tailles 64 bits, reprise par blocs, réservations disque et marge de sécurité. Le sélecteur WebView natif transmet les URI des gros médias ; les copies JavaScript/Blob gardent un plafond mémoire distinct.
+- HTTP et HTTPS partagent une politique de navigation, téléchargement, restauration et import ; le canal MCP et les mises à jour restent en HTTPS. Aucun contournement des certificats TLS.
+- Jusqu’à 24 onglets, identifiants de session stables acceptés par le champ id du connecteur, sélection indépendante des avertissements HTTP antérieurs.
+- Onglets créés en arrière-plan : viewport mesuré pour l’inspection DOM et le sélecteur natif. Les pixels cachés restent explicitement indisponibles ou marqués comme cache.
+- Les commandes Studio create/update/render sont raccordées aux véritables opérations du moteur. Une sauvegarde MCP Local 3 exige la révision attendue.
+- Téléchargements MCP durables : identifiant stable, suivi download_status, vérification du fichier/MP4 et SHA-256, import facultatif dans workspace_path sans écrasement. Un téléchargement en cours n’est pas déclaré terminé.
+- Workflows : téléchargement et opérations navigateur vérifiables, attente de fin sans répéter l’envoi, conservation intégrale des grands résultats dans un fichier référencé.
+- Réglages de compatibilité par site : mode ordinateur, cookies tiers, ouverture externe ; caméra/microphone/localisation web soumis au consentement du propriétaire et aux permissions Android.
+- PDF : lecture explicite des URL dynamiques et redirections bornées, sans transmettre les cookies à un autre domaine.
+- Messages réseau détaillés et reçus anti-doublon disponibles pour les clics standards également.
+- Tests : fichier sparse de 6 Go, lecture au-delà de 4 Go, navigation HTTP, onglets et faux HTTP 503, viewport, téléchargement natif terminé/importé et rejet de HTML déguisé en MP4.
+
+Les 6 Go concernent les fichiers et transferts, pas une allocation RAM. Les plafonds de décodage PDF/images et d’analyse restent bornés. Le moteur de lip-sync phonétique n’est pas ajouté ; la validation MP4 distingue ses contrôles techniques des lèvres et des niveaux audio. Les limites propres aux sites de téléversement restent applicables.
+
 ## Local 3 — compatibilité 1.0.4 et confirmation des actions (26 octobre 2026)
 
 - Synchronisation des capacités : négociation du catalogue exact du serveur 1.0.4 après HTTP 400. Les opérations avancées restent accessibles via le canal desktop existant, sans changer de serveur ni de jumelage.

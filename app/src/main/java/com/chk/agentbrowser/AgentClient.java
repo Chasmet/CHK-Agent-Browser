@@ -382,6 +382,8 @@ public final class AgentClient {
     }
     /** Local 3 delegates to the existing CHK browser / keyboard / workspace tools. */
     public void executeLocal3(String action, JSONObject args, DirectMcpServer.Reply reply) {
+        if(action.equals("video_editor_project_create")&&(args.has("project")||args.has("path")))action="video_editor_project_import";
+        action=Local3Commands.canonicalAction(action);
         if("local3_status".equals(action)){
             try{reply.finish(true,Local3Client.get(app).snapshot().toString());}
             catch(Exception e){reply.finish(false,"Diagnostic Local 3 indisponible");}
@@ -425,7 +427,8 @@ public final class AgentClient {
             if(completed.compareAndSet(false,true))reply.finish(false,
                 "Délai de commande locale dépassé · résultat non confirmé, aucune répétition automatique.");
         };
-        ui.postDelayed(timeout,150000L);
+        String actual="android_action".equals(action)?args.optString("action",action):action;
+        ui.postDelayed(timeout,TransferLimits.longOperation(actual)?900000L:150000L);
         executeLocal2Command(action,args,(ok,message)->{
             if(completed.compareAndSet(false,true)){
                 ui.removeCallbacks(timeout);
@@ -492,7 +495,7 @@ public final class AgentClient {
                         || KeyboardCommands.nativeTarget(cmd)
                         || DesktopCommands.handles(nativeAction,nativeArgs)
                         || nativeAction.equals(PublicationJobs.ACTION_SUBMIT)
-                        || nativeAction.equals("upload_file") || nativeAction.equals("select_option")
+                        || nativeAction.equals("download_file") || nativeAction.equals("upload_file") || nativeAction.equals("select_option")
                         || nativeAction.equals("check") || nativeAction.equals("get_page_status")
                         || nativeAction.equals("wait_for_element")
                         || nativeAction.equals("browser_task_submit")
@@ -545,9 +548,9 @@ public final class AgentClient {
                     default: reply.finish(false, "Action navigateur inconnue."); return;
                 }
                 if ("browser_open_url".equals(action) &&
-                    (!args.optString("url", "").startsWith("https://") ||
+                    (!BrowserPolicy.publicUrl(args.optString("url", "")) ||
                      args.optString("url", "").length() > 2000)) {
-                    reply.finish(false, "URL HTTPS invalide."); return;
+                    reply.finish(false, "URL HTTP/HTTPS publique invalide."); return;
                 }
                 if (("browser_click".equals(action) || "browser_type".equals(action)) &&
                     (args.optString("selector", "").isEmpty() ||

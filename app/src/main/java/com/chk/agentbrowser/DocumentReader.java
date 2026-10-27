@@ -46,9 +46,10 @@ public final class DocumentReader {
         if(url==null)return false;
         try{
             android.net.Uri u=android.net.Uri.parse(url);
-            if(!"https".equalsIgnoreCase(u.getScheme())||u.getHost()==null)return false;
+            if(!BrowserPolicy.webUrl(url)||u.getHost()==null)return false;
             String p=u.getPath()==null?"":u.getPath().toLowerCase(Locale.ROOT);
-            return p.endsWith(".pdf")||p.contains("affichage_document_pdf");
+            String query=u.getQuery()==null?"":u.getQuery().toLowerCase(Locale.ROOT);
+            return p.endsWith(".pdf")||p.contains("affichage_document_pdf")||query.contains("format=pdf")||query.contains("application/pdf");
         }catch(Exception e){return false;}
     }
     public static JSONObject readFile(Context app,String path,int page,int count,int offset)throws Exception{
@@ -105,15 +106,8 @@ public final class DocumentReader {
         }
     }
     public static JSONObject readWebPdf(Context app,String address,String cookies)throws Exception{
-        if(!webPdfCandidate(address))throw new IOException("La page courante n'est pas un PDF HTTPS reconnu.");
-        URL url=new URL(address);
-        HttpURLConnection c=(HttpURLConnection)url.openConnection();
-        c.setInstanceFollowRedirects(false);
-        c.setConnectTimeout(12000);
-        c.setReadTimeout(20000);
-        c.setRequestMethod("GET");
-        c.setRequestProperty("Accept","application/pdf");
-        if(cookies!=null&&!cookies.isEmpty())c.setRequestProperty("Cookie",cookies);
+        if(!BrowserPolicy.publicUrl(address))throw new IOException("Adresse PDF HTTP/HTTPS publique requise.");
+        HttpURLConnection c=pdfConnection(address,cookies);
         File temp=File.createTempFile("chk-private-pdf-", ".pdf", app.getCacheDir());
         try{
             if(c.getResponseCode()!=200)throw new IOException("Accès au PDF refusé (HTTP "+c.getResponseCode()+").");
@@ -141,6 +135,24 @@ public final class DocumentReader {
             c.disconnect();
             if(!temp.delete()&&temp.exists())temp.deleteOnExit();
         }
+    }
+    private static HttpURLConnection pdfConnection(String address,String cookies)throws Exception{
+        URL original=new URL(address),url=original;
+        for(int hop=0;hop<6;hop++){
+            if(!BrowserPolicy.publicUrl(url.toString()))throw new IOException("Redirection PDF non autorisée.");
+            HttpURLConnection connection=(HttpURLConnection)url.openConnection();
+            connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(12000);connection.setReadTimeout(20000);
+            connection.setRequestProperty("Accept","application/pdf");
+            if(cookies!=null&&!cookies.isEmpty()&&original.getProtocol().equalsIgnoreCase(url.getProtocol())
+                &&original.getHost().equalsIgnoreCase(url.getHost())&&original.getPort()==url.getPort())connection.setRequestProperty("Cookie",cookies);
+            int code=connection.getResponseCode();
+            if(code==301||code==302||code==303||code==307||code==308){
+                String location=connection.getHeaderField("Location");connection.disconnect();
+                if(location==null)throw new IOException("Redirection PDF sans destination.");url=new URL(url,location);continue;
+            }
+            return connection;
+        }
+        throw new IOException("Trop de redirections PDF.");
     }
     private static String ocrPdfPage(Context app,File pdf,int page)throws Exception{
         try(ParcelFileDescriptor descriptor=ParcelFileDescriptor.open(pdf,ParcelFileDescriptor.MODE_READ_ONLY);

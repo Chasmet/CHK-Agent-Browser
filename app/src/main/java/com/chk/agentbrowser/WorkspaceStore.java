@@ -15,7 +15,7 @@ import java.util.*;
 
 /** Durable private workspace. Writes are atomic; delete means recoverable trash. */
 public final class WorkspaceStore {
-    public static final long MAX_IMPORT=512L*1024*1024;
+    public static final long MAX_IMPORT=TransferLimits.MAX_FILE_BYTES;
     private final Context app;
     private final File root,trash;
     private final SQLiteDatabase db;
@@ -117,7 +117,7 @@ public final class WorkspaceStore {
         File temp=new File(target.getParentFile(),".import-"+UUID.randomUUID());long total=0;
         try(InputStream in=app.getContentResolver().openInputStream(source);FileOutputStream out=new FileOutputStream(temp)){
             if(in==null)throw new IOException("Fichier inaccessible");byte[] buf=new byte[32768];int n;
-            while((n=in.read(buf))!=-1){total+=n;if(total>MAX_IMPORT)throw new IOException("Fichier supérieur à 512 Mo");out.write(buf,0,n);}out.getFD().sync();
+            while((n=in.read(buf))!=-1){total+=n;if(total% (16L*1024*1024)<n)TransferLimits.requireSpace(temp,n);if(total>MAX_IMPORT)throw new IOException("Fichier supérieur à 6 Go");out.write(buf,0,n);}out.getFD().sync();
         }catch(Exception e){temp.delete();throw e;}
         if(target.exists()||!temp.renameTo(target)){temp.delete();throw new IOException("Enregistrement impossible");}return path;
     }

@@ -130,7 +130,7 @@ final class PublicationJobs {
             if(!(mime.startsWith("video/")||mime.startsWith("image/")||mime.startsWith("audio/")))
                 throw new Exception("Le fichier n'est pas un média autorisé : "+path);
             total+=f.length();if(total>WorkspaceStore.MAX_IMPORT)
-                throw new Exception("Sélection de médias supérieure à 512 Mo.");
+                throw new Exception("Sélection de médias supérieure à 6 Go.");
             checked.put(new JSONObject().put("path",path).put("size",f.length())
                 .put("updated",f.lastModified()).put("mime",mime));
         }

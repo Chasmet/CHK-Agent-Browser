@@ -37,7 +37,7 @@ public final class VerifiedClick {
             (expectedSelector.isEmpty() && expectedText.isEmpty() && expectedUrl.isEmpty()) ||
             expectedSelector.length()>340 || expectedText.length()>250 ||
             expectedUrl.length()>500 ||
-            (waitEnabled && !receiptId.matches("[A-Za-z0-9_-]{1,100}"))) {
+            (waitEnabled && receiptId.isEmpty()) || (!receiptId.isEmpty()&&!receiptId.matches("[A-Za-z0-9_-]{1,100}"))) {
             callback.finish(false,"Sélecteur, condition attendue et (en mode attente) receipt_id stable requis.");return;
         }
         if(!expectedHost.isEmpty()){
@@ -51,11 +51,11 @@ public final class VerifiedClick {
                 JSONObject.quote(expectedText),JSONObject.quote(expectedUrl));
         final long start=SystemClock.elapsedRealtime();
         final String originalUrl=web.getUrl()==null?"":web.getUrl();
-        final SharedPreferences receipts=waitEnabled
+        final SharedPreferences receipts=!receiptId.isEmpty()
                 ?web.getContext().getApplicationContext().getSharedPreferences("chk-click-once-v1",0):null;
         final String actionFingerprint="|"+selector+"|"+expectedSelector+"|"+expectedText+"|"+expectedUrl;
         final String fingerprint=originalUrl+actionFingerprint;
-        if(waitEnabled){
+        if(receipts!=null){
             String prior=receipts.getString(receiptId,"");
             if(!prior.isEmpty()){
                 // The accepted click can legitimately navigate to a new URL.

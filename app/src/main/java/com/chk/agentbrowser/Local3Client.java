@@ -144,6 +144,7 @@ public final class Local3Client {
             .put("enabled",enabled()).put("paired",paired()).put("status",status())
             .put("autonomous",autonomousAllowed()).put("persistent_permissions",persistentPermissions())
             .put("permission_sync",permissionStatus).put("request_quota",JSONObject.NULL)
+            .put("max_file_bytes",TransferLimits.MAX_FILE_BYTES).put("max_tabs",BrowserPolicy.MAX_TABS)
             .put("previews_allowed",AgentClient.get(app).isPreviewAllowed())
             .put("capability_sync",capabilityStatus).put("last_action",lastAction)
             .put("last_outcome",lastOutcome).put("result_pending",!p.getString("outbox","").isEmpty());
@@ -278,6 +279,12 @@ public final class Local3Client {
         if(result==null)return "";
         if(result.getBytes(StandardCharsets.UTF_8).length<=240000
             &&new JSONObject().put("message",result).toString().getBytes(StandardCharsets.UTF_8).length<=330000)return result;
+        return resultFile(app,result);
+    }
+    static String compactWorkflowResult(Context app,String result)throws Exception{
+        return result.getBytes(StandardCharsets.UTF_8).length<=26000?result:resultFile(app,result);
+    }
+    private static String resultFile(Context app,String result)throws Exception{
         byte[] bytes=result.getBytes(StandardCharsets.UTF_8);
         WorkspaceStore store=new WorkspaceStore(app);
         java.io.File directory=store.file("AgentResults");

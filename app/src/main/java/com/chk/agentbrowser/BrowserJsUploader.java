@@ -70,7 +70,7 @@ public final class BrowserJsUploader {
                             if(n>=0&&!c.isNull(n))name=c.getString(n);
                             int size=c.getColumnIndex(OpenableColumns.SIZE);
                             if(size>=0&&!c.isNull(size)&&c.getLong(size)>MAX_TOTAL-total)
-                                throw new Exception("Import MCP limité à 32 Mo. Utilise la sélection CHK pour les fichiers plus volumineux.");
+                                throw new Exception("Copie JavaScript limitée à 32 Mo (import natif jusqu’à 6 Go). Utilise la sélection CHK pour les fichiers plus volumineux.");
                         }
                     }
                     String mime=app.getContentResolver().getType(uri);
@@ -84,7 +84,7 @@ public final class BrowserJsUploader {
                         int n;
                         while((n=stream.read(buffer))!=-1){
                             if(n==0)continue;
-                            total+=n;if(total>MAX_TOTAL)throw new Exception("Import MCP limité à 32 Mo, utiliser la sélection CHK pour les gros fichiers");
+                            total+=n;if(total>MAX_TOTAL)throw new Exception("Copie JavaScript limitée à 32 Mo (import natif jusqu’à 6 Go), utiliser la sélection CHK pour les gros fichiers");
                             String part=Base64.encodeToString(buffer,0,n,Base64.NO_WRAP);
                             String append="(function(){try{"+stage
                                 +"if(!s||!s.files["+i+"])return 'STAGE_LOST';"

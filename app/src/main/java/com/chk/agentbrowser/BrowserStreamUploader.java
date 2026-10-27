@@ -66,7 +66,7 @@ final class BrowserStreamUploader {
         final Context app=context.getApplicationContext();final String token=UUID.randomUUID().toString();
         final String page=web.getUrl();final long version=BrowserWebState.documentVersion(web);
         try{
-            if(page==null||!page.startsWith("https://")||uris==null||uris.length<1||uris.length>8)throw new Exception("Page HTTPS et sélection locale requises.");
+            if(page==null||!BrowserPolicy.webUrl(page)||uris==null||uris.length<1||uris.length>8)throw new Exception("Page HTTPS et sélection locale requises.");
             JSONArray files=new JSONArray();long total=0;
             for(Uri uri:uris){
                 if(uri==null||!"content".equals(uri.getScheme())||!(app.getPackageName()+".browserfiles").equals(uri.getAuthority()))throw new Exception("URI locale CHK requise.");
@@ -75,9 +75,9 @@ final class BrowserStreamUploader {
                     if(c==null||!c.moveToFirst())throw new Exception("Fichier illisible.");
                     name=c.getString(c.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME));size=c.getLong(c.getColumnIndexOrThrow(OpenableColumns.SIZE));
                 }
-                if(size<=0||size>WorkspaceStore.MAX_IMPORT-total)throw new Exception("Sélection vide ou supérieure à 512 Mio.");
-                total+=size;String key=UUID.randomUUID().toString();
-                String address=new Uri.Builder().scheme("https").encodedAuthority(Uri.parse(page).getEncodedAuthority())
+                if(size<=0||size>WorkspaceStore.MAX_IMPORT-total)throw new Exception("Sélection vide ou supérieure à 6 Go.");
+                total+=size;if(total>64L*1024*1024)throw new Exception("Utilise le sélecteur natif pour les gros fichiers (jusqu’à 6 Go), sans copie Blob en mémoire.");String key=UUID.randomUUID().toString();
+                String address=new Uri.Builder().scheme(Uri.parse(page).getScheme()).encodedAuthority(Uri.parse(page).getEncodedAuthority())
                     .encodedPath(PREFIX+key).build().toString();
                 TICKETS.put(key,new Ticket(web,app,uri,address,size));
                 String mime=app.getContentResolver().getType(uri);

@@ -19,7 +19,7 @@ final class BrowserWebState {
     static void remember(WebView web,String url){
         BrowserStreamUploader.revoke(web);
         DOCUMENTS.put(web,documentVersion(web)+1);
-        if(url!=null&&url.startsWith("https://"))URLS.put(web,url);
+        if(url!=null&&BrowserPolicy.webUrl(url))URLS.put(web,url);
     }
     static long documentVersion(WebView web){Long version=DOCUMENTS.get(web);return version==null?0:version;}
     /** Page-start alone may still expose the previous document on same-URL reloads. */

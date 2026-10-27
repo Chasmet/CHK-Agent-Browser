@@ -45,7 +45,7 @@ final class WorkspaceTransfer {
         JSONObject state;
         if(action.equals("files_transfer_begin")){
             String path=p.getString("path"),sha=p.getString("sha256");long size=p.getLong("size");
-            if(size<0||size>WorkspaceStore.MAX_IMPORT||!sha.matches("[a-f0-9]{64}"))throw new IOException("Taille 0..512 Mo et SHA-256 minuscule requis.");
+            if(size<0||size>WorkspaceStore.MAX_IMPORT||!sha.matches("[a-f0-9]{64}"))throw new IOException("Taille 0..6 Go et SHA-256 minuscule requis.");
             File destination=store.file(path);
             if(journal.exists()){
                 state=AgentFiles.read(journal);
@@ -57,10 +57,11 @@ final class WorkspaceTransfer {
                     JSONObject prior=AgentFiles.read(f);String status=prior.optString("state");
                     if(status.equals("receiving")||status.equals("committing")){
                         if(path.equals(prior.optString("path")))throw new IOException("Destination réservée par un autre transfert.");
-                        count++;reserved+=prior.optLong("size");
+                        count++;reserved+=Math.max(0,prior.optLong("size")-prior.optLong("received"));
                     }
                 }
-                if(count>=32||reserved+size>2L*1024*1024*1024)throw new IOException("Transferts actifs saturés : terminer ou annuler les précédents.");
+                if(count>=32||reserved+size>TransferLimits.MAX_ACTIVE_BYTES)throw new IOException("Transferts actifs saturés : terminer ou annuler les précédents.");
+                TransferLimits.requireSpace(destination,reserved+size);
                 // Publish metadata first. A crash before the first chunk is safely resumable at zero.
                 state=new JSONObject().put("id",id).put("path",path).put("size",size).put("sha256",sha).put("received",0).put("state","receiving");
                 AgentFiles.save(journal,state);

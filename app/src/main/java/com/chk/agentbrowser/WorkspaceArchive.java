@@ -43,7 +43,7 @@ final class WorkspaceArchive {
                 try(FileOutputStream file=new FileOutputStream(stage);ZipOutputStream zip=new ZipOutputStream(file)){
                     add(store,path,source.getName(),zip,count,0);zip.finish();file.getFD().sync();
                 }
-                if(stage.length()>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive supérieure à 512 Mo.");
+                if(stage.length()>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive supérieure à 6 Go.");
             }else if(action.equals("files_unzip")){
                 if(!source.isFile()||source.length()>WorkspaceStore.MAX_IMPORT||!stage.mkdir())throw new IOException("Archive inaccessible ou trop grande.");
                 Set<String> names=new HashSet<>();
@@ -81,7 +81,7 @@ final class WorkspaceArchive {
         }
     }
     private static void copy(InputStream in,OutputStream out,Counter count)throws Exception{
-        byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1){count.check();count.bytes+=n;if(count.bytes>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive décompressée supérieure à 512 Mo.");out.write(buffer,0,n);}
+        byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1){count.check();count.bytes+=n;if(count.bytes>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive décompressée supérieure à 6 Go.");out.write(buffer,0,n);}
     }
     static void remove(File f){if(f.isDirectory()){File[] children=f.listFiles();if(children!=null)for(File child:children)remove(child);}f.delete();}
     private static final class Counter{

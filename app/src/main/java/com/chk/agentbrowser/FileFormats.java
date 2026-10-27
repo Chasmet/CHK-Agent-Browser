@@ -62,7 +62,7 @@ final class FileFormats {
             .put("warning",warning).put("safe_preview",true).put("executes_content",false);
     }
     static ZipFile zip(File file)throws Exception{
-        if(file.length()>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive supérieure à 512 Mo");
+        if(file.length()>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive supérieure à 6 Go");
         try(RandomAccessFile in=new RandomAccessFile(file,"r")){int size=(int)Math.min(65557,file.length());byte[] tail=new byte[size];in.seek(file.length()-size);in.readFully(tail);boolean found=false;
             for(int i=size-22;i>=0;i--)if(ascii(tail,i,"PK\005\006")){
                 int comment=(tail[i+20]&255)|((tail[i+21]&255)<<8);if(i+22+comment!=size)continue;found=true;

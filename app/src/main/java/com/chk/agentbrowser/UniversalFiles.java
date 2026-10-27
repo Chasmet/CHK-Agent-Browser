@@ -51,9 +51,9 @@ final class UniversalFiles {
             return new JSONObject().put("format","opendocument").put("text",text.toString()).put("extraction","text_only");}
     }
     static JSONObject archiveList(Context app,String path,int offset)throws Exception{
-        if(offset<0)throw new IOException("Position archive invalide");File file=new WorkspaceStore(app).file(path);if(file.length()>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive supérieure à 512 Mo");JSONArray entries=new JSONArray();
+        if(offset<0)throw new IOException("Position archive invalide");File file=new WorkspaceStore(app).file(path);if(file.length()>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive supérieure à 6 Go");JSONArray entries=new JSONArray();
         try(ZipFile zip=FileFormats.zip(file)){if(zip.size()>5000)throw new IOException("Archive limitée à 5000 entrées");Enumeration<? extends ZipEntry> it=zip.entries();int index=0;long total=0;
-            while(it.hasMoreElements()){ZipEntry entry=it.nextElement();if(entry.getSize()>0){total+=entry.getSize();if(total>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive décompressée supérieure à 512 Mo");}if(index>=offset&&index<offset+100)entries.put(new JSONObject().put("name",entry.getName()).put("directory",entry.isDirectory()).put("size_bytes",entry.getSize()).put("compressed_bytes",entry.getCompressedSize()));index++;}
+            while(it.hasMoreElements()){ZipEntry entry=it.nextElement();if(entry.getSize()>0){total+=entry.getSize();if(total>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive décompressée supérieure à 6 Go");}if(index>=offset&&index<offset+100)entries.put(new JSONObject().put("name",entry.getName()).put("directory",entry.isDirectory()).put("size_bytes",entry.getSize()).put("compressed_bytes",entry.getCompressedSize()));index++;}
             return new JSONObject().put("entries",entries).put("total",index).put("next_offset",offset+100<index?offset+100:-1).put("text",entries.toString(2));
         }catch(ZipException ex){throw new IOException("ZIP corrompu, chiffré ou algorithme non pris en charge",ex);}
     }
@@ -70,7 +70,7 @@ final class UniversalFiles {
                 if(name.endsWith("/"))name=name.substring(0,name.length()-1);if(name.isEmpty()||name.split("/",-1).length>24||!names.add(name))throw new IOException("Entrée ZIP invalide, répétée ou trop profonde");
                 File output=WorkspacePaths.resolve(stage,name,false);if(!output.getParentFile().isDirectory()&&!output.getParentFile().mkdirs())throw new IOException("Parent d’entrée invalide");
                 if(entry.isDirectory()){if(!output.isDirectory()&&!output.mkdir())throw new IOException("Dossier ZIP invalide");}
-                else{if(output.exists())throw new IOException("Conflit entre entrées ZIP");try(InputStream in=zip.getInputStream(entry);FileOutputStream out=new FileOutputStream(output)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1){if(active!=null&&!active.isActive())throw new IOException("Extraction arrêtée");total+=n;if(total>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive décompressée supérieure à 512 Mo");out.write(b,0,n);}out.getFD().sync();}}
+                else{if(output.exists())throw new IOException("Conflit entre entrées ZIP");try(InputStream in=zip.getInputStream(entry);FileOutputStream out=new FileOutputStream(output)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1){if(active!=null&&!active.isActive())throw new IOException("Extraction arrêtée");total+=n;if(total>WorkspaceStore.MAX_IMPORT)throw new IOException("Archive décompressée supérieure à 6 Go");out.write(b,0,n);}out.getFD().sync();}}
                 count++;
             }
             if(count==0||selected!=null&&count!=wanted.size())throw new IOException("Entrées sélectionnées absentes de l’archive");

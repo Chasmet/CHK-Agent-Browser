@@ -34,14 +34,14 @@ final class WorkspaceCapabilities {
         add(all,"files_edit_text","Modifie le texte seulement si SHA-256 attendu correspond ; conserve l’ancienne version en corbeille.","path:string","text:string","expected_sha256:string");
         add(all,"files_read_text","Lecture progressive Unicode ou extraction des documents pris en charge.","path:string","offset:integer?","page:integer?","page_count:integer?");
         add(all,"files_read_bytes","Lecture Base64 par blocs de 8 Ko (compatibilité).","path:string","offset:integer?");
-        add(all,"files_copy","Copie fichier ou dossier privé sans écraser, vérifie SHA-256 des fichiers ; 5 000 entrées / 512 Mo maximum.","path:string","destination:string");
+        add(all,"files_copy","Copie fichier ou dossier privé sans écraser, vérifie SHA-256 des fichiers ; 5 000 entrées / 6 Go maximum.","path:string","destination:string");
         add(all,"files_move","Déplace ou renomme sans écraser.","path:string","destination:string");
         add(all,"files_trash","Retrait récupérable dans la corbeille Android.","path:string");
         add(all,"files_trash_list","Liste les éléments restaurables.");
         add(all,"files_restore","Restaure avec contrôle de destination.","id:string");
-        add(all,"files_zip","Sauvegarde fichier ou dossier en ZIP, 5 000 entrées / 512 Mo maximum.","path:string","destination:string");
+        add(all,"files_zip","Sauvegarde fichier ou dossier en ZIP, 5 000 entrées / 6 Go maximum.","path:string","destination:string");
         add(all,"files_unzip","Extraction dans un nouveau dossier, chemins confinés et quota décompressé.","path:string","destination:string");
-        add(all,"files_transfer_begin","Import binaire reprenable : id stable, taille 0..536870912, SHA-256 minuscule ; pas d’écrasement.","id:string","path:string","size:integer","sha256:string");
+        add(all,"files_transfer_begin","Import binaire reprenable : id stable, taille 0..6000000000, SHA-256 minuscule ; pas d’écrasement.","id:string","path:string","size:integer","sha256:string");
         add(all,"files_transfer_write","Écrit 1..49152 octets à received ; un bloc identique rejoué est sans effet.","id:string","offset:integer","base64:string","chunk_sha256:string?");
         add(all,"files_transfer_status","Relit le point de reprise durable après interruption.","id:string");
         add(all,"files_transfer_commit","Vérifie taille et SHA-256 puis publie atomiquement.","id:string");

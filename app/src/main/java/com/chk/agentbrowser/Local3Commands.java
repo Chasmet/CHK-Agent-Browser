@@ -5,6 +5,14 @@ import org.json.JSONObject;
 /** Direct Local 3 names reuse the existing, verified native handlers. */
 final class Local3Commands {
     private Local3Commands(){}
+    static String canonicalAction(String action){
+        switch(action){
+            case "video_editor_project_create":return "video_editor_project_new";
+            case "video_editor_project_update":return "video_editor_project_save";
+            case "video_editor_render":return "video_editor_export";
+            default:return action;
+        }
+    }
     static JSONObject translate(String action,JSONObject input)throws Exception{
         String tool,operation;
         switch(action){

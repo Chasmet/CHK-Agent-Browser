@@ -77,12 +77,13 @@ public final class BrowserNativeUploader {
             cb.finish(false,"Sélecteur ou fichiers invalides.");return;
         }
         if (!BrowserWebState.alive(web) || !cb.isActive()
-                || web.getUrl()==null || !web.getUrl().startsWith("https://")) {
+                || web.getUrl()==null || !BrowserPolicy.webUrl(web.getUrl())) {
             cb.finish(false,"La page HTTPS de destination est indisponible.");return;
         }
         if (ACTIVE.containsKey(web)) {
             cb.finish(false,"Un autre fichier est déjà en cours de sélection.");return;
         }
+        AgentVision.ensureMeasured(web);
         long total=0;JSONArray manifest=new JSONArray();
         try {
             String ownAuthority=context.getPackageName()+".browserfiles";
@@ -98,7 +99,7 @@ public final class BrowserNativeUploader {
                         throw new Exception("Taille de fichier absente.");
                     long size=c.getLong(ix);
                     if(size>WorkspaceStore.MAX_IMPORT-total)
-                        throw new Exception("La sélection dépasse 512 Mo.");
+                        throw new Exception("La sélection dépasse 6 Go.");
                     int ni=c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
                     if(ni<0||c.isNull(ni))throw new Exception("Nom du fichier absent.");
                     manifest.put(new JSONObject().put("name",c.getString(ni)).put("size",size));
@@ -119,7 +120,8 @@ public final class BrowserNativeUploader {
                     String problem=target.optString("error","Champ de fichier absent.");
                     if(pending.totalBytes<=JS_FALLBACK_LIMIT) {
                         BrowserJsUploader.upload(pending.context,web,selector,uris,cb);
-                    } else cb.finish(false,"Sélecteur natif non identifié : "+problem
+                    } else if(pending.totalBytes<=64L*1024*1024){BrowserStreamUploader.upload(pending.context,web,selector,uris,cb);}
+                    else cb.finish(false,"Sélecteur natif non identifié : "+problem
                         +". Aucun fichier envoyé. Ouvre le dialogue d'importation du site.");
                     return;
                 }
@@ -146,6 +148,8 @@ public final class BrowserNativeUploader {
                     if(!pending.valid()){cb.finish(false,"Page remplacée pendant l'importation.");return;}
                     if(pending.totalBytes<=JS_FALLBACK_LIMIT)
                         BrowserJsUploader.upload(pending.context,web,selector,uris,cb);
+                    else if(pending.totalBytes<=64L*1024*1024)
+                        BrowserStreamUploader.upload(pending.context,web,selector,uris,cb);
                     else
                         cb.finish(false,"Le site n'a pas ouvert son sélecteur natif. Aucun fichier n'a été envoyé. "
                             +"Le transfert local de "+pending.totalBytes+" octets nécessite un champ fichier activable dans cette WebView.");

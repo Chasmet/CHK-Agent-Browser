@@ -190,10 +190,35 @@ public final class Local2BrowserAutomationTest {
         assertTrue(done.await(5,TimeUnit.SECONDS));assertFalse(result.text,result.ok);
         assertTrue(result.text,result.text.contains("Chargement non confirmé"));
     }
-    @Test public void legacyDesktopDownloadUsesNativeHandlerAndRejectsNonHttps()throws Exception{
+    @Test public void legacyDesktopDownloadUsesNativeHandlerAndRejectsNonWebSchemes()throws Exception{
         open("example.com","<html><body>Download fixture</body></html>");
-        Result result=browserCall("download_file",new JSONObject().put("expected_host","example.com").put("url","http://example.com/file.mp4"));
+        Result result=browserCall("download_file",new JSONObject().put("expected_host","example.com").put("url","file:///not-a-web-download.mp4"));
         assertFalse(result.ok);assertTrue(result.text,result.text.contains("HTTPS"));
+    }
+    @Test public void httpDocumentsUseTheSameMcpNavigationAndReadbackPath()throws Exception{
+        WebView web=open("example.com","<html><body>Initial HTTPS fixture</body></html>");
+        WebFixture.load(instrument,web,"http://example.com/fixture","<html><body>HTTP fixture successfully loaded</body></html>","!!document.body");
+        Result navigation=call("browser_open_url",new JSONObject().put("url","http://example.com/fixture"));
+        assertTrue(navigation.text,navigation.ok);
+        assertTrue(call("browser_read_page",new JSONObject()).json().getString("text").contains("HTTP fixture successfully loaded"));
+    }
+    @Test public void stableTabIdSelectionSucceedsDespiteAnEarlierHttpWarning()throws Exception{
+        WebView web=open("example.com","<html><body>Functional document</body></html>");
+        JSONArray tabs=new JSONArray(call("browser_tabs",new JSONObject().put("operation","list")).text);
+        String id="";for(int i=0;i<tabs.length();i++)if(tabs.getJSONObject(i).getBoolean("active"))id=tabs.getJSONObject(i).getString("id");
+        assertTrue(id.startsWith("tab-"));
+        java.lang.reflect.Method error=MainActivity.class.getDeclaredMethod("pageError",WebView.class,String.class);error.setAccessible(true);
+        instrument.runOnMainSync(()->{try{error.invoke(browser,web,"Page inaccessible · HTTP 503");}catch(Exception e){throw new RuntimeException(e);}});
+        JSONObject selected=call("browser_tabs",new JSONObject().put("operation","switch").put("id",id)).json();
+        assertTrue(selected.getBoolean("selected"));assertTrue(selected.getString("network_warning").contains("503"));
+        assertTrue(call("browser_read_page",new JSONObject()).json().getString("text").contains("Functional document"));
+    }
+    @Test public void unmeasuredTabCanBeInspectedWithoutClaimingRealPixels()throws Exception{
+        WebView web=open("example.com","<html><body><button>Ready</button></body></html>");
+        instrument.runOnMainSync(()->web.layout(0,0,0,0));
+        JSONObject info=nativeCall("desktop",new JSONObject().put("tool","vision").put("target","web").put("capture",false)).json();
+        assertTrue(info.getInt("width")>0);assertTrue(info.getInt("height")>0);
+        assertTrue(info.getString("text").contains("Ready"));assertFalse(info.has("jpeg_base64"));
     }
     @Test public void uncertainClickCanBeConfirmedLaterWithoutRepeatingIt()throws Exception{
         WebView web=open("example.com","<html><body><button id='send' onclick='window.clicks=(window.clicks||0)+1'>Envoyer</button><p id='done'></p></body></html>");

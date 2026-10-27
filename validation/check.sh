@@ -11,3 +11,6 @@ node --check app/src/main/assets/agent_vision.js
 
 javac -d "$task_tmp" app/src/main/java/com/chk/agentbrowser/WorkspacePaths.java validation/WorkspacePathChecks.java
 java -cp "$task_tmp" WorkspacePathChecks "$task_tmp/workspace"
+
+javac -d "$task_tmp" app/src/main/java/com/chk/agentbrowser/BrowserPolicy.java app/src/main/java/com/chk/agentbrowser/TransferLimits.java validation/CapacityPolicyChecks.java
+java -cp "$task_tmp" CapacityPolicyChecks

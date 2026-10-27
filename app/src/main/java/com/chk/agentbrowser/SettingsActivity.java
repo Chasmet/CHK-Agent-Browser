@@ -56,6 +56,10 @@ public final class SettingsActivity extends Activity {
             Toast.makeText(this,enabled?"Mode éco activé : le traitement en veille peut être retardé":"Mode MCP réactif activé",Toast.LENGTH_LONG).show();
         });
         group.addView(ecoMode);
+        TextView capacity=new TextView(this);
+        capacity.setText("Fichiers jusqu’à 6 Go · transferts natifs et reprenables. Les aperçus et le décodage des documents gardent leurs limites mémoire.");
+        capacity.setPadding(16,12,16,12);group.addView(capacity);
+
         int localInsert = group.indexOfChild(findViewById(R.id.mcp_diagnostic)) + 1;
         TextView channels = new TextView(this);
         channels.setText("CONNEXIONS MCP INDÉPENDANTES");

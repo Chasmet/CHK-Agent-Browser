@@ -140,8 +140,8 @@ public class MainActivity extends Activity {
     private void openIntent(Intent intent){
         String launch=intent.getStringExtra("open_url"),cut=intent.getStringExtra("cutstudio_url");
         intent.removeExtra("open_url");intent.removeExtra("cutstudio_url");
-        if(launch!=null&&launch.startsWith("https://")){explicitPageOnResume=true;navigate(launch);}
-        if(cut!=null&&cut.startsWith("https://")){
+        if(launch!=null&&BrowserPolicy.webUrl(launch)){explicitPageOnResume=true;navigate(launch);}
+        if(cut!=null&&BrowserPolicy.webUrl(cut)){
             explicitPageOnResume=true;showSpace("browser");
             if(tabs.size()<12)newTab(cut);else navigate(cut);
         }
@@ -184,7 +184,7 @@ public class MainActivity extends Activity {
         address.clearFocus();
     }
     private void newTab(String url){
-        if(tabs.size()>=12){toast("Maximum 12 onglets : ferme un onglet pour en ouvrir un autre");return;}
+        if(tabs.size()>=BrowserPolicy.MAX_TABS){toast("Maximum 24 onglets : ferme un onglet pour en ouvrir un autre");return;}
         if(home!=null&&HOME.equals(url))home.newStart();
         WebView web=new WebView(new android.content.MutableContextWrapper(this));web.setBackgroundColor(Color.WHITE);configure(web);
         BrowserWebState.remember(web,url);
@@ -195,7 +195,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);
         s.setAllowFileAccess(false);s.setAllowContentAccess(false);
         s.setJavaScriptCanOpenWindowsAutomatically(true);s.setSupportMultipleWindows(true);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         s.setBuiltInZoomControls(true);s.setDisplayZoomControls(false);
         s.setUseWideViewPort(true);s.setLoadWithOverviewMode(true);
         s.setTextZoom(getSharedPreferences("mobile_ui",MODE_PRIVATE).getInt("text_zoom",100));
@@ -210,11 +210,12 @@ public class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
                 String scheme=request.getUrl().getScheme();
                 if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme))return false;
-                toast("Lien externe bloqué");return true;
+                if(request.isForMainFrame()&&request.hasGesture()&&BrowserSiteSettings.external(MainActivity.this,request.getUrl().toString()))return true;
+                toast("Lien externe indisponible");return true;
             }
             @SuppressWarnings("deprecation")
             @Override public boolean shouldOverrideUrlLoading(WebView v,String url){
-                if(url.startsWith("https://")||url.startsWith("http://"))return false;
+                if(BrowserPolicy.webUrl(url))return false;
                 toast("Lien non autorisé");return true;
             }
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap favicon){
@@ -227,7 +228,7 @@ public class MainActivity extends Activity {
                 applyCookiePolicy(v,url);if(v==current&&home!=null)home.page(url);
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
-                if(request.isForMainFrame())pageError(view,"Page inaccessible. Vérifie la connexion. Toucher pour réessayer.",request.getUrl().toString());
+                if(request.isForMainFrame())pageError(view,"Erreur réseau "+error.getErrorCode()+" · "+error.getDescription(),request.getUrl().toString());
             }
             @Override public void onPageCommitVisible(WebView view,String url){BrowserWebState.committed(view,url);}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,android.webkit.WebResourceResponse response){
@@ -250,8 +251,11 @@ public class MainActivity extends Activity {
             if(delta>8&&y>260)setBottomNavCollapsed(true);
             else if(delta< -8||y<48)setBottomNavCollapsed(false);
         });
-        web.setOnLongClickListener(v->{WebView.HitTestResult hit=web.getHitTestResult();if(hit==null||hit.getExtra()==null||!(hit.getType()==WebView.HitTestResult.SRC_ANCHOR_TYPE||hit.getType()==WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE))return false;String link=hit.getExtra();if(!link.startsWith("https://"))return false;new AgentDialog.Builder(this).setTitle("Lien").setMessage(link).setItems(new String[]{"Ouvrir dans un nouvel onglet","Copier le lien","Partager"},(d,i)->{if(i==0)newTab(link);else if(i==1){((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Lien",link));toast("Lien copié");}else startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,link),"Partager le lien"));}).show();return true;});
+        web.setOnLongClickListener(v->{WebView.HitTestResult hit=web.getHitTestResult();if(hit==null||hit.getExtra()==null||!(hit.getType()==WebView.HitTestResult.SRC_ANCHOR_TYPE||hit.getType()==WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE))return false;String link=hit.getExtra();if(!BrowserPolicy.webUrl(link))return false;new AgentDialog.Builder(this).setTitle("Lien").setMessage(link).setItems(new String[]{"Ouvrir dans un nouvel onglet","Copier le lien","Partager"},(d,i)->{if(i==0)newTab(link);else if(i==1){((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Lien",link));toast("Lien copié");}else startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,link),"Partager le lien"));}).show();return true;});
         web.setWebChromeClient(new WebChromeClient(){
+            @Override public void onPermissionRequest(android.webkit.PermissionRequest request){BrowserPermissions.media(MainActivity.this,web,request);}
+            @Override public void onGeolocationPermissionsShowPrompt(String origin,android.webkit.GeolocationPermissions.Callback callback){BrowserPermissions.location(MainActivity.this,origin,callback);}
+
             @Override public boolean onJsAlert(WebView web,String url,String message,android.webkit.JsResult result){
                 new AgentDialog.Builder(MainActivity.this).setTitle("Message du site").setMessage(message)
                     .setPositiveButton("OK",(d,w)->result.confirm()).setOnCancelListener(d->result.cancel()).show();return true;
@@ -275,7 +279,7 @@ public class MainActivity extends Activity {
             }
             @Override public void onReceivedTitle(WebView v,String title){if(v==current)refreshTabs();}
             @Override public boolean onCreateWindow(WebView view,boolean isDialog,boolean isUserGesture,android.os.Message resultMsg){
-                if(tabs.size()>=12){toast("Maximum 12 onglets");return false;}
+                if(tabs.size()>=BrowserPolicy.MAX_TABS){toast("Maximum 24 onglets");return false;}
                 WebView popup=new WebView(new android.content.MutableContextWrapper(MainActivity.this));popup.setBackgroundColor(Color.WHITE);configure(popup);
                 tabs.add(popup);select(popup);
                 WebView.WebViewTransport transport=(WebView.WebViewTransport)resultMsg.obj;
@@ -306,25 +310,15 @@ public class MainActivity extends Activity {
             }
         });
         web.setDownloadListener((url,userAgent,contentDisposition,mimeType,length)->{
-            if(!url.startsWith("https://")){toast("Téléchargement HTTPS uniquement");return;}
+            if(!BrowserPolicy.webUrl(url)){toast("Adresse de téléchargement HTTP ou HTTPS requise");return;}
             new AgentDialog.Builder(this).setTitle("Télécharger ce fichier ?")
                 .setMessage("Enregistrer dans les téléchargements de l'application ?")
                 .setNegativeButton("Annuler",null)
                 .setPositiveButton("Télécharger",(d,w)->startDownload(url,userAgent,contentDisposition,mimeType)).show();
         });
     }
-    private void applyCookiePolicy(WebView web,String url){
-        boolean allow=false;
-        try{
-            String host=Uri.parse(url==null?"":url).getHost();
-            if(host!=null){
-                host=host.toLowerCase(java.util.Locale.ROOT);
-                allow=host.equals("google.com")||host.endsWith(".google.com")
-                    ||host.endsWith(".googleusercontent.com")||host.endsWith(".gstatic.com");
-            }
-        }catch(Exception ignored){}
-        CookieManager.getInstance().setAcceptThirdPartyCookies(web,allow);
-    }
+    private void applyCookiePolicy(WebView web,String url){BrowserSiteSettings.apply(this,web,url);}
+
     private void startDownload(String url,String userAgent,String disposition,String mime){
         BrowserTransferManager.downloadToApp(this,url,userAgent,disposition,mime,(ok,message)->{
             if(!isFinishing()&&!isDestroyed())toast(message);
@@ -516,7 +510,7 @@ public class MainActivity extends Activity {
                             .put("page_loaded",true).put("visible",visible)
                             .put("ready_state",page.optString("ready"))
                             .put("resources_complete",BrowserWebState.loaded(target))
-                            .put("session_source","shared_android").put("tab_index",tabs.indexOf(target))
+                            .put("session_source","shared_android").put("tab_index",tabs.indexOf(target)).put("tab_id",BrowserTabIds.id(target))
                             .put("display_state",visible?"displayed":"ready_when_chk_returns");
                         finish(true,proof.toString());
                     }catch(Exception error){finish(false,"Document chargé mais résultat de navigation illisible.");}
@@ -629,7 +623,7 @@ public class MainActivity extends Activity {
                     for(int index=0;index<tabs.size();index++){
                         WebView web=tabs.get(index);
                         JSONObject entry=new JSONObject();
-                        entry.put("index",index);entry.put("active",web==current);
+                        entry.put("id",BrowserTabIds.id(web));entry.put("index",index);entry.put("active",web==current);
                         entry.put("title",web.getTitle()==null?"":web.getTitle());
                         entry.put("url",web.getUrl()==null?"":web.getUrl());
                         list.put(entry);
@@ -644,17 +638,17 @@ public class MainActivity extends Activity {
                 case "new_tab":case "open_tab":{
                     String url=args.optString("url",HOME);
                     if(url.isEmpty())url=HOME;
-                    if(url.length()>2000||!BackgroundBrowser.isPublicHttps(Uri.parse(url))){
-                        callback.finish(false,"Une URL HTTPS publique est requise.");return;
+                    if(url.length()>2000||!BrowserPolicy.publicUrl(url)){
+                        callback.finish(false,"Une URL HTTP ou HTTPS publique est requise.");return;
                     }
-                    if(tabs.size()>=12){callback.finish(false,"Maximum de 12 onglets atteint.");return;}
+                    if(tabs.size()>=BrowserPolicy.MAX_TABS){callback.finish(false,"Maximum de 24 onglets atteint.");return;}
                     newTab(url);
                     verifyNavigation(current,url,0,args.optInt("timeout_ms",20000),callback);return;
                 }
                 case "close_tab":{
-                    int index=args.has("index")?args.optInt("index",-1):tabs.indexOf(current);
+                    int index=BrowserTabIds.index(tabs,args,tabs.indexOf(current));
                     String contains=args.optString("url_contains","");
-                    if(!contains.isEmpty()&&!args.has("index")){
+                    if(!contains.isEmpty()&&!args.has("index")&&!args.has("id")){
                         index=-1;
                         for(int i=0;i<tabs.size();i++){String url=tabs.get(i).getUrl();
                             if(url!=null&&url.contains(contains)){index=i;break;}}
@@ -696,14 +690,14 @@ public class MainActivity extends Activity {
                     String url=args.optString("url","");
                     Uri uri=Uri.parse(url);
                     String hostname=uri.getHost();
-                    if(!"https".equalsIgnoreCase(uri.getScheme())||hostname==null||url.length()>2000
+                    if(!BrowserPolicy.webUrl(url)||hostname==null||url.length()>2000
                         ||hostname.equalsIgnoreCase("localhost")||hostname.endsWith(".local")
                         ||hostname.startsWith("127.")||hostname.startsWith("192.168.")||hostname.startsWith("10.")){
                         callback.finish(false,"Adresse HTTPS invalide ou réseau local interdit.");return;
                     }
-                    if(!BackgroundBrowser.isPublicHttps(uri)){callback.finish(false,"Une URL HTTPS publique est requise.");return;}
+                    if(!BrowserPolicy.publicUrl(url)){callback.finish(false,"Une URL HTTP ou HTTPS publique est requise.");return;}
                     if(args.optBoolean("new_tab",false)){
-                        if(tabs.size()>=12){callback.finish(false,"Maximum de 12 onglets atteint.");return;}
+                        if(tabs.size()>=BrowserPolicy.MAX_TABS){callback.finish(false,"Maximum de 24 onglets atteint.");return;}
                         newTab(url);verifyNavigation(current,url,0,args.optInt("timeout_ms",20000),callback);return;
                     }
                     long before=BrowserWebState.documentVersion(current);
@@ -782,13 +776,14 @@ public class MainActivity extends Activity {
                     current.evaluateJavascript(BrowserScripts.pageStatus(),raw->callback.finish(true,fromJavascript(raw)));return;
                 }
                 case "switch_tab":{
-                    int index=args.optInt("index",-1);
-                    String contains=args.optString("url_contains","");
-                    WebView target=null;
-                    if(index>=0&&index<tabs.size())target=tabs.get(index);
-                    if(target==null&&!contains.isEmpty())for(WebView tab:tabs){String u=tab.getUrl();if(u!=null&&u.contains(contains)){target=tab;break;}}
-                    if(target==null){callback.finish(false,"Onglet introuvable.");return;}
-                    select(target);verifyNavigation(target,BrowserWebState.url(target),-1,args.optInt("timeout_ms",20000),callback);return;
+                    int index=BrowserTabIds.index(tabs,args,-1);
+                    if(index<0||index>=tabs.size()){callback.finish(false,"Onglet introuvable.");return;}
+                    WebView target=tabs.get(index);select(target);AgentVision.ensureMeasured(target);
+                    // Selection succeeds independently from a stale HTTP warning.
+                    JSONObject proof=new JSONObject().put("selected",true).put("id",BrowserTabIds.id(target))
+                        .put("tab_index",index).put("url",target.getUrl()).put("page_loaded",BrowserWebState.loaded(target))
+                        .put("visible",browserVisible()).put("network_warning",pageErrors.containsKey(target)?pageErrors.get(target):"");
+                    callback.finish(true,proof.toString());return;
                 }
                 case "close_popup":{
                     if(tabs.size()<=1){callback.finish(false,"Aucun onglet secondaire à fermer.");return;}
@@ -834,19 +829,22 @@ public class MainActivity extends Activity {
             callback.finish(false,"Destination de téléchargement différente de celle autorisée.");return;
         }
         String direct=args.optString("url","");
-        if(!direct.isEmpty()){downloadResolved(web,direct,args.optString("mime_type",""),callback);return;}
+        if(!direct.isEmpty()){downloadResolved(web,direct,args.optString("mime_type",""),args,callback);return;}
         String selector=args.optString("selector","");
         if(selector.isEmpty()){callback.finish(false,"URL ou sélecteur de téléchargement requis.");return;}
         web.evaluateJavascript(BrowserScripts.linkUrl(JSONObject.quote(selector)),raw->{
             String url=fromJavascript(raw);
             if(url==null||url.isEmpty()){callback.finish(false,"Lien de téléchargement introuvable.");return;}
-            downloadResolved(web,url,args.optString("mime_type",""),callback);
+            downloadResolved(web,url,args.optString("mime_type",""),args,callback);
         });
     }
     private void downloadResolved(WebView web,String url,String mime,AgentClient.ResultCallback callback){
+        downloadResolved(web,url,mime,new JSONObject(),callback);
+    }
+    private void downloadResolved(WebView web,String url,String mime,JSONObject options,AgentClient.ResultCallback callback){
         if(!callback.isActive()||!BrowserWebState.alive(web))return;
-        if(!url.startsWith("https://")){callback.finish(false,"Téléchargement HTTPS uniquement.");return;}
-        BrowserTransferManager.downloadToApp(this,url,web.getSettings().getUserAgentString(),mime,(ok,message)->callback.finish(ok,message));
+        if(!BrowserPolicy.webUrl(url)){callback.finish(false,"Adresse de téléchargement HTTP ou HTTPS requise.");return;}
+        BrowserDownloads.start(this,url,web.getSettings().getUserAgentString(),mime,options,callback);
     }
     private void waitForElement(WebView web,String selector,int timeout,AgentClient.ResultCallback callback){
         if(selector.isEmpty()||selector.length()>=350){callback.finish(false,"Sélecteur invalide.");return;}
@@ -958,7 +956,7 @@ public class MainActivity extends Activity {
             store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris",
             "Favoris et historique","Rechercher dans la page","Partager le lien",
             "Enregistrer dans Notes","Lire / copier le texte","Taille du texte",
-            "Mode lecture plein écran","Reprendre la page MCP","Réglages"},(d,i)->{
+            "Mode lecture plein écran","Reprendre la page MCP","Réglages","Compatibilité du site","Ouvrir dans le navigateur externe"},(d,i)->{
             switch(i){
                 case 0:newTab(HOME);break;
                 case 1:tabOverview();break;
@@ -976,12 +974,14 @@ public class MainActivity extends Activity {
                 case 13:setFocusMode(true);break;
                 case 14:openAgentPage();break;
                 case 15:startActivity(new Intent(this,SettingsActivity.class));break;
+                case 16:BrowserSiteSettings.show(this,current);break;
+                case 17:if(current!=null)BrowserSiteSettings.external(this,current.getUrl());break;
             }
         }).setNegativeButton("Fermer",null).show();
     }
     private void openAgentPage(){
         String url=AgentService.latestBackgroundUrl();
-        if(url==null||!url.startsWith("https://")){
+        if(url==null||!BrowserPolicy.webUrl(url)){
             toast("Aucune page MCP récente à reprendre");return;
         }
         for(WebView tab:tabs){
@@ -1017,7 +1017,7 @@ public class MainActivity extends Activity {
         header.addView(add,new LinearLayout.LayoutParams(dp(52),dp(50)));
         add.setOnClickListener(v->{if(tabs.size()<12){dialog.dismiss();newTab(HOME);address.requestFocus();
             ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(address,InputMethodManager.SHOW_IMPLICIT);}
-            else toast("Maximum 12 onglets");});
+            else toast("Maximum 24 onglets");});
         android.widget.ScrollView scroll=new android.widget.ScrollView(this);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         android.widget.GridLayout grid=new android.widget.GridLayout(this);
@@ -1068,12 +1068,12 @@ public class MainActivity extends Activity {
             window.setLayout(-1,Math.round(getResources().getDisplayMetrics().heightPixels*0.92f));
             window.setGravity(Gravity.BOTTOM);}
     }
-    private void saveTabs(){if(tabs.isEmpty())return;JSONArray urls=new JSONArray();for(WebView web:tabs){String url=web.getUrl();urls.put(url!=null&&url.startsWith("https://")?url:BrowserWebState.url(web));}getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putString("tabs",urls.toString()).putInt("active_tab",Math.max(0,tabs.indexOf(current))).apply();}
+    private void saveTabs(){if(tabs.isEmpty())return;JSONArray urls=new JSONArray();for(WebView web:tabs){String url=web.getUrl();urls.put(url!=null&&BrowserPolicy.webUrl(url)?url:BrowserWebState.url(web));}getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putString("tabs",urls.toString()).putInt("active_tab",Math.max(0,tabs.indexOf(current))).apply();}
     private void restoreTabs(Bundle state){
         try{JSONArray urls=new JSONArray(state==null?getSharedPreferences("mobile_ui",MODE_PRIVATE).getString("tabs","[]"):state.getString("tabs","[]"));int selected=state==null?getSharedPreferences("mobile_ui",MODE_PRIVATE).getInt("active_tab",0):state.getInt("active_tab",0);
             for(int i=0;i<Math.min(12,urls.length());i++){
                 String url=urls.optString(i,HOME);
-                if(!url.startsWith("https://"))url=HOME;
+                if(!BrowserPolicy.webUrl(url))url=HOME;
                 WebView restored=new WebView(new android.content.MutableContextWrapper(this));
                 restored.setBackgroundColor(Color.WHITE);
                 configure(restored);
@@ -1090,6 +1090,7 @@ public class MainActivity extends Activity {
         catch(Exception e){return "Résultat illisible";}
     }
 
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);BrowserPermissions.result(this,request);}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==812&&result==RESULT_OK&&data!=null){java.util.ArrayList<String> words=data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS);if(words!=null&&!words.isEmpty())navigate(words.get(0));return;}

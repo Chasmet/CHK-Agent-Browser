@@ -22,8 +22,8 @@ import java.util.concurrent.Executors;
 
 /** Bounded file transfer helper. It never reads arbitrary phone files. */
 public final class BrowserTransferManager {
-    private static final long MAX_FILE=12L*1024L*1024L;
-    private static final long MAX_TOTAL=32L*1024L*1024L;
+    private static final long MAX_FILE=TransferLimits.MAX_FILE_BYTES;
+    private static final long MAX_TOTAL=TransferLimits.MAX_FILE_BYTES;
     private static final ExecutorService IO=Executors.newSingleThreadExecutor();
     private static final Handler UI=new Handler(Looper.getMainLooper());
     private static final java.util.Set<String> downloadNames=new java.util.HashSet<>();
@@ -51,7 +51,7 @@ public final class BrowserTransferManager {
                     if(!local.isEmpty()){
                         WorkspaceStore workspace=new WorkspaceStore(app);File source=workspace.file(local);
                         if(!source.isFile())throw new Exception("Fichier Fichiers introuvable");
-                        total+=source.length();if(total>WorkspaceStore.MAX_IMPORT)throw new Exception("Ensemble de fichiers supérieur à 512 Mo");
+                        if(source.length()>WorkspaceStore.MAX_IMPORT-total)throw new Exception("Ensemble de fichiers supérieur à 6 Go");total+=source.length();
                         uris[i]=workspace.uri(local);continue;
                     }
                     String url=item.optString("url","");
@@ -88,7 +88,7 @@ public final class BrowserTransferManager {
         try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(target)){
             byte[] buf=new byte[16384];int n;
             while((n=in.read(buf))!=-1){
-                total+=n;if(total>MAX_FILE)throw new Exception("Fichier supérieur à 12 Mo");
+                total+=n;if(total>MAX_FILE)throw new Exception("Fichier supérieur à 6 Go");
                 digest.update(buf,0,n);out.write(buf,0,n);
             }
         }
@@ -100,7 +100,7 @@ public final class BrowserTransferManager {
         downloadToApp(context,url,userAgent,null,mime,callback);
     }
     public static void downloadToApp(Context context,String url,String userAgent,String disposition,String mime,DownloadCallback callback){
-        if(url==null||!url.startsWith("https://")){callback.done(false,"Téléchargement HTTPS requis.");return;}
+        if(url==null||!BrowserPolicy.webUrl(url)){callback.done(false,"Adresse de téléchargement HTTP ou HTTPS requise.");return;}
         try{
             File root=context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
             if(root==null||(!root.isDirectory()&&!root.mkdirs()))throw new Exception("Stockage des téléchargements indisponible");

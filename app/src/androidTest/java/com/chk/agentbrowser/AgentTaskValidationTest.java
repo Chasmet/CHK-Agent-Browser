@@ -32,6 +32,16 @@ public final class AgentTaskValidationTest {
         valid("read_page",new JSONObject(),false);
         valid("resume_visible_page",new JSONObject(),false);
     }
+    @Test public void durableDownloadAndItsReadOnlyStatusComposeInAWorkflow()throws Exception{
+        JSONObject download=new JSONObject().put("id","cut-01").put("expected_host","example.com").put("url","https://example.com/clip.mp4");
+        JSONObject step=step("download_file",download,false);
+        step.put("verify",new JSONObject().put("action","desktop").put("args",new JSONObject().put("tool","browser").put("operation","download_status").put("id","cut-01"))
+            .put("expect",new JSONObject().put("state","completed").put("verified",true)));
+        AgentTasks.validate(new JSONArray().put(step));
+        rejected("download_file",download,false);
+        JSONObject writeAsProof=new JSONObject(step.toString());writeAsProof.getJSONObject("verify").getJSONObject("args").put("operation","download_file");
+        try{AgentTasks.validate(new JSONArray().put(writeAsProof));fail("A verification must not enqueue another download");}catch(Exception expected){assertTrue(expected.getMessage().contains("uniquement lire"));}
+    }
     @Test public void sensitiveWebOperationsNeedObservability()throws Exception{
         JSONObject click=new JSONObject().put("selector","#save")
             .put("expected_selector","#finished");

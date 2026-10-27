@@ -24,12 +24,13 @@ final class BrowserAutomation {
                 .put("args",new JSONObject().put("action","desktop")
                     .put("args",new JSONObject().put("tool","browser").put("operation","capabilities"))))
             .put("operations",new JSONArray().put("capabilities").put("upload_file").put("upload_status")
-                .put("get_form").put("fill_form").put("verify_form").put("get_page_status")
-                .put("click_verified").put("click_when_enabled").put("download_file").put("publication_submit"))
+                .put("get_form").put("fill_form").put("verify_form").put("get_page_status").put("read_pdf")
+                .put("click_verified").put("click_when_enabled").put("download_file").put("download_status").put("publication_submit"))
             .put("upload",new JSONObject().put("required",new JSONArray().put("id").put("expected_host").put("selector").put("files"))
                 .put("files","[{workspace_path: chemin relatif CHK}]")
                 .put("max_files",8).put("max_local_bytes",WorkspaceStore.MAX_IMPORT)
                 .put("confirmation","selected signifie reçu par le champ du site ; pas téléversé sur son serveur"))
+            .put("download",new JSONObject().put("start","download_file").put("status","download_status").put("id","identifiant stable requis dans un workflow").put("workspace_path","destination facultative : vérification SHA-256 et import sans écrasement").put("size_limit",TransferLimits.MAX_FILE_BYTES).put("completion","state=completed et verified=true ; downloading signifie encore en cours"))
             .put("forms",new JSONObject().put("required",new JSONArray().put("expected_host").put("fields"))
                 .put("fields","[{selector,kind:text|check|select,value:string|boolean}]")
                 .put("max_fields",24).put("readback",true))
@@ -42,9 +43,9 @@ final class BrowserAutomation {
     }
     private static void destination(WebView web,JSONObject args)throws Exception{
         String expected=args.optString("expected_host","");
-        if(!BrowserWebState.alive(web)||web.getUrl()==null||!web.getUrl().startsWith("https://")
+        if(!BrowserWebState.alive(web)||web.getUrl()==null||!BrowserPolicy.webUrl(web.getUrl())
                 ||expected.isEmpty()||expected.length()>253||!expected.equalsIgnoreCase(host(web)))
-            throw new Exception("Page HTTPS et expected_host correspondant exactement au domaine requis.");
+            throw new Exception("Page HTTP/HTTPS et expected_host correspondant exactement au domaine requis.");
     }
     static void execute(Context context,WebView web,JSONObject args,AgentClient.ResultCallback cb){
         if(Looper.myLooper()!=Looper.getMainLooper()){UI.post(()->execute(context,web,args,cb));return;}
@@ -53,11 +54,17 @@ final class BrowserAutomation {
             String operation=args.optString("operation","");
             if(operation.equals("capabilities")){cb.finish(true,capabilities().toString());return;}
             if(operation.equals("upload_status")){cb.finish(true,uploadStatus(context,args.getString("id")).toString());return;}
+            if(operation.equals("download_status")){BrowserDownloads.inspect(context,args,cb);return;}
             destination(web,args);
             switch(operation){
                 case "upload_file":if(!args.has("id"))throw new Exception("id stable obligatoire pour une importation MCP.");upload(context,web,args,cb);return;
                 case "get_form":web.evaluateJavascript(BrowserScripts.getForm(),raw->cb.finish(true,decode(raw)));return;
                 case "get_page_status":web.evaluateJavascript(BrowserScripts.pageStatus(),raw->cb.finish(true,decode(raw)));return;
+                case "read_pdf":{
+                    String url=web.getUrl(),cookie=android.webkit.CookieManager.getInstance().getCookie(url);
+                    WorkspaceCommands.IO.execute(()->{try{JSONObject document=DocumentReader.readWebPdf(context,url,cookie);WorkspaceCommands.UI.post(()->{if(cb.isActive())cb.finish(true,document.toString());});}
+                        catch(Exception e){WorkspaceCommands.UI.post(()->{if(cb.isActive())cb.finish(false,e.getMessage());});}});return;
+                }
                 case "fill_form":case "verify_form":form(web,args,operation.equals("fill_form"),cb);return;
                 case "click_verified":VerifiedClick.run(web,args,UI,cb);return;
                 case "download_file":
@@ -197,13 +204,13 @@ final class BrowserAutomation {
                 // Grok Imagine can hold the synthetic same-origin response stream open
                 // indefinitely in a background WebView. Owner-selected images are
                 // small enough for the existing bounded, serial JS file injection.
-                // Keep the streaming path for all other destinations and large media.
+                // Large media use native content URIs; bounded stream/JS fallbacks stay small.
                 if("grok.com".equalsIgnoreCase(host(web))
                         && files.length()==1 && files.optJSONObject(0)!=null
                         && files.optJSONObject(0).optString("workspace_path","").toLowerCase(java.util.Locale.ROOT)
                             .matches(".*\\.(png|jpg|jpeg|webp)"))
                     BrowserJsUploader.upload(app,web,selector,uris,receipt);
-                else BrowserStreamUploader.upload(app,web,selector,uris,receipt);
+                else BrowserNativeUploader.upload(app,web,selector,uris,receipt);
             });
         }catch(Exception e){cb.finish(false,e.getMessage()==null?"Importation refusée.":e.getMessage());}
     }

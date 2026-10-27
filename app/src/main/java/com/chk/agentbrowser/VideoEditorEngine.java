@@ -200,7 +200,7 @@ public final class VideoEditorEngine {
             .put("size_bytes",file.isFile()?file.length():0)
             .put("expected_duration_ms",expectedMs)
             .put("project_video_count",videoCount).put("project_audio_count",audioCount)
-            .put("sources_present",sourcesPresent).put("valid",false);
+            .put("sources_present",sourcesPresent).put("verification_scope","technical_metadata_and_sampled_frames").put("lip_sync_verified",false).put("audio_levels_verified",false).put("valid",false);
         if(!file.isFile()||file.length()<1000)
             return result.put("reason","Fichier MP4 absent ou incomplet");
         MediaMetadataRetriever retriever=new MediaMetadataRetriever();

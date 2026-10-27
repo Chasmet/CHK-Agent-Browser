@@ -60,6 +60,7 @@ final class AgentVision {
         if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++)collect(((ViewGroup)v).getChildAt(i),root,out,revision,visits);
     }
     static JSONObject inspect(View root)throws Exception{
+        if(root instanceof WebView)ensureMeasured((WebView)root);
         if(root.getWidth()<=0||root.getHeight()<=0)throw new Exception("Écran non mesuré : attends son affichage.");
         JSONArray rows=new JSONArray();StringBuilder revision=new StringBuilder(context(root));collect(root,root,rows,revision,new int[]{0});
         float scale=Math.min(1f,Math.min(720f/root.getWidth(),960f/root.getHeight()));
@@ -68,6 +69,16 @@ final class AgentVision {
             .put("coordinate_space","view_pixels").put("controls",rows).put("controls_truncated",rows.length()==160).put("foreground",NativeKeyboard.foreground());
         if(root instanceof WebView)out.put("url",((WebView)root).getUrl());else out.put("activity",NativeKeyboard.activity().getClass().getSimpleName());
         return out;
+    }
+    /** An inactive Activity can create a tab without a layout pass. DOM and
+     * native file selectors still need a real viewport; this is not a screenshot. */
+    static void ensureMeasured(WebView web){
+        if(web.getWidth()>0&&web.getHeight()>0)return;
+        android.util.DisplayMetrics metrics=web.getResources().getDisplayMetrics();
+        int width=Math.max(320,metrics.widthPixels),height=Math.max(480,metrics.heightPixels);
+        if(web.getParent() instanceof View){View parent=(View)web.getParent();if(parent.getWidth()>0)width=parent.getWidth();if(parent.getHeight()>0)height=parent.getHeight();}
+        web.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(height,View.MeasureSpec.EXACTLY));
+        web.layout(0,0,width,height);
     }
     static void guard(View root,JSONObject p)throws Exception{
         if(!context(root).equals(p.optString("expected_context")))throw new Exception("Écran absent ou remplacé : observe l’écran avant le geste.");
