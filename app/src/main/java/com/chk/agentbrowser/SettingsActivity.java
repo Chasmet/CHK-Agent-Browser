@@ -163,6 +163,9 @@ public final class SettingsActivity extends Activity {
             +"Les actions sensibles nécessitent l'approbation prévue sur le serveur.");
         local3Help.setPadding(16,8,16,12);
         group.addView(local3Help,localInsert++);
+        TextView controlHelp=new TextView(this);
+        controlHelp.setText("Contrôle dans CHK : vision, souris visible et clavier avec relecture du résultat. Jusqu’à 4 workflows peuvent avancer sur des onglets distincts, pendant les téléchargements ou un export Studio. Les gestes sur le même écran sont coordonnés. Les pixels cachés ne sont jamais annoncés comme une capture actuelle.");
+        controlHelp.setPadding(16,8,16,12);group.addView(controlHelp,localInsert++);
         Button local3Pair=new Button(this);
         local3Pair.setAllCaps(false);
         local3Pair.setText("Associer Local 3 avec une invitation");

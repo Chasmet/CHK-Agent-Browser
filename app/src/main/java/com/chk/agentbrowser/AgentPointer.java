@@ -13,6 +13,10 @@ import org.json.JSONObject;
 final class AgentPointer {
     private AgentPointer(){}
     static void execute(Context app,WebView web,JSONObject p,AgentClient.ResultCallback cb){
+        try{executeLeased(app,web,p,AgentControl.lease(web,!p.optString("target","native").equals("web"),cb));}
+        catch(Exception e){cb.finish(false,e.getMessage());}
+    }
+    private static void executeLeased(Context app,WebView web,JSONObject p,AgentClient.ResultCallback cb){
         if(p.optString("target","native").equals("web")){
             try{AgentVision.target(p,web);AgentVision.observeWeb(app,web,new AgentVision.Observation(){public void ready(JSONObject info){if(cb.isActive())executeReady(app,web,p,cb);}public void failed(String error){if(cb.isActive())cb.finish(false,error);}});}catch(Exception e){cb.finish(false,e.getMessage());}
         }else executeReady(app,web,p,cb);
@@ -49,7 +53,7 @@ final class AgentPointer {
         final View root;final WebView web;final JSONObject p;final AgentClient.ResultCallback cb;final String kind;final float x,y,ex,ey;final int duration;long down;boolean accepted,held;int tap;
         Gesture(View r,WebView w,JSONObject p,AgentClient.ResultCallback cb,String kind,float x,float y,float ex,float ey,int duration){root=r;web=w;this.p=p;this.cb=cb;this.kind=kind;this.x=x;this.y=y;this.ex=ex;this.ey=ey;this.duration=duration;}
         boolean valid(){try{return cb.isActive()&&AgentVision.target(p,web)==root&&AgentVision.context(root).equals(p.optString("expected_context"));}catch(Exception e){return false;}}
-        boolean event(int action,float x,float y){MotionEvent e=MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,x,y,0);e.setSource(InputDevice.SOURCE_TOUCHSCREEN);try{return root.dispatchTouchEvent(e);}catch(RuntimeException failure){return false;}finally{e.recycle();}}
+        boolean event(int action,float x,float y){if(action!=MotionEvent.ACTION_CANCEL)AgentFeedback.point(root,x,y,"Souris CHK");MotionEvent e=MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,x,y,0);e.setSource(InputDevice.SOURCE_TOUCHSCREEN);try{return root.dispatchTouchEvent(e);}catch(RuntimeException failure){return false;}finally{e.recycle();}}
         void start(){if(!valid())return;down=SystemClock.uptimeMillis();held=true;accepted=event(MotionEvent.ACTION_DOWN,x,y);WorkspaceCommands.UI.postDelayed(this::tick,16);}
         void tick(){
             if(!valid()){if(held){event(MotionEvent.ACTION_CANCEL,x,y);held=false;}if(cb.isActive()){try{cb.finish(true,new JSONObject().put("ok",accepted).put("gesture_sent",true).put("screen_changed",true).put("outcome_confirmed",false).toString());}catch(Exception ignored){cb.finish(false,"Écran changé pendant le geste ; résultat à vérifier.");}}return;}

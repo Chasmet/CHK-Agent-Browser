@@ -65,6 +65,7 @@ public final class AgentClient {
         default boolean isActive(){return true;}
         default boolean isLocal2(){return false;}
         default boolean isLocal3(){return false;}
+        default String inputLease(){return "";}
     }
     public interface CommandHandler {
         void onCommand(JSONObject command, ResultCallback callback);
@@ -73,6 +74,8 @@ public final class AgentClient {
         default String sessionSource() { return "background"; }
         default boolean visible() { return false; }
         default void workspaceChanged() {}
+        default java.util.List<android.webkit.WebView> browserTabs(){return java.util.Collections.emptyList();}
+        default android.webkit.WebView selectedWebView(){return null;}
     }
     public interface RegistrationCallback {void completed(boolean ok, String message); }
     public interface IncomingListener {
@@ -97,6 +100,7 @@ public final class AgentClient {
         return local2Screen != null && !local2Screen.isFinishing() && !local2Screen.isDestroyed()
             ? local2Handler : (isAutonomous() && (Local2Client.get(app).enabled() || Local3Client.get(app).enabled()) ? retainedLocal2 : null);
     }
+    CommandHandler controlBrowser(ResultCallback cb){return cb.isLocal2()||cb.isLocal3()?local2Browser():activeHandler();}
     // Retain the actual owner's WebViews, not a second browser loaded from a URL.
     boolean retainBrowser(Activity activity, java.util.List<android.webkit.WebView> tabs,
                           android.webkit.WebView selected) {

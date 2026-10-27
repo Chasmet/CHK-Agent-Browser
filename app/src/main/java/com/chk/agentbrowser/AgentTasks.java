@@ -23,7 +23,7 @@ final class AgentTasks {
                 if(!readOnly(action,args))throw new Exception("Une vérification doit uniquement lire l’état.");
                 if(verify.optJSONObject("expect")==null&&verify.optJSONObject("contains")==null)throw new Exception("Précise le résultat attendu par la vérification.");}
             String action=step.getString("action");
-            if(action.equals("desktop")&&step.getJSONObject("args").optString("tool").equals("browser")
+            if(action.equals("desktop")&&Arrays.asList("browser","control").contains(step.getJSONObject("args").optString("tool"))
                 &&!readOnly(action,step.getJSONObject("args"))&&verify==null)throw new Exception("Une écriture navigateur exige une vérification explicite.");
             if(action.equals("desktop")&&step.getJSONObject("args").optString("tool").equals("pointer")&&verify==null)
                 throw new Exception("Un geste dans une tâche exige une vérification explicite.");
@@ -51,7 +51,8 @@ final class AgentTasks {
                 throw new Exception("Publication : ID, domaine, cible et résultat observable requis.");
         }
         if(action.equals("desktop")){
-            String tool=p.optString("tool");if(!Arrays.asList("vision","pointer","files","browser").contains(tool))throw new Exception("Pas de tâche ou script imbriqué.");
+            String tool=p.optString("tool");if(!Arrays.asList("vision","pointer","files","browser","control").contains(tool))throw new Exception("Pas de tâche ou script imbriqué.");
+            if(tool.equals("control")&&!Arrays.asList("observe","status","capabilities","act").contains(p.optString("operation")))throw new Exception("Opération de contrôle non autorisée dans une tâche.");
             if(tool.equals("browser")&&!Arrays.asList("upload_file","upload_status","get_form","fill_form","verify_form","get_page_status","read_pdf","click_verified","click_when_enabled","download_file","download_status").contains(p.optString("operation")))throw new Exception("Opération navigateur non autorisée dans une tâche.");
             if(tool.equals("vision")&&p.optBoolean("capture",false))throw new Exception("Utilise la vision structurée dans une tâche, puis capture séparément.");
         }
@@ -76,7 +77,7 @@ final class AgentTasks {
                 throw new Exception("Importation : entre 1 et 8 fichiers autorisés sont requis.");
         }
     }
-    private static boolean readOnly(String action,JSONObject p){return action.equals("desktop")&&p.optString("tool").equals("browser")&&Arrays.asList("download_status","upload_status","get_form","verify_form","get_page_status","read_pdf").contains(p.optString("operation"))||action.equals("files_external")&&Arrays.asList("external_roots","external_list","external_read_text").contains(p.optString("operation"))||action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_detect_format","files_copy_content","files_search_content","files_media_inspect","files_verify","files_archive_list","files_archive_read","files_database","files_stat","files_hash","document_read","document_page","media_frame","video_editor_capabilities","video_editor_queue_status","video_editor_status","video_editor_wait","video_editor_verify_output","video_editor_project_read","files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","workspace_status","tabs","list_tabs","get_page_status","get_form","wait_for_element","read_page","publication_status","publication_list").contains(action);}
+    private static boolean readOnly(String action,JSONObject p){return action.equals("desktop")&&p.optString("tool").equals("control")&&Arrays.asList("observe","status","capabilities").contains(p.optString("operation"))||action.equals("desktop")&&p.optString("tool").equals("browser")&&Arrays.asList("download_status","upload_status","get_form","verify_form","get_page_status","read_pdf").contains(p.optString("operation"))||action.equals("files_external")&&Arrays.asList("external_roots","external_list","external_read_text").contains(p.optString("operation"))||action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_detect_format","files_copy_content","files_search_content","files_media_inspect","files_verify","files_archive_list","files_archive_read","files_database","files_stat","files_hash","document_read","document_page","media_frame","video_editor_capabilities","video_editor_queue_status","video_editor_status","video_editor_wait","video_editor_verify_output","video_editor_project_read","files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","workspace_status","tabs","list_tabs","get_page_status","get_form","wait_for_element","read_page","publication_status","publication_list").contains(action);}
     static JSONObject command(Context c,JSONObject p)throws Exception{
         return command(c,p,false);
     }

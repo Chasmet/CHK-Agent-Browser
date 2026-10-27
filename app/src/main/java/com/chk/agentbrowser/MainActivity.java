@@ -446,6 +446,8 @@ public class MainActivity extends Activity {
                 @Override public String pageTitle(){return current==null||current.getTitle()==null?"":current.getTitle();}
                 @Override public String sessionSource(){return "visible";}
                 @Override public boolean visible(){return browserVisible();}
+                @Override public java.util.List<WebView> browserTabs(){return new java.util.ArrayList<>(tabs);}
+                @Override public WebView selectedWebView(){return current;}
                 @Override public void workspaceChanged(){
                     if(workspace!=null&&!"browser".equals(activeSpace))workspace.refresh();
                 }

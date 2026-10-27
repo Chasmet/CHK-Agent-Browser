@@ -145,6 +145,7 @@ public final class Local3Client {
             .put("autonomous",autonomousAllowed()).put("persistent_permissions",persistentPermissions())
             .put("permission_sync",permissionStatus).put("request_quota",JSONObject.NULL)
             .put("max_file_bytes",TransferLimits.MAX_FILE_BYTES).put("max_tabs",BrowserPolicy.MAX_TABS)
+            .put("agent_control",AgentControl.capabilities())
             .put("previews_allowed",AgentClient.get(app).isPreviewAllowed())
             .put("capability_sync",capabilityStatus).put("last_action",lastAction)
             .put("last_outcome",lastOutcome).put("result_pending",!p.getString("outbox","").isEmpty());

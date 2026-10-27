@@ -183,6 +183,7 @@ final class NativeKeyboard {
     }
     private static void apply(View r,View v,String op,JSONObject p)throws Exception{
         if(!v.isEnabled())throw new Exception("Contrôle désactivé.");
+        AgentFeedback.field(v);
         if(op.equals("click")){
             if(v instanceof EditText){v.requestFocus();return;}
             if(listItem(v)){AdapterView<?> parent=(AdapterView<?>)v.getParent();int position=parent.getPositionForView(v);if(position<0||!parent.performItemClick(v,position,parent.getAdapter().getItemId(position)))throw new Exception("Choix non confirmé.");return;}

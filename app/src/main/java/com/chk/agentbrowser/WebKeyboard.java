@@ -22,6 +22,7 @@ final class WebKeyboard {
     static void execute(Context context,WebView web,JSONObject p,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
         try{
+            if(!java.util.Arrays.asList("inspect","verify").contains(p.optString("operation","inspect")))AgentFeedback.point(web,20,20,"Clavier CHK");
             String host=p.optString("expected_host","");String actual=android.net.Uri.parse(web.getUrl()==null?"":web.getUrl()).getHost();
             if(!host.isEmpty()&&!host.equalsIgnoreCase(actual))throw new Exception("La destination web a changé : inspecte la page avant la saisie.");
             web.evaluateJavascript(invocation(context,p),raw->{

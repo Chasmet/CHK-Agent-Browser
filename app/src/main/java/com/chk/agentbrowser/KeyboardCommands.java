@@ -47,8 +47,10 @@ final class KeyboardCommands {
             JSONObject p=parameters(action,args);
             String target=p.optString("target","web");
             if(!target.equals("web")&&!target.equals("native")&&!target.equals("auto"))throw new Exception("Cible attendue : web, native ou auto.");
-            if(target.equals("native")||(target.equals("auto")&&NativeKeyboard.prefersNative()))NativeKeyboard.execute(p,cb);
-            else if(web!=null)WebKeyboard.execute(context,web,p,cb);
+            boolean nativeTarget=target.equals("native")||(target.equals("auto")&&NativeKeyboard.prefersNative());
+            AgentClient.ResultCallback input=java.util.Arrays.asList("inspect","verify").contains(p.optString("operation","inspect"))?cb:AgentControl.lease(web,nativeTarget,cb);
+            if(nativeTarget)NativeKeyboard.execute(p,input);
+            else if(web!=null)WebKeyboard.execute(context,web,p,input);
             else cb.finish(false,"Aucun onglet web disponible.");
         }catch(Exception e){cb.finish(false,e.getMessage()==null?"Commande clavier invalide.":e.getMessage());}
     }

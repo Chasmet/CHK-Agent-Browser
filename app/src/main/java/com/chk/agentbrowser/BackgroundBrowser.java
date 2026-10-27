@@ -28,6 +28,8 @@ import java.util.List;
  * with the visible browser and never controls other applications.
  */
 public final class BackgroundBrowser implements AgentClient.CommandHandler {
+    @Override public java.util.List<WebView> browserTabs(){restore();return new java.util.ArrayList<>(tabs);}
+    @Override public WebView selectedWebView(){restore();return current;}
     private static final String PREF="browser_mcp_v1";
     private static final String DEFAULT_URL="https://www.google.com/";
     private final Context app;

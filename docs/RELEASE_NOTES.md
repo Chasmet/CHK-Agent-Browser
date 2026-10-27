@@ -1,3 +1,13 @@
+## Local 3 — contrôle unifié, vision après action et tâches concurrentes (27 octobre 2026)
+
+- Nouveau contrôle intégré via desktop/tool=control : status, observe, act et parallel, utilisables avec le serveur PC 1.0.4 existant sans nouveau jumelage.
+- Chaque observation réunit vision et clavier, cible un onglet précis sans changer celui qui est affiché et fournit un identifiant temporaire. La révision est relue avant chaque entrée ; la vision et les champs sont relus après.
+- Reçus persistants pour les actions souris/clavier : relire une demande ne rejoue pas le geste ; une interruption reste inconnue jusqu’à inspection. Le geste envoyé et le résultat attendu confirmé sont distincts.
+- Curseur visible et indicateur clavier dessinés uniquement dans CHK, sans interception des gestes du propriétaire.
+- Lancement groupé de 1 à 4 workflows durables ; entrées concurrentes sur des onglets différents. Verrou partagé souris/clavier par cible et exclusion des gestes natifs conflictuels. Les téléchargements et exports existants peuvent continuer en parallèle.
+- Les captures cachées gardent leur indication DOM/cache ; aucun accès aux autres applications ni nouvelle promesse de pixels Android en arrière-plan.
+- Tests Android pour les entrées natives/web, les observations périmées, les reçus interrompus, les collisions, les onglets indépendants et les workflows concurrents. Détails et exemples : docs/AGENT_CONTROL.md.
+
 ## Local 3 principal — fichiers 6 Go et corrections du navigateur (27 octobre 2026)
 
 - Capacité de fichiers : 6 000 000 000 octets, offsets et tailles 64 bits, reprise par blocs, réservations disque et marge de sécurité. Le sélecteur WebView natif transmet les URI des gros médias ; les copies JavaScript/Blob gardent un plafond mémoire distinct.
