@@ -42,7 +42,7 @@ final class PublicCommentCollector {
         return new JSONObject().put("id",id).put("urls",arr).put("max_scrolls",maxScrolls).put("max_comments",maxComments);
     }
     static boolean allowed(Uri uri){
-        if(!BackgroundBrowser.isPublicHttps(uri))return false;
+        if(uri==null||!"https".equalsIgnoreCase(uri.getScheme())||!BrowserPolicy.publicUrl(uri.toString()))return false;
         String h=uri.getHost().toLowerCase(Locale.ROOT),p=uri.getPath();
         boolean x=(h.equals("x.com")||h.equals("www.x.com")||h.equals("twitter.com")||h.equals("www.twitter.com"))&&p!=null&&p.matches("/[^/]+/status/[0-9]+/?");
         boolean t=(h.equals("tiktok.com")||h.equals("www.tiktok.com")||h.equals("m.tiktok.com"))&&p!=null&&p.matches("/@[^/]+/video/[0-9]+/?");

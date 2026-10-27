@@ -134,9 +134,7 @@ public final class AgentService extends Service implements AgentClient.IncomingL
      * Preserve two explicit page snapshots instead of overwriting the agent's session.
      */
     public static void syncVisible(Context context,String url) {
-        if(url==null||!url.startsWith("https://"))return;
-        android.net.Uri requested=android.net.Uri.parse(url);
-        if(!BackgroundBrowser.isPublicHttps(requested))return;
+        if(!BrowserPolicy.publicUrl(url))return;
         context.getApplicationContext().getSharedPreferences("browser_mcp_v1",MODE_PRIVATE)
             .edit().putString("last_visible_page",url).apply();
     }
