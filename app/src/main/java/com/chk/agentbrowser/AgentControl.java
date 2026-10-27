@@ -170,7 +170,8 @@ final class AgentControl {
                             JSONObject after=seen?new JSONObject(afterText):new JSONObject().put("observation_error",afterText);
                             boolean confirmed=sent&&seen&&p.has("expect")&&matches(p.getJSONObject("expect"),after,p.getJSONObject("input"));
                             JSONObject out=new JSONObject().put("ok",sent).put("id",id).put("state",sent?"completed":"unconfirmed")
-                                .put("action_sent",true).put("outcome_confirmed",confirmed).put("input_result",inputResult).put("after",after);
+                                .put("action_attempted",true).put("action_sent",sent?Boolean.TRUE:JSONObject.NULL).put("effect_uncertain",!sent)
+                                .put("outcome_confirmed",confirmed).put("input_result",inputResult).put("after",after);
                             complete(journal,saved,cb,lane,id,sent,out,null);
                         }catch(Exception e){complete(journal,saved,cb,lane,id,false,null,message(e));}
                     }));
@@ -215,8 +216,9 @@ final class AgentControl {
     private static void complete(File journal,JSONObject saved,AgentClient.ResultCallback cb,String lane,String id,boolean ok,JSONObject out,String error){
         STORE.execute(()->{
             try{
-                JSONObject result=out==null?new JSONObject().put("ok",false).put("id",id).put("state","unknown").put("action_sent",true).put("outcome_confirmed",false):out;
-                if(error!=null){result.put("ok",false).put("reason",error);if(out!=null)result.put("state","rejected").put("action_sent",false);}
+                JSONObject result=out==null?new JSONObject().put("ok",false).put("state","unknown").put("action_sent",JSONObject.NULL).put("effect_uncertain",true).put("outcome_confirmed",false):out;
+                result.put("id",id);
+                if(error!=null){result.put("ok",false).put("reason",error);if(out!=null)result.put("state","rejected").put("action_attempted",false).put("action_sent",false).put("outcome_confirmed",false);}
                 saved.put("result",result).put("state",result.optString("state")).put("finished_at",System.currentTimeMillis());AgentFiles.save(journal,saved);
                 WorkspaceCommands.UI.postDelayed(()->{release(lane,id);if(cb.isActive())cb.finish(ok,result.toString());},32L);
             }catch(Exception e){WorkspaceCommands.UI.post(()->{release(lane,id);if(cb.isActive())cb.finish(false,"Résultat non enregistré : observer avant de renvoyer.");});}

@@ -89,6 +89,12 @@ public final class AgentControlIntegrationTest {
         JSONObject receipt=new JSONObject(result.text);assertEquals("rejected",receipt.getString("state"));assertFalse(receipt.getBoolean("action_sent"));
         assertFalse(call(new JSONObject().put("operation","observe").put("target","web").put("tab_id","tab-absent")).ok);
     }
+    @Test public void invalidPointerDoesNotClaimAnAcknowledgedGestureOrKeepTheLock()throws Exception{
+        JSONObject seen=observe("web","");JSONObject input=new JSONObject().put("tool","pointer").put("gesture","tap").put("x",-5).put("y",20);
+        Result rejected=call(action(seen,input));assertFalse(rejected.text,rejected.ok);JSONObject result=new JSONObject(rejected.text);
+        assertTrue(result.isNull("action_sent"));assertFalse(result.getBoolean("outcome_confirmed"));assertTrue(result.getBoolean("effect_uncertain"));
+        assertEquals(0,call(new JSONObject().put("operation","status")).json().getJSONArray("active_inputs").length());assertEquals("0",js(web,"window.clicks||0"));
+    }
     @Test public void otherTabKeyboardFinishesWhilePointerGestureIsStillRunning()throws Exception{
         JSONObject first=observe("web","");String firstId=first.getString("tab_id");
         ins.runOnMainSync(()->{try{java.lang.reflect.Method m=MainActivity.class.getDeclaredMethod("newTab",String.class);m.setAccessible(true);m.invoke(activity,"https://control.test/second");}catch(Exception e){throw new RuntimeException(e);}});

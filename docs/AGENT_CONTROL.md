@@ -28,7 +28,7 @@ La souris utilise `input.tool=pointer`, `gesture=tap|double_tap|long_press|drag|
 
 Avant l’entrée, l’interface est observée de nouveau et sa révision doit correspondre. Un onglet fermé ou une interface modifiée provoque un refus sans basculer vers une autre cible. L’onglet ciblé ne devient pas automatiquement l’onglet affiché.
 
-Après l’entrée, la vision et le clavier sont relus. `after` contient la nouvelle observation. `action_sent` décrit l’envoi ; `outcome_confirmed` devient vrai uniquement si les conditions explicites `expect.field_value`, `expect.text_contains` ou `expect.url_contains` sont satisfaites. Un geste envoyé sans condition métier reste non confirmé. Les valeurs des champs longues sont bornées dans les observations.
+Après l’entrée, la vision et le clavier sont relus. `after` contient la nouvelle observation. `action_sent` vaut vrai si l’entrée est acquittée, faux lors d’un refus préalable, et null si son effet reste incertain (`effect_uncertain=true`). `outcome_confirmed` devient vrai uniquement si les conditions explicites `expect.field_value`, `expect.text_contains` ou `expect.url_contains` sont satisfaites. Un geste envoyé sans condition métier reste non confirmé. Les valeurs des champs longues sont bornées dans les observations.
 
 Conserver le même `id` pour relire une action : son reçu durable est renvoyé avec `replayed=true`, sans répétition de l’entrée. Réutiliser cet id avec une autre demande est refusé. Une interruption entre l’effet et son reçu produit `state=unknown` : observer l’écran et décider de l’étape suivante, sans renvoyer aveuglément.
 
