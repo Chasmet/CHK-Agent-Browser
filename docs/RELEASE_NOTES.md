@@ -2,7 +2,7 @@
 
 - Clic vérifié : délai de 0,8 à 25 secondes par phase (attente du bouton puis vérification, 50 secondes maximum au total), y compris si une réponse JavaScript n’arrive jamais ; aucun rejeu automatique après résultat incertain.
 - Une condition déjà satisfaite produit `already_satisfied`, `action_sent:false`, `outcome_confirmed:false`.
-- Local 3 continue de sonder la file pendant les commandes : jusqu’à quatre tâches reçues, résultats persistants séparés, diagnostics indépendants, entrées sur onglets explicitement distincts. Les commandes qui pourraient modifier le même écran restent ordonnées. La concurrence effective dépend aussi des baux attribués par le serveur PC.
+- Local 3 continue de sonder la file pendant les commandes : jusqu’à quatre tâches reçues, résultats persistants séparés, diagnostics indépendants, entrées sur onglets explicitement distincts. Les commandes qui pourraient modifier le même écran restent ordonnées. Compatible avec les baux multiples du serveur PC 1.0.4 existant.
 - Délai de secours indépendant du thread d’interface : 45 secondes pour les commandes courantes, 60 secondes pour les clics avec attente ; délais adaptés pour audio et grands fichiers. Les résultats de tâches closes par le serveur sont conservés sans bloquer les suivantes.
 - Capture hors écran : rendu de l’onglet existant sur un affichage privé CHK, sans miroir de l’écran du téléphone. Pixels vérifiés par PixelCopy et comparaison de l’état de page ; restauration de l’onglet ensuite. Délai de 6 secondes, repli explicite DOM/cache si le téléphone refuse ce rendu ou si la page change.
 - Signature et installation par-dessus l’application existante conservées. Aucun changement du serveur PC ni de l’association.

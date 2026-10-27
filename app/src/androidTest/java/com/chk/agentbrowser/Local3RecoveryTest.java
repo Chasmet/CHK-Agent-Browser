@@ -66,6 +66,12 @@ public final class Local3RecoveryTest {
             d.submit("next","browser_open_url",new JSONObject(),(ok,text)->{});
         });assertTrue(next.await(2,TimeUnit.SECONDS));assertEquals(1,clicks.get());
     }
+    @Test public void onlyExplicitClosedJobResponseMayArchiveA400Result(){
+        assertTrue(Local3Client.terminalResultError(400,"{\"error\":\"invalid_job_result\"}"));
+        assertFalse(Local3Client.terminalResultError(400,"{\"error\":\"result_too_large\"}"));
+        assertFalse(Local3Client.terminalResultError(401,"{\"error\":\"invalid_job_result\"}"));
+        assertFalse(Local3Client.terminalResultError(400,"invalid_job_result"));
+    }
     @Test public void onlyDistinctExplicitTabTargetsOverlap()throws Exception{
         JSONObject p=new JSONObject().put("tool","control").put("target","web").put("tab_id","A").put("operation","act");
         String a=Local3TaskPolicy.lane("desktop",p),b=Local3TaskPolicy.lane("desktop",new JSONObject(p.toString()).put("tab_id","B"));

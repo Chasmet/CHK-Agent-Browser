@@ -18,6 +18,8 @@ import static org.junit.Assert.*;
 public final class PrivateWebCaptureTest {
     @Test public void detachedTabProducesRealPixelsWithoutChangingItsIdentity()throws Exception{
         Instrumentation ins=InstrumentationRegistry.getInstrumentation();Context app=ins.getTargetContext();
+        // Instrumentation disables hardware drawing by default; same setup as Studio encoder tests.
+        if(android.os.Build.VERSION.SDK_INT>=29)ins.runOnMainSync(()->android.graphics.HardwareRenderer.setDrawingEnabled(true));
         AtomicReference<WebView> web=new AtomicReference<>();AtomicReference<String> initial=new AtomicReference<>();
         ins.runOnMainSync(()->{WebView w=new WebView(app);w.getSettings().setJavaScriptEnabled(true);w.measure(android.view.View.MeasureSpec.makeMeasureSpec(360,1073741824),android.view.View.MeasureSpec.makeMeasureSpec(640,1073741824));w.layout(0,0,360,640);web.set(w);initial.set(BrowserTabIds.id(w));});
         try{

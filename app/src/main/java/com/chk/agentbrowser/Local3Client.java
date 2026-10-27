@@ -270,7 +270,15 @@ public final class Local3Client {
                 try(OutputStream out=c.getOutputStream()){out.write(bytes);}
             }
             int http=c.getResponseCode();
-            if(http!=200 && http!=201)throw new java.io.IOException("HTTP "+http);
+            if(http!=200 && http!=201){
+                if(route.endsWith("/result")&&http==400){
+                    try(InputStream error=c.getErrorStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
+                        if(error!=null){byte[] buf=new byte[512];int n;while((n=error.read(buf))!=-1){if(out.size()+n>4096)break;out.write(buf,0,n);}
+                            if(terminalResultError(http,new String(out.toByteArray(),StandardCharsets.UTF_8)))throw new ResultClosed();}
+                    }
+                }
+                throw new java.io.IOException("HTTP "+http);
+            }
             try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
                 byte[] buf=new byte[4096];int len;
                 while((len=in.read(buf))!=-1){
@@ -280,6 +288,14 @@ public final class Local3Client {
                 return new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));
             }
         }finally{c.disconnect();}
+    }
+    private static final class ResultClosed extends java.io.IOException {ResultClosed(){super("Résultat clos par le serveur");}}
+    static boolean terminalResultError(int status,String body){
+        if(status!=400)return false;
+        try{return new JSONObject(body).optString("error").equals("invalid_job_result");}catch(Exception e){return false;}
+    }
+    private static boolean resultClosed(java.io.IOException error){
+        return error instanceof ResultClosed||java.util.Arrays.asList("HTTP 404","HTTP 409","HTTP 410").contains(error.getMessage());
     }
     /** Large text, MP3/MP4/PDF metadata and previews remain in Android workspace. */
     static String compactResult(Context app,String result)throws Exception{
@@ -349,7 +365,7 @@ public final class Local3Client {
                 if(!queued.isEmpty()){
                     JSONObject o=new JSONObject(queued);
                     try{request("POST","/api/agent/"+id+"/result",o,secret);}catch(java.io.IOException e){
-                        if(!java.util.Arrays.asList("HTTP 404","HTTP 409","HTTP 410").contains(e.getMessage()))throw e;
+                        if(!resultClosed(e))throw e;
                         p.edit().putString("last_task_receipt",o.toString()).commit();
                     }
                     if(queued.equals(p.getString("outbox","")))p.edit().remove("outbox").commit();
@@ -366,7 +382,7 @@ public final class Local3Client {
                     }
                     try{request("POST","/api/agent/"+id+"/result",item,secret);}
                     catch(java.io.IOException e){
-                        if(!java.util.Arrays.asList("HTTP 404","HTTP 409","HTTP 410").contains(e.getMessage()))throw e;
+                        if(!resultClosed(e))throw e;
                     }
                     String receipt=item.toString();
                     if(receipt.length()>8192)receipt=new JSONObject().put("task_id",tid).put("result",new JSONObject().put("ok",false)

@@ -39,7 +39,7 @@ final class PrivateWebCapture {
                 if(width<=0||height<=0||(long)width*height>4_500_000L)throw new Exception("Dimensions de capture privée hors limite.");
                 // Android may globally stop hardware drawing when all Activities pause.
                 // Explicit offscreen CHK rendering needs the renderer active, as do Studio exports.
-                if(android.os.Build.VERSION.SDK_INT>=29)android.graphics.HardwareRenderer.setDrawingEnabled(true);
+                if(android.os.Build.VERSION.SDK_INT>=33)android.graphics.HardwareRenderer.setDrawingEnabled(true);
                 expected=AgentVision.context(web);parent=web.getParent() instanceof ViewGroup?(ViewGroup)web.getParent():null;
                 layout=web.getLayoutParams();index=parent==null?-1:parent.indexOfChild(web);visibility=web.getVisibility();preraster=web.getSettings().getOffscreenPreRaster();
                 left=web.getLeft();top=web.getTop();right=web.getRight();bottom=web.getBottom();
