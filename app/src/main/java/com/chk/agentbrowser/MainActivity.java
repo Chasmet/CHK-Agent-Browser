@@ -678,6 +678,8 @@ public class MainActivity extends Activity {
                             out.put("resources_complete",BrowserWebState.loaded(web));
                             out.put("text",details.optString("text"));
                             out.put("elements",details.optJSONArray("elements"));
+                            out.put("cards",details.optJSONArray("cards"));
+                            out.put("scrollables",details.optJSONArray("scrollables"));
                             out.put("media",details.optJSONArray("media"));
                             out.put("document_url",details.optString("document_url"));
                             out.put("session_source","visible");
