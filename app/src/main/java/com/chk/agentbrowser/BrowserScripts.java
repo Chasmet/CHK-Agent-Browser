@@ -66,18 +66,35 @@ public final class BrowserScripts {
     }
 
 
+    /** Safe JavaScript string literal without requiring Android's JSON classes. */
+    private static String quoteJs(String raw){
+        StringBuilder out=new StringBuilder("\"");
+        for(int i=0;i<raw.length();i++){
+            char c=raw.charAt(i);
+            if(c=='\\')out.append("\\\\");
+            else if(c=='"')out.append("\\\"");
+            else if(c<' ') {
+                String h=Integer.toHexString(c);
+                out.append("\\u");
+                for(int pad=h.length();pad<4;pad++)out.append('0');
+                out.append(h);
+            }else out.append(c);
+        }
+        return out.append('"').toString();
+    }
+
     /** Scroll the actual visible inner list (dialog/card grid) instead of only the WebView root.
      * Returns measured movement, never claims success solely because a gesture was sent. */
     public static String scrollContainer(String direction,int pixels,String selector,String untilText){
         return "(function(){try{" + finder()
             + "var dir="
-            + org.json.JSONObject.quote(direction)
+            + quoteJs(direction)
             + ",pixels="
             + Integer.toString(pixels)
             + ",sel="
-            + org.json.JSONObject.quote(selector)
+            + quoteJs(selector)
             + ",wanted="
-            + org.json.JSONObject.quote(untilText)
+            + quoteJs(untilText)
             + ";var modal=document.querySelector('[role=dialog][aria-modal=true]')||document.querySelector('[role=dialog]');var scope=sel?deepFind(sel):modal;if"
             + "(sel&&!scope)return JSON.stringify({ok:false,error:'Zone de défilement introuvable',selector:sel});var roots=scope?[scope]:[document];var candida"
             + "tes=[],seen=new Set();function visible(e){var r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.height>32&&r.width>35&&r.bottom>0&&r.rig"
