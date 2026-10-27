@@ -10,7 +10,7 @@
 - Réglages de compatibilité par site : mode ordinateur, cookies tiers, ouverture externe ; caméra/microphone/localisation web soumis au consentement du propriétaire et aux permissions Android.
 - PDF : lecture explicite des URL dynamiques et redirections bornées, sans transmettre les cookies à un autre domaine.
 - Messages réseau détaillés et reçus anti-doublon disponibles pour les clics standards également.
-- Tests : fichier sparse de 6 Go, lecture au-delà de 4 Go, navigation HTTP, onglets et faux HTTP 503, viewport, téléchargement natif terminé/importé et rejet de HTML déguisé en MP4.
+- Tests : sélection native d’un fichier sparse de 6 Go et lecture de son dernier bloc par la page, lecture au-delà de 4 Go, navigation HTTP, onglets et faux HTTP 503, viewport, téléchargement natif terminé/importé et rejet de HTML déguisé en MP4.
 
 Les 6 Go concernent les fichiers et transferts, pas une allocation RAM. Les plafonds de décodage PDF/images et d’analyse restent bornés. Le moteur de lip-sync phonétique n’est pas ajouté ; la validation MP4 distingue ses contrôles techniques des lèvres et des niveaux audio. Les limites propres aux sites de téléversement restent applicables.
 

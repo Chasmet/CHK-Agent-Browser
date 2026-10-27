@@ -79,9 +79,10 @@ public final class BrowserMediaUploadTest {
         app.getSharedPreferences("update_monitor",0).edit().putBoolean("enabled",false).commit();
         WorkspaceStore store=new WorkspaceStore(app);
         String path="test-native-large-"+UUID.randomUUID()+".mp4";
-        long length=34L*1024L*1024L;
+        long length=TransferLimits.MAX_FILE_BYTES;
         try(java.io.RandomAccessFile file=new java.io.RandomAccessFile(store.file(path),"rw")){
             file.setLength(length);
+            file.seek(length-4);file.write(new byte[]{7,6,5,4});
         }
         MainActivity activity=(MainActivity)instrumentation.startActivitySync(
             new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
@@ -90,10 +91,10 @@ public final class BrowserMediaUploadTest {
             WebView web=(WebView)current.get(activity);
             String html="<html><body><input id='media' type='file' accept='video/mp4' "
                 +"style='display:block;width:240px;height:70px;margin:35px'>"
-                +"<output id='selected'></output><script>"
+                +"<output id='selected'></output><output id='tail'></output><script>"
                 +"document.querySelector('#media').addEventListener('change',function(e){"
                 +"var f=e.target.files[0];document.querySelector('#selected').textContent="
-                +"f?f.name+':'+f.size:'none';});</script></body></html>";
+                +"f?f.name+':'+f.size:'none';if(f)f.slice(f.size-4).arrayBuffer().then(function(b){document.querySelector('#tail').textContent=Array.from(new Uint8Array(b)).join(',');});});</script></body></html>";
             WebFixture.load(instrumentation,web,"https://example.com/native-large-video",html,
                 "!!document.getElementById('media')");
             CountDownLatch received=new CountDownLatch(1);
@@ -105,13 +106,15 @@ public final class BrowserMediaUploadTest {
                     success.set(ok);message.set(response);received.countDown();
                 }));
             assertTrue("Native upload result timed out",received.await(25,TimeUnit.SECONDS));
-            assertTrue("Expected native 34 MiB URI upload: "+message.get(),success.get());
+            assertTrue("Expected native 6 GB URI selection: "+message.get(),success.get());
             String after=evaluate(instrumentation,web,
                 "JSON.stringify({size:document.querySelector('#media').files[0].size,"
                 +"name:document.querySelector('#media').files[0].name})");
             org.json.JSONObject obj=new org.json.JSONObject(new JSONArray("["+after+"]").getString(0));
             assertEquals(length,obj.getLong("size"));
             assertEquals(path,obj.getString("name"));
+            String tail="";for(int i=0;i<30;i++){tail=evaluate(instrumentation,web,"document.querySelector('#tail').textContent");if(tail.contains("7,6,5,4"))break;Thread.sleep(100);}
+            assertEquals("\"7,6,5,4\"",tail);
         }finally{
             instrumentation.runOnMainSync(activity::finish);
             store.file(path).delete();

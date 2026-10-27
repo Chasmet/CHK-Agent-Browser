@@ -27,7 +27,7 @@ public final class NativeDownloadRecoveryTest {
                 byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
             }
             String sha=WorkspaceTransfer.hash(source);
-            nativeId=manager.addCompletedDownload(path,"CHK test fixture",false,"video/mp4",source.getAbsolutePath(),source.length(),false);
+            nativeId=manager.addCompletedDownload(path,"CHK test fixture",false,"video/mp4",source.getAbsolutePath(),source.length(),true);
             AgentFiles.save(journal,new JSONObject().put("id",id).put("state","downloading").put("filename",path)
                 .put("download_id",nativeId).put("workspace_path",path).put("mime","video/mp4").put("expected_sha256",sha));
             JSONObject result=BrowserDownloads.status(app,id);
@@ -45,7 +45,7 @@ public final class NativeDownloadRecoveryTest {
         DownloadManager manager=(DownloadManager)app.getSystemService(Context.DOWNLOAD_SERVICE);long nativeId=-1;
         try{
             try(FileOutputStream out=new FileOutputStream(source)){out.write("<html>Access denied</html>".getBytes(java.nio.charset.StandardCharsets.UTF_8));}
-            nativeId=manager.addCompletedDownload(path,"CHK invalid fixture",false,"video/mp4",source.getAbsolutePath(),source.length(),false);
+            nativeId=manager.addCompletedDownload(path,"CHK invalid fixture",false,"video/mp4",source.getAbsolutePath(),source.length(),true);
             AgentFiles.save(journal,new JSONObject().put("id",id).put("state","downloading").put("filename",path).put("download_id",nativeId).put("workspace_path",path).put("mime","video/mp4"));
             try{BrowserDownloads.status(app,id);fail("HTML must not be accepted as MP4");}catch(Exception expected){assertTrue(expected.getMessage().contains("MP4"));}
             assertFalse(target.exists());

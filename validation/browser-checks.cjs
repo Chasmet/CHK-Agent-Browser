@@ -80,6 +80,9 @@ function uploadFixture(labels) {
     getClientRects:()=>[],closest:()=>null,getRootNode:()=>doc,
     id:'media',hasAttribute:()=>false,addEventListener(type,callback){this.changeListener=callback;}
   };
+  doc.fileListeners={};
+  doc.addEventListener=(type,fn,capture)=>{assert.equal(capture,true);doc.fileListeners[type]=fn;};
+  doc.removeEventListener=(type,fn,capture)=>{if(doc.fileListeners[type]===fn)delete doc.fileListeners[type];};
   doc.querySelector=s=>s==='#media'?input:null;
   doc.querySelectorAll=s=>s==='*'?[input,...buttons]:
     s==='form'?[]:[input,...buttons];
@@ -131,7 +134,7 @@ console.log('PASS: retry bounds, native forms, dynamic controls, upload confirma
 const receiptContext=uploadFixture(['Upload APK']);
 vm.runInNewContext(nativeTarget,receiptContext);
 receiptContext.input.files=[{name:'fixture.mp4',size:35651584}];
-receiptContext.input.changeListener();receiptContext.input.files=[];
+receiptContext.document.fileListeners.change({target:receiptContext.input});receiptContext.input.files=[];
 const receipt=JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/file-receipt.js','utf8'),receiptContext));
 assert.equal(receipt.event_observed,true);assert.equal(receipt.count,1);assert.equal(receipt.sizes[0],35651584);
 const field={tagName:'INPUT',type:'text',value:'old',isConnected:true,getAttribute:()=>null,dispatchEvent(){}};

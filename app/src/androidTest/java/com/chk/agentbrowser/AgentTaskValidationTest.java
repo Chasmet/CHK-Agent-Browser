@@ -39,7 +39,7 @@ public final class AgentTaskValidationTest {
             .put("expect",new JSONObject().put("state","completed").put("verified",true)));
         AgentTasks.validate(new JSONArray().put(step));
         rejected("download_file",download,false);
-        JSONObject writeAsProof=new JSONObject(step.toString());writeAsProof.getJSONObject("verify").getJSONObject("args").put("operation","download_file");
+        JSONObject writeAsProof=new JSONObject(step.toString());writeAsProof.getJSONObject("verify").getJSONObject("args").put("operation","download_file").put("expected_host","example.com");
         try{AgentTasks.validate(new JSONArray().put(writeAsProof));fail("A verification must not enqueue another download");}catch(Exception expected){assertTrue(expected.getMessage().contains("uniquement lire"));}
     }
     @Test public void sensitiveWebOperationsNeedObservability()throws Exception{

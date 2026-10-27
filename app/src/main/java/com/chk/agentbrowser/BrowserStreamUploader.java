@@ -66,7 +66,7 @@ final class BrowserStreamUploader {
         final Context app=context.getApplicationContext();final String token=UUID.randomUUID().toString();
         final String page=web.getUrl();final long version=BrowserWebState.documentVersion(web);
         try{
-            if(page==null||!BrowserPolicy.webUrl(page)||uris==null||uris.length<1||uris.length>8)throw new Exception("Page HTTPS et sélection locale requises.");
+            if(page==null||!BrowserPolicy.webUrl(page)||uris==null||uris.length<1||uris.length>8)throw new Exception("Page HTTP/HTTPS et sélection locale requises.");
             JSONArray files=new JSONArray();long total=0;
             for(Uri uri:uris){
                 if(uri==null||!"content".equals(uri.getScheme())||!(app.getPackageName()+".browserfiles").equals(uri.getAuthority()))throw new Exception("URI locale CHK requise.");

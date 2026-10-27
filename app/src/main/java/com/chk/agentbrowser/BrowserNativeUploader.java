@@ -23,7 +23,7 @@ import java.util.WeakHashMap;
  * onShowFileChooser callback. Neither the file bytes nor the owner's cookies pass
  * through MCP/Render or through an evaluateJavascript base64 buffer.
  *
- * Only an exact, inspected file input on the current HTTPS document is eligible.
+ * Only an exact, inspected file input on the current HTTP/HTTPS document is eligible.
  * A bounded native touch on its visible chooser control starts the site's real
  * chooser request. If the renderer suppresses that request, never claim success:
  * small files retain the old JS fallback; large files return a precise error.
@@ -78,7 +78,7 @@ public final class BrowserNativeUploader {
         }
         if (!BrowserWebState.alive(web) || !cb.isActive()
                 || web.getUrl()==null || !BrowserPolicy.webUrl(web.getUrl())) {
-            cb.finish(false,"La page HTTPS de destination est indisponible.");return;
+            cb.finish(false,"La page HTTP/HTTPS de destination est indisponible.");return;
         }
         if (ACTIVE.containsKey(web)) {
             cb.finish(false,"Un autre fichier est déjà en cours de sélection.");return;
