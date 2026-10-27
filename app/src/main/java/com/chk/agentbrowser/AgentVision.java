@@ -118,7 +118,9 @@ final class AgentVision {
                 float sy=web.getHeight()/(float)Math.max(1,dom.getDouble("css_height"));
                 JSONArray controls=dom.getJSONArray("controls"),cards=dom.optJSONArray("cards"),scrollables=dom.optJSONArray("scrollables");
                 scaleBounds(controls,sx,sy);scaleBounds(cards,sx,sy);scaleBounds(scrollables,sx,sy);
-                String revision=digest(info.getString("revision")+dom.toString());webRevisions.put(web,revision);
+                // Execution timing is telemetry, NOT page state: excluding it prevents false stale revisions.
+                 JSONObject stableDom=new JSONObject(dom.toString());stableDom.remove("observed_duration_ms");
+                 String revision=digest(info.getString("revision")+stableDom.toString());webRevisions.put(web,revision);
                 info.put("controls",controls).put("text",dom.getString("text")).put("controls_truncated",dom.getBoolean("controls_truncated")).put("revision",revision);
                 info.put("cards",cards==null?new JSONArray():cards).put("scrollables",scrollables==null?new JSONArray():scrollables)
                     .put("cards_truncated",dom.optBoolean("cards_truncated",false))
