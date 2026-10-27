@@ -52,6 +52,20 @@ public final class Local3RecoveryTest {
             replies.get("browser_click").finish(true,"late acknowledgement must be ignored");
         });ins.waitForIdleSync();ins.runOnMainSync(()->{assertEquals(Arrays.asList("browser_click","local3_status","browser_open_url"),started);replies.get("local3_status").finish(true,"done");replies.get("browser_open_url").finish(true,"done");});
     }
+    @Test public void transportLeaseExpiresWithoutAnyUiCallbackAndNeverFinishesTwice()throws Exception{
+        CountDownLatch done=new CountDownLatch(1);AtomicInteger replies=new AtomicInteger();AtomicReference<String> result=new AtomicReference<>();
+        CommandLease lease=new CommandLease(120,(ok,text)->{replies.incrementAndGet();result.set(text);done.countDown();});
+        assertTrue(done.await(2,TimeUnit.SECONDS));assertFalse(lease.isActive());assertEquals("timed_out",new JSONObject(result.get()).getString("execution_state"));
+        lease.finish(true,"late");assertEquals(1,replies.get());
+    }
+    @Test public void expiredOwnerReleasesDispatcherForTheNextTask()throws Exception{
+        CountDownLatch next=new CountDownLatch(1);AtomicInteger clicks=new AtomicInteger();
+        ins.runOnMainSync(()->{
+            Local3Dispatcher d=new Local3Dispatcher((action,args,reply)->{if(action.equals("browser_click"))clicks.incrementAndGet();else{next.countDown();reply.finish(true,"next");}});
+            d.submit("stalled","browser_click",new JSONObject(),new CommandLease(150,(ok,text)->{}));
+            d.submit("next","browser_open_url",new JSONObject(),(ok,text)->{});
+        });assertTrue(next.await(2,TimeUnit.SECONDS));assertEquals(1,clicks.get());
+    }
     @Test public void onlyDistinctExplicitTabTargetsOverlap()throws Exception{
         JSONObject p=new JSONObject().put("tool","control").put("target","web").put("tab_id","A").put("operation","act");
         String a=Local3TaskPolicy.lane("desktop",p),b=Local3TaskPolicy.lane("desktop",new JSONObject(p.toString()).put("tab_id","B"));

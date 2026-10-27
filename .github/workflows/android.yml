@@ -44,7 +44,7 @@ jobs:
         if: failure()
         run: |
           if test -f app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt; then
-            rg -A 5 'Error:' app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt || true
+            grep -A 5 'Error:' app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt || true
           fi
       - name: Autoriser KVM pour les tests Android
         run: sudo chmod 666 /dev/kvm

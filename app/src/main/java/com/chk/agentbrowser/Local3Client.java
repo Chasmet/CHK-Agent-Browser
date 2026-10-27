@@ -34,7 +34,7 @@ public final class Local3Client {
     private volatile long lastContact, nextCapabilitySync, nextConsentSync;
     private volatile String capabilityStatus="À synchroniser", lastAction="aucune", lastOutcome="aucun";
     private volatile boolean executing;
-    private final java.util.Set<String> inFlight=java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.Set<String> inFlight=java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String,Boolean>());
     private final Local3Dispatcher dispatcher;
     private volatile String sentConsent="", permissionStatus="À synchroniser";
     private final Runnable loop=this::poll;
@@ -80,7 +80,7 @@ public final class Local3Client {
         if(!p.edit().putString("server_url",normalized).remove("app_id").remove("secret")
             .remove("outbox").remove("leased_task").putBoolean("enabled",false).commit())
             throw new IllegalStateException("Enregistrement sécurisé impossible.");
-        SharedPreferences.Editor clean=p.edit();for(String key:p.getAll().keySet())if(key.startsWith("task_v2_")||key.startsWith("done_v2_"))clean.remove(key);clean.commit();
+        SharedPreferences.Editor clean=p.edit();for(String key:p.getAll().keySet())if(key.startsWith("task_v2_")||key.startsWith("done_v2_")||key.startsWith("done_time_"))clean.remove(key);clean.commit();
         lastContact=0;
         status="Serveur configuré · association nécessaire";
     }
@@ -368,9 +368,13 @@ public final class Local3Client {
                     catch(java.io.IOException e){
                         if(!java.util.Arrays.asList("HTTP 404","HTTP 409","HTTP 410").contains(e.getMessage()))throw e;
                     }
-                    p.edit().putString("last_task_receipt",item.toString()).putString("done_v2_"+tid,item.toString()).remove(key).commit();
+                    String receipt=item.toString();
+                    if(receipt.length()>8192)receipt=new JSONObject().put("task_id",tid).put("result",new JSONObject().put("ok",false)
+                        .put("execution_state","already_completed").put("retry_command",false).put("message","Tâche déjà exécutée et résultat transmis. Lire son résultat initial sur le serveur ; aucun rejeu.")).toString();
+                    p.edit().putString("last_task_receipt",receipt).putString("done_v2_"+tid,receipt).putLong("done_time_"+tid,System.currentTimeMillis()).remove(key).commit();
                     java.util.ArrayList<String> receipts=new java.util.ArrayList<>();for(String entry:p.getAll().keySet())if(entry.startsWith("done_v2_"))receipts.add(entry);
-                    if(receipts.size()>64){SharedPreferences.Editor trim=p.edit();for(int n=0;n<receipts.size()-64;n++)trim.remove(receipts.get(n));trim.commit();}
+                    if(receipts.size()>64){java.util.Collections.sort(receipts,(a,b)->Long.compare(p.getLong("done_time_"+a.substring(8),0),p.getLong("done_time_"+b.substring(8),0)));
+                        SharedPreferences.Editor trim=p.edit();for(int n=0;n<receipts.size()-64;n++){String old=receipts.get(n);trim.remove(old).remove("done_time_"+old.substring(8));}trim.commit();}
                 }
                 if(inFlight.size()>=4)return;
                 // Refresh this paired worker's fixed tool manifest after every APK update.
@@ -400,7 +404,7 @@ public final class Local3Client {
                     if(!p.edit().putString(journalKey,new JSONObject().put("task_id",taskId).toString()).commit())
                         throw new java.io.IOException("Journal de tâche non enregistré");
                     inFlight.add(taskId);executing=true;lastAction=action;lastOutcome="en cours";
-                    main.post(()->dispatcher.submit(taskId,action,parameters,new DirectMcpServer.Reply(){
+                    CommandLease lease=new CommandLease(Local3TaskPolicy.timeout(action,parameters)+15000L,new DirectMcpServer.Reply(){
                         private final java.util.concurrent.atomic.AtomicBoolean ended=new java.util.concurrent.atomic.AtomicBoolean();
                         public boolean isActive(){return !ended.get()&&session==generation&&running&&enabled();}
                         public void finish(boolean ok,String message){
@@ -415,7 +419,8 @@ public final class Local3Client {
                                 finally{inFlight.remove(taskId);executing=!inFlight.isEmpty();schedule(generation,0);}
                             });
                         }
-                    }));
+                    });
+                    main.post(()->dispatcher.submit(taskId,action,parameters,lease));
                     delay=150L;
                 }
             }catch(Exception e){

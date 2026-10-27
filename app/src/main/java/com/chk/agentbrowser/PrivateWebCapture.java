@@ -19,8 +19,10 @@ import org.json.JSONObject;
 final class PrivateWebCapture {
     interface Result {void ready(Bitmap image);void unavailable(String reason);}
     static void capture(Context app,WebView web,JSONObject info,AgentClient.ResultCallback owner,Result result){
+        if(android.os.Build.VERSION.SDK_INT<26){result.unavailable("Rendu privé PixelCopy disponible à partir d’Android 8.");return;}
         new Session(app,web,info,owner,result).start();
     }
+    @android.annotation.TargetApi(26)
     private static final class Session {
         final Context app;final WebView web;final JSONObject info;final AgentClient.ResultCallback owner;final Result result;
         ViewGroup parent;ViewGroup.LayoutParams layout;int index,visibility;int left,top,right,bottom;boolean preraster;
@@ -31,7 +33,7 @@ final class PrivateWebCapture {
             try{
                 if(!owner.isActive())throw new Exception("Capture annulée.");
                 if(!BrowserWebState.alive(web))throw new Exception("Onglet fermé.");
-                if(NativeKeyboard.foreground()&&web.isShown()&&web.isAttachedToWindow())throw new Exception("L'onglet est revenu au premier plan : refaire l'observation.");
+                if(AgentVision.visibleWindow(web))throw new Exception("L'onglet est revenu au premier plan : refaire l'observation.");
                 try{if((NativeKeyboard.window().getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)throw new SecurityException("Fenêtre protégée.");}catch(SecurityException e){throw e;}catch(Exception ignored){}
                 int width=web.getWidth(),height=web.getHeight();
                 if(width<=0||height<=0||(long)width*height>4_500_000L)throw new Exception("Dimensions de capture privée hors limite.");
@@ -53,7 +55,7 @@ final class PrivateWebCapture {
                 holder.addView(web,new FrameLayout.LayoutParams(width,height));presentation.setContentView(holder);presentation.show();
                 presentation.getWindow().setLayout(width,height);web.onResume();web.invalidate();
                 timeout=()->fail("Rendu privé sans pixels confirmés après 6 secondes.");WorkspaceCommands.UI.postDelayed(timeout,6000L);
-                monitor=new Runnable(){public void run(){if(ended)return;if(!owner.isActive()||!BrowserWebState.alive(web)||web.getParent()!=holder||NativeKeyboard.foreground()&&parent!=null&&parent.isShown()){fail("Capture interrompue : onglet repris, fermé ou autorisation révoquée.");return;}WorkspaceCommands.UI.postDelayed(this,100L);}};
+                monitor=new Runnable(){public void run(){if(ended)return;if(!owner.isActive()||!BrowserWebState.alive(web)||web.getParent()!=holder||parent!=null&&AgentVision.visibleWindow(parent)){fail("Capture interrompue : onglet repris, fermé ou autorisation révoquée.");return;}WorkspaceCommands.UI.postDelayed(this,100L);}};
                 WorkspaceCommands.UI.postDelayed(monitor,100L);
                 web.postVisualStateCallback(1,new WebView.VisualStateCallback(){public void onComplete(long id){if(!ended)web.postOnAnimation(()->web.postOnAnimation(()->copy(0)));}});
             }catch(Exception e){fail(e.getMessage()==null?"Capture privée indisponible.":e.getMessage());}
@@ -86,7 +88,7 @@ final class PrivateWebCapture {
         void cleanup(){
             if(timeout!=null)WorkspaceCommands.UI.removeCallbacks(timeout);if(monitor!=null)WorkspaceCommands.UI.removeCallbacks(monitor);
             // Do not recycle a bitmap still owned by an in-flight PixelCopy.
-            try{if(moved&&web.getParent()==holder){holder.removeView(web);web.getSettings().setOffscreenPreRaster(preraster);web.setVisibility(visibility);
+            try{if(moved&&(web.getParent()==holder||web.getParent()==null)){if(web.getParent()==holder)holder.removeView(web);web.getSettings().setOffscreenPreRaster(preraster);web.setVisibility(visibility);
                 if(parent!=null&&BrowserWebState.alive(web))parent.addView(web,Math.min(index,parent.getChildCount()),layout);
                 else if(layout!=null)web.setLayoutParams(layout);
                 web.measure(View.MeasureSpec.makeMeasureSpec(right-left,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(bottom-top,View.MeasureSpec.EXACTLY));web.layout(left,top,right,bottom);

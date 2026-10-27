@@ -131,6 +131,10 @@ final class AgentVision {
             capture(app,web,root,p,info,cb);
         }catch(Exception e){cb.finish(false,e.getMessage()==null?"Vision indisponible.":e.getMessage());}
     }
+    static boolean visibleWindow(View root){
+        try{return NativeKeyboard.foreground()&&root.isShown()&&root.isAttachedToWindow()&&root.getRootView()==NativeKeyboard.window().getDecorView();}
+        catch(Exception e){return false;}
+    }
     private static void capture(Context app,WebView web,View root,JSONObject p,JSONObject info,AgentClient.ResultCallback cb){
         try{
             if(!p.optBoolean("capture",false)){cb.finish(true,info.toString());return;}
@@ -140,7 +144,7 @@ final class AgentVision {
             // as a verified visual preview.
             final boolean isWeb=root instanceof WebView;
             final boolean foreground=NativeKeyboard.foreground();
-            if(isWeb&&(!foreground||!root.isAttachedToWindow()||!root.isShown())){
+            if(isWeb&&!visibleWindow(root)){
                 AgentClient.ResultCallback captureOwner=AgentControl.lease(web,false,cb);
                 PrivateWebCapture.capture(app,web,info,captureOwner,new PrivateWebCapture.Result(){
                     public void ready(Bitmap bitmap){try{finish(bitmap,info,"private_webview_pixels",captureOwner,web);}catch(Exception e){captureOwner.finish(false,e.getMessage());}}
