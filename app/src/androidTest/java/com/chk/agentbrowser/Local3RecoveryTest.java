@@ -70,6 +70,6 @@ public final class Local3RecoveryTest {
         JSONObject p=new JSONObject().put("tool","control").put("target","web").put("tab_id","A").put("operation","act");
         String a=Local3TaskPolicy.lane("desktop",p),b=Local3TaskPolicy.lane("desktop",new JSONObject(p.toString()).put("tab_id","B"));
         assertFalse(Local3TaskPolicy.conflicts(a,b));assertTrue(Local3TaskPolicy.conflicts(a,a));assertTrue(Local3TaskPolicy.conflicts(a,"exclusive"));assertFalse(Local3TaskPolicy.conflicts(a,"read"));
-        assertEquals(45000L,Local3TaskPolicy.timeout("browser_click",p));assertEquals(900000L,Local3TaskPolicy.timeout("files_hash",p));
+        assertEquals(60000L,Local3TaskPolicy.timeout("browser_click",p));assertEquals(900000L,Local3TaskPolicy.timeout("files_hash",p));
     }
 }

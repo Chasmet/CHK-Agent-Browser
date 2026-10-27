@@ -57,6 +57,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.PrivateWebCaptureTest,com.chk.agentbrowser.Local3RecoveryTest,com.chk.agentbrowser.Local2BrowserAutomationTest,com.chk.agentbrowser.Local2SessionIntegrationTest
             ./gradlew --no-daemon connectedDebugAndroidTest
             adb pull /data/local/tmp/chk-autonomy-fixtures app/build/autonomy-fixtures
       - uses: actions/setup-python@v5

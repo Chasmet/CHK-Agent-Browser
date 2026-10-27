@@ -37,6 +37,9 @@ final class PrivateWebCapture {
                 try{if((NativeKeyboard.window().getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)throw new SecurityException("Fenêtre protégée.");}catch(SecurityException e){throw e;}catch(Exception ignored){}
                 int width=web.getWidth(),height=web.getHeight();
                 if(width<=0||height<=0||(long)width*height>4_500_000L)throw new Exception("Dimensions de capture privée hors limite.");
+                // Android may globally stop hardware drawing when all Activities pause.
+                // Explicit offscreen CHK rendering needs the renderer active, as do Studio exports.
+                if(android.os.Build.VERSION.SDK_INT>=29)android.graphics.HardwareRenderer.setDrawingEnabled(true);
                 expected=AgentVision.context(web);parent=web.getParent() instanceof ViewGroup?(ViewGroup)web.getParent():null;
                 layout=web.getLayoutParams();index=parent==null?-1:parent.indexOfChild(web);visibility=web.getVisibility();preraster=web.getSettings().getOffscreenPreRaster();
                 left=web.getLeft();top=web.getTop();right=web.getRight();bottom=web.getBottom();
@@ -44,7 +47,7 @@ final class PrivateWebCapture {
                 // Drain compositor buffers; PixelCopy reads the Presentation window directly.
                 reader.setOnImageAvailableListener(r->{try(android.media.Image image=r.acquireLatestImage()){}catch(Exception ignored){}},WorkspaceCommands.UI);
                 DisplayManager manager=(DisplayManager)app.getSystemService(Context.DISPLAY_SERVICE);
-                display=manager.createVirtualDisplay("CHK private tab capture",width,height,app.getResources().getDisplayMetrics().densityDpi,reader.getSurface(),DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY);
+                display=manager.createVirtualDisplay("CHK private tab capture",width,height,app.getResources().getDisplayMetrics().densityDpi,reader.getSurface(),DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY|DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION);
                 if(display==null)throw new Exception("Affichage privé indisponible.");
                 presentation=new Presentation(app,display.getDisplay(),android.R.style.Theme_Material_Light_NoActionBar);
                 presentation.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE|WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);

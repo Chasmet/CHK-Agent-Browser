@@ -237,6 +237,9 @@ final class AgentControl {
     private static void release(String lane,String id){if(id.equals(LOCKS.get(lane)))LOCKS.remove(lane);REQUESTS.remove(id);}
     /** Existing pointer/keyboard tools share the same input exclusion as control/act. */
     static AgentClient.ResultCallback lease(WebView web,boolean nativeTarget,AgentClient.ResultCallback parent)throws Exception{
+        return lease(web,nativeTarget,parent,30000L);
+    }
+    static AgentClient.ResultCallback lease(WebView web,boolean nativeTarget,AgentClient.ResultCallback parent,long timeout)throws Exception{
         if(!nativeTarget&&!BrowserWebState.alive(web))throw new Exception("Aucun onglet web disponible pour cette entrée.");
         String lane=nativeTarget?"native":BrowserTabIds.id(web);
         if(parent.inputLease().equals(LOCKS.get(lane)))return parent;
@@ -247,7 +250,7 @@ final class AgentControl {
             public String inputLease(){return owner;}public boolean isActive(){return !ended.get()&&parent.isActive();}
             public void finish(boolean ok,String text){if(!ended.compareAndSet(false,true))return;release(lane,owner);if(parent.isActive())parent.finish(ok,text);}
         };
-        WorkspaceCommands.UI.postDelayed(()->{if(!ended.compareAndSet(false,true))return;WorkspaceCommands.UI.postDelayed(()->{release(lane,owner);if(parent.isActive())parent.finish(false,"Entrée interrompue : vérifier l'écran avant de la répéter.");},32L);},30000L);return leased;
+        WorkspaceCommands.UI.postDelayed(()->{if(!ended.compareAndSet(false,true))return;WorkspaceCommands.UI.postDelayed(()->{release(lane,owner);if(parent.isActive())parent.finish(false,"Entrée interrompue : vérifier l'écran avant de la répéter.");},32L);},Math.max(1000L,Math.min(60000L,timeout)));return leased;
     }
     private static void parallel(Context app,JSONObject p,AgentClient.ResultCallback cb)throws Exception{
         JSONArray jobs=p.getJSONArray("jobs");if(jobs.length()<1||jobs.length()>4)throw new Exception("Entre 1 et 4 workflows parallèles par demande.");

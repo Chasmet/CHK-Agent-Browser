@@ -11,6 +11,8 @@ final class Local3TaskPolicy {
         if(TransferLimits.longOperation(name)||name.equals("media_transcribe")||name.equals("desktop")&&p.optString("tool").equals("hearing")&&p.optString("operation").equals("transcribe"))return 900000L;
         if(name.startsWith("media_")||name.equals("desktop")&&p.optString("tool").equals("hearing"))return 180000L;
         if(name.equals("browser_batch"))return 150000L;
+        if(name.equals("browser_click")||name.equals("browser_click_when_enabled")||name.equals("click")||name.equals("click_verified")
+            ||name.equals("desktop")&&p.optString("tool").equals("browser")&&p.optString("operation").equals("click_when_enabled"))return 60000L;
         return 45000L;
     }
     static String lane(String a,JSONObject args){

@@ -215,6 +215,10 @@ final class PublicationJobs {
         if(!"click_pending".equals(job.optString("status")))
             throw new Exception("Journal Publication incohérent.");
         boolean clicked=ok&&feedback!=null&&feedback.startsWith("Clic confirmé");
+        if(ok&&feedback!=null&&feedback.startsWith("{"))try{
+            JSONObject proof=new JSONObject(feedback);
+            clicked=proof.optBoolean("action_sent",false)&&proof.optBoolean("outcome_confirmed",false)&&proof.optString("state").equals("completed");
+        }catch(org.json.JSONException ignored){clicked=false;}
         job.put("status",clicked?
             (job.optString("schedule_at").isEmpty()?"browser_confirmed":"schedule_browser_confirmed"):"uncertain");
         job.put("remote_verified",clicked);
