@@ -65,6 +65,42 @@ public final class BrowserScripts {
             +"}catch(e){return 'ERROR: '+e.message;}})()";
     }
 
+
+    /** Scroll the actual visible inner list (dialog/card grid) instead of only the WebView root.
+     * Returns measured movement, never claims success solely because a gesture was sent. */
+    public static String scrollContainer(String direction,int pixels,String selector,String untilText){
+        return "(function(){try{" + finder()
+            + "var dir="
+            + org.json.JSONObject.quote(direction)
+            + ",pixels="
+            + Integer.toString(pixels)
+            + ",sel="
+            + org.json.JSONObject.quote(selector)
+            + ",wanted="
+            + org.json.JSONObject.quote(untilText)
+            + ";var modal=document.querySelector('[role=dialog][aria-modal=true]')||document.querySelector('[role=dialog]');var scope=sel?deepFind(sel):modal;if"
+            + "(sel&&!scope)return JSON.stringify({ok:false,error:'Zone de défilement introuvable',selector:sel});var roots=scope?[scope]:[document];var candida"
+            + "tes=[],seen=new Set();function visible(e){var r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.height>32&&r.width>35&&r.bottom>0&&r.rig"
+            + "ht>0&&r.top<innerHeight&&r.left<innerWidth&&s.display!=='none'&&s.visibility!=='hidden';}function inspect(root){var es=[root];try{es=es.concat(Ar"
+            + "ray.from(root.querySelectorAll('*')).slice(0,4000));}catch(ignore){}for(var el of es){if(seen.has(el))continue;seen.add(el);if(!visible(el))conti"
+            + "nue;var sty=getComputedStyle(el);var scrollable=el.scrollHeight>el.clientHeight+10&&(sty.overflowY==='auto'||sty.overflowY==='scroll'||sty.overfl"
+            + "owY==='overlay'||el.hasAttribute('data-scroll-container'));if(scrollable){var r=el.getBoundingClientRect();candidates.push({el:el,score:(scope&&s"
+            + "cope.contains(el)?5000:0)+(modal&&modal.contains(el)?2000:0)+Math.min(1000,el.scrollHeight-el.clientHeight)+(Math.min(r.height,900)/5),rect:r});}"
+            + "}}for(var root of roots)inspect(root);if(!scope||scope===document){if(modal)inspect(modal);}var fallback=document.scrollingElement||document.docu"
+            + "mentElement; if(!scope||scope===document)candidates.push({el:fallback,score:1,rect:fallback.getBoundingClientRect()});if(!candidates.length)retur"
+            + "n JSON.stringify({ok:true,moved:false,reason:'Aucune zone interne défilable',selector:sel});candidates.sort((a,b)=>b.score-a.score);var delta=(di"
+            + "r==='up'?-1:1)*Math.max(60,Math.min(2400,pixels||Math.round(innerHeight*.6)));var found=false,selected=candidates[0],before=0,after=0;function ha"
+            + "sTarget(el){if(!wanted)return false;var nodes=el.querySelectorAll('article,li,[role=listitem],button,[class*=card],[class*=Card]');for(var i=0;i<"
+            + "Math.min(nodes.length,250);i++){var e=nodes[i],r=e.getBoundingClientRect();if(r.bottom>0&&r.top<innerHeight&&(e.innerText||'').toLowerCase().incl"
+            + "udes(wanted.toLowerCase()))return true;}return false;}if(wanted&&candidates.some(c=>hasTarget(c.el))){found=true;return JSON.stringify({ok:true,m"
+            + "oved:false,found:true,matched:wanted,reason:'Element visible',container_count:candidates.length});}for(var c of candidates){var e=c.el,b=e.scroll"
+            + "Top;e.scrollTop=Math.max(0,Math.min(e.scrollHeight-e.clientHeight,b+delta));if(Math.abs(e.scrollTop-b)>1){selected=c;before=b;after=e.scrollTop;b"
+            + "reak;}}found=hasTarget(selected.el);var r=selected.rect;return JSON.stringify({ok:true,moved:Math.abs(after-before)>1,found:found,scroll_top_befo"
+            + "re:before,scroll_top_after:after,container_count:candidates.length,container_bounds:{x:r.left,y:r.top,width:r.width,height:r.height},scrollable_h"
+            + "eight:selected.el.scrollHeight,visible_height:selected.el.clientHeight});"
+            + "}catch(e){return JSON.stringify({ok:false,error:String(e.message||e)});}})()";
+    }
+
     public static String type(String selectorLiteral,String textLiteral) {
         return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");"
             + "if(!el)return 'Champ introuvable';if(['password','file','hidden'].indexOf((el.type||'').toLowerCase())>=0)return 'Champ sensible bloqué';"
