@@ -678,6 +678,8 @@ public class MainActivity extends Activity {
                             out.put("resources_complete",BrowserWebState.loaded(web));
                             out.put("text",details.optString("text"));
                             out.put("elements",details.optJSONArray("elements"));
+                            out.put("cards",details.optJSONArray("cards"));
+                            out.put("scrollables",details.optJSONArray("scrollables"));
                             out.put("media",details.optJSONArray("media"));
                             out.put("document_url",details.optString("document_url"));
                             out.put("session_source","visible");
@@ -711,10 +713,47 @@ public class MainActivity extends Activity {
                     PublicCommentCollector.start(this,current,args,transferHandler,callback);return;
                 }
                 case "scroll":{
-                    int offset=(int)(current.getHeight()*0.7f);
-                    if("up".equals(args.optString("direction")))offset=-offset;
-                    final WebView target=current;final int from=target.getScrollY(),to=Math.max(0,from+offset);
-                    android.animation.ValueAnimator animation=android.animation.ValueAnimator.ofInt(from,to);animation.setDuration(280);animation.addUpdateListener(v->target.scrollTo(target.getScrollX(),(int)v.getAnimatedValue()));animation.addListener(new android.animation.AnimatorListenerAdapter(){@Override public void onAnimationEnd(android.animation.Animator a){callback.finish(true,"Défilement effectué.");}});animation.start();return;
+                    // Dialogs and virtualized card lists (Suno Voices, file pickers) scroll
+                    // independently of the top-level WebView. Execute successive steps
+                    // locally to eliminate one remote MCP round-trip for every gesture.
+                    final WebView target=current;
+                    final String url=target.getUrl();
+                    final long version=BrowserWebState.documentVersion(target);
+                    final String direction=args.optString("direction","down");
+                    final String selector=args.optString("selector","");
+                    final String until=args.optString("until_text","");
+                    if(!direction.equals("up")&&!direction.equals("down")||selector.length()>350||until.length()>180){
+                        callback.finish(false,"Paramètres de défilement invalides.");return;
+                    }
+                    final int pixels=Math.max(60,Math.min(2400,args.optInt("pixels",Math.max(350,(int)(target.getHeight()*0.6f)))));
+                    final int limit=Math.max(1,Math.min(20,args.optInt("max_steps",1)));
+                    final String script=BrowserScripts.scrollContainer(direction,pixels,selector,until);
+                    new Runnable(){
+                        int steps=0;boolean moved=false;
+                        @Override public void run(){
+                            if(!callback.isActive())return;
+                            if(!BrowserWebState.alive(target)||!java.util.Objects.equals(url,target.getUrl())
+                                ||version!=BrowserWebState.documentVersion(target)){
+                                callback.finish(false,"Page modifiée durant le défilement. Relire avant de continuer.");return;
+                            }
+                            target.evaluateJavascript(script,raw->{
+                                if(!callback.isActive())return;
+                                try{
+                                    JSONObject state=new JSONObject(fromJavascript(raw));
+                                    steps++;
+                                    moved|=state.optBoolean("moved",false);
+                                    state.put("steps",steps).put("movement_verified",moved);
+                                    if(!state.optBoolean("ok",false)){
+                                        callback.finish(false,state.toString());return;
+                                    }
+                                    if(state.optBoolean("found",false)||!state.optBoolean("moved",false)||steps>=limit){
+                                        callback.finish(moved||state.optBoolean("found",false),state.toString());return;
+                                    }
+                                    transferHandler.postDelayed(this,85L);
+                                }catch(Exception error){callback.finish(false,"Impossible de vérifier le déplacement de la liste.");}
+                            });
+                        }
+                    }.run();return;
                 }
                 case "click_verified":{
                     VerifiedClick.run(current,args,transferHandler,callback);

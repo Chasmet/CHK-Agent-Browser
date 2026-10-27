@@ -19,6 +19,10 @@ public final class ScriptChecks {
             throw new AssertionError("Expired result must not block polling; transient errors retry");
         java.nio.file.Path root=java.nio.file.Paths.get(args[0]);
         java.nio.file.Files.write(root.resolve("read.js"),BrowserScripts.readPage().getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("scroll-list.js"),
+            BrowserScripts.scrollContainer("down",420,"","").getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("scroll-until.js"),
+            BrowserScripts.scrollContainer("down",420,"","Paname offi").getBytes("UTF-8"));
         java.nio.file.Files.write(root.resolve("type.js"),
             BrowserScripts.type("\"#target\"","\"hello\\nworld\"").getBytes("UTF-8"));
         java.nio.file.Files.write(root.resolve("select.js"),

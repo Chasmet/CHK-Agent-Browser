@@ -101,9 +101,9 @@ final class AgentVision {
         if(!BrowserWebState.alive(web)){cb.failed("Onglet fermé pendant l'observation.");return;}
         ensureMeasured(web);String current=context(web);long now=android.os.SystemClock.elapsedRealtime();
         if(!current.equals(settledContexts.get(web))){settledContexts.put(web,current);settledSince.put(web,now);}
-        if(now-settledSince.get(web)<180L){
+        if(now-settledSince.get(web)<90L){
             if(attempt>=40){cb.failed("La taille de l'onglet change encore : attendre la fin du clavier ou de l'animation.");return;}
-            WorkspaceCommands.UI.postDelayed(()->settleWeb(app,web,cb,attempt+1),30L);return;
+            WorkspaceCommands.UI.postDelayed(()->settleWeb(app,web,cb,attempt+1),20L);return;
         }
         observeWebNow(app,web,cb);
     }
@@ -114,14 +114,33 @@ final class AgentVision {
             web.evaluateJavascript(script,raw->{try{
                 if(!BrowserWebState.alive(web)||!expected.equals(context(web)))throw new Exception("La page a changé pendant l’observation.");
                 JSONObject dom=new JSONObject(new JSONArray("["+raw+"]").getString(0));JSONObject info=inspect(web);
-                float sx=web.getWidth()/(float)Math.max(1,dom.getDouble("css_width")),sy=sx;JSONArray controls=dom.getJSONArray("controls");
-                for(int i=0;i<controls.length();i++){JSONObject bounds=controls.getJSONObject(i).getJSONObject("bounds");bounds.put("x",bounds.getDouble("x")*sx).put("y",bounds.getDouble("y")*sy).put("width",bounds.getDouble("width")*sx).put("height",bounds.getDouble("height")*sy);}
-                String revision=digest(info.getString("revision")+dom.toString());webRevisions.put(web,revision);
+                float sx=web.getWidth()/(float)Math.max(1,dom.getDouble("css_width"));
+                float sy=web.getHeight()/(float)Math.max(1,dom.getDouble("css_height"));
+                JSONArray controls=dom.getJSONArray("controls"),cards=dom.optJSONArray("cards"),scrollables=dom.optJSONArray("scrollables");
+                scaleBounds(controls,sx,sy);scaleBounds(cards,sx,sy);scaleBounds(scrollables,sx,sy);
+                // Execution timing is telemetry, NOT page state: excluding it prevents false stale revisions.
+                 JSONObject stableDom=new JSONObject(dom.toString());stableDom.remove("observed_duration_ms");
+                 String revision=digest(info.getString("revision")+stableDom.toString());webRevisions.put(web,revision);
                 info.put("controls",controls).put("text",dom.getString("text")).put("controls_truncated",dom.getBoolean("controls_truncated")).put("revision",revision);
+                info.put("cards",cards==null?new JSONArray():cards).put("scrollables",scrollables==null?new JSONArray():scrollables)
+                    .put("cards_truncated",dom.optBoolean("cards_truncated",false))
+                    .put("dom_scan_ms",dom.optInt("observed_duration_ms",-1));
                 info.put("observation_source","live_dom").put("observed_at",System.currentTimeMillis());
                 cb.ready(info);
             }catch(Exception e){cb.failed(e.getMessage()==null?"Observation web indisponible.":e.getMessage());}});
         }catch(Exception e){cb.failed(e.getMessage());}
+    }
+    /** Maps CSS viewport coordinates to the Android WebView coordinates used by the pointer. */
+    private static void scaleBounds(JSONArray items,float sx,float sy)throws Exception{
+        if(items==null)return;
+        for(int i=0;i<items.length();i++){
+            JSONObject row=items.optJSONObject(i);
+            if(row==null)continue;
+            JSONObject rect=row.optJSONObject("bounds");
+            if(rect==null)continue;
+            rect.put("x",rect.optDouble("x")*sx).put("y",rect.optDouble("y")*sy)
+                .put("width",rect.optDouble("width")*sx).put("height",rect.optDouble("height")*sy);
+        }
     }
     static void execute(Context app,WebView web,JSONObject p,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
@@ -197,7 +216,7 @@ final class AgentVision {
         if(frame!=null&&frame.optString("context").equals(info.optString("context"))
             &&frame.optString("url").equals(info.optString("url"))){
             long age=android.os.SystemClock.elapsedRealtime()-frame.optLong("elapsed_at");
-            if(age>=0&&age<=60000L){
+            if(age>=0&&age<=3000L){
                 info.put("capture_source","cached_window_pixels").put("capture_available",true)
                     .put("capture_age_ms",age).put("captured_at",frame.getLong("captured_at"))
                     .put("capture_revision",frame.getString("revision")).put("jpeg_base64",frame.getString("jpeg_base64"));
