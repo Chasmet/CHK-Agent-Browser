@@ -55,7 +55,7 @@ final class AudioDecoder {
         if(rate<8000||rate>192000||channels<1||channels>8)throw new IOException("Fréquence ou canaux audio non pris en charge.");
         int frames=pcm.remaining()/(channels*2);long skip=Math.max(0,(long)Math.ceil((start-time)*rate/1000000d));long until=Math.min(frames,(long)Math.ceil((end-time)*rate/1000000d));
         if(until<=skip)return;int base=pcm.position();pcm.limit(base+(int)until*channels*2);pcm.position(base+(int)skip*channels*2);
-        long from=time+skip*1000000L/rate;int count=(int)(until-skip);info.rate=rate;info.channels=channels;if(info.firstUs<0)info.firstUs=from;info.lastUs=from+count*1000000L/rate;info.frames+=count;
+        long from=time+skip*1000000L/rate;int count=(int)(until-skip);info.rate=rate;info.channels=channels;if(info.firstUs<0)info.firstUs=from;info.lastUs=Math.min(end,from+count*1000000L/rate);info.frames+=count;
         sink.pcm(pcm.slice().order(ByteOrder.LITTLE_ENDIAN),rate,channels,from);
     }
     private static boolean wav(File file,long start,long end,Sink sink,Info info,AgentClient.ResultCallback active)throws Exception{
