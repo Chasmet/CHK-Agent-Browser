@@ -363,8 +363,9 @@ public final class AgentClient {
                 finish.finish(false, "Lots imbriqués interdits."); return;
             }
             executeLocal(next, step.optJSONObject("args") == null
-                ? new JSONObject() : step.getJSONObject("args"), (ok, message) -> {
-                ui.post(() -> {
+                ? new JSONObject() : step.getJSONObject("args"), new DirectMcpServer.Reply(){
+                public boolean isActive(){return !completed.get()&&epoch==localChannelGeneration(third)&&localChannelEnabled(third)&&localAutonomous(third);}
+                public void finish(boolean ok,String message){ui.post(() -> {
                     try {
                         results.put(new JSONObject().put("step", index + 1)
                             .put("action", next).put("success", ok)
@@ -375,7 +376,7 @@ public final class AgentClient {
                         finish.finish(false, "Erreur de suivi du lot Android.");
                     }
                 });
-            },third);
+            }},third);
         } catch(Exception error) {
             finish.finish(false, "Étape de lot invalide.");
         }
@@ -424,6 +425,7 @@ public final class AgentClient {
     private int localChannelGeneration(boolean third){
         return third?Local3Client.get(app).sessionGeneration():Local2Client.get(app).sessionGeneration();
     }
+    private static final java.util.concurrent.ScheduledExecutorService LOCAL_DEADLINES=java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
     private void executeLocal(String action, JSONObject args, DirectMcpServer.Reply reply,boolean third) {
         final int epoch=localChannelGeneration(third);
         final java.util.concurrent.atomic.AtomicBoolean completed=new java.util.concurrent.atomic.AtomicBoolean();
@@ -432,19 +434,20 @@ public final class AgentClient {
                 "Délai de commande locale dépassé · résultat non confirmé, aucune répétition automatique.");
         };
         String actual="android_action".equals(action)?args.optString("action",action):action;
-        ui.postDelayed(timeout,TransferLimits.longOperation(actual)?900000L:150000L);
+        final java.util.concurrent.ScheduledFuture<?> alarm=LOCAL_DEADLINES.schedule(timeout,Local3TaskPolicy.timeout(action,args),java.util.concurrent.TimeUnit.MILLISECONDS);
         executeLocal2Command(action,args,(ok,message)->{
             if(completed.compareAndSet(false,true)){
-                ui.removeCallbacks(timeout);
+                alarm.cancel(false);
                 if(ok && epoch!=localChannelGeneration(third))
                     reply.finish(false,"Canal modifié pendant l’action · résultat à vérifier avant toute répétition.");
                 else reply.finish(ok,message);
             }
-        },epoch,completed,third);
+        },epoch,completed,third,reply);
     }
     private void executeLocal2Command(String action, JSONObject args, DirectMcpServer.Reply reply,
-                                     int epoch,java.util.concurrent.atomic.AtomicBoolean completed,boolean third) {
+                                     int epoch,java.util.concurrent.atomic.AtomicBoolean completed,boolean third,DirectMcpServer.Reply owner) {
         ui.post(() -> {
+            if(completed.get()||!owner.isActive())return;
             if (!localChannelEnabled(third)) {
                 reply.finish(false, third ? "Local 3 désactivé dans Réglages." : "Local 2 désactivé dans Réglages."); return;
             }
@@ -516,7 +519,7 @@ public final class AgentClient {
                         @Override public boolean isLocal2() { return true; }
                         @Override public boolean isLocal3() { return third; }
                         @Override public boolean isActive() {
-                            return !completed.get() && epoch==localChannelGeneration(third)
+                            return !completed.get() && owner.isActive() && epoch==localChannelGeneration(third)
                                 && localChannelEnabled(third) && localAutonomous(third);
                         }
                         @Override public void finish(boolean ok, String message) {
@@ -570,7 +573,7 @@ public final class AgentClient {
                     @Override public boolean isLocal2() { return true; }
                         @Override public boolean isLocal3() { return third; }
                     @Override public boolean isActive() {
-                        return !completed.get() && epoch==localChannelGeneration(third)
+                        return !completed.get() && owner.isActive() && epoch==localChannelGeneration(third)
                             && localChannelEnabled(third) && localAutonomous(third)
                             && local2Browser() == receiver;
                     }

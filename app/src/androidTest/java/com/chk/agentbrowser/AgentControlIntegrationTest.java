@@ -67,6 +67,10 @@ public final class AgentControlIntegrationTest {
         assertEquals("completed",result.getString("state"));assertTrue(result.toString(),result.getBoolean("outcome_confirmed"));
         assertEquals("\"Texte vérifié\"",js(web,"document.querySelector('#draft').value"));assertTrue(result.getJSONObject("after").has("observation_id"));
     }
+    @Test public void conditionTrueBeforeControlActionIsNotAnEffectConfirmation()throws Exception{
+        JSONObject seen=observe("web","");JSONObject request=action(seen,pointer(seen,"Exécuter")).put("expect",new JSONObject().put("text_contains","Exécuter"));
+        JSONObject result=call(request).json();assertEquals("already_satisfied",result.getString("state"));assertFalse(result.getBoolean("action_sent"));assertFalse(result.getBoolean("outcome_confirmed"));assertEquals("0",js(web,"window.clicks||0"));
+    }
     @Test public void nativePointerHasAfterVisionAndReplayNeverClicksTwice()throws Exception{
         AtomicInteger clicks=new AtomicInteger();ins.runOnMainSync(()->{
             LinearLayout box=new LinearLayout(activity);box.setOrientation(1);Button b=new Button(activity);b.setText("Exécuter");TextView out=new TextView(activity);out.setText("En attente");

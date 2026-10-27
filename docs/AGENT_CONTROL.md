@@ -65,3 +65,12 @@ Les extraits sont PCM16 mono 16 kHz, bornés à 5 secondes pour le transport MCP
 `hearing/media`, avec `tab_id` et `expected_host` facultatifs, lit les sources des éléments audio/vidéo du véritable onglet CHK. Cette découverte n’est pas une capture sonore. Pour une source HTTP/HTTPS accessible, utiliser le téléchargement durable vers CHK, puis écouter le fichier. Les flux blob, les contenus DRM et le son d’autres applications ne sont pas extraits automatiquement. Aucun microphone n’est enregistré.
 
 Les actions natives équivalentes `media_listen`, `media_analyze_audio`, `media_transcribe` et `media_audio_capabilities` passent également par android_action. Les analyses/transcriptions peuvent faire partie des workflows ; les extraits audio volumineux s’écoutent séparément.
+
+
+## Recovery and private captures
+
+`already_satisfied` is a no-op, never proof that input occurred. Inspect `action_sent` and `outcome_confirmed`; `ok` alone is insufficient. Verified clicks have a single absolute 0.8–25 s deadline including missing JavaScript callbacks. A late reply is discarded and no click is retried. Observe again after an uncertain result.
+
+Local 3 keeps up to four leased tasks, each with a persistent receipt. Independent diagnostics and explicit tab targets can progress concurrently; shared/default targets are serialized. Server 1.0.4 may still choose to return a single outstanding lease; the APK cannot override that server policy. Generic command deadlines are 45 s, audio analysis 180 s, transcription/large file operations 900 s, bounded batches 150 s.
+
+For hidden WebViews, CHK temporarily renders the existing tab on an OWN_CONTENT_ONLY private VirtualDisplay, never AUTO_MIRROR or PUBLIC. No external app capture, screen recording permission or new pairing is used. PixelCopy reads the CHK Presentation window after WebView visual readiness, and DOM revision is compared again. Original parent, index, dimensions, visibility and preraster preference are restored. `private_webview_pixels` means a current CHK private rendering, not the physical phone display. Protected media may be blank; changing pages or unsupported OEM renderers return explicit unavailable/cache results within six seconds.

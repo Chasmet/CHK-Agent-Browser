@@ -18,13 +18,38 @@ import org.json.JSONObject;
 public final class VerifiedClick {
     private VerifiedClick() {}
 
+    private static String result(String state,Object sent,boolean confirmed,String message) {
+        try{return new JSONObject().put("state",state).put("action_sent",sent).put("outcome_confirmed",confirmed).put("retry_command",false).put("message",message).toString();}
+        catch(Exception e){return message;}
+    }
+    private static final class DeadlineCallback implements AgentClient.ResultCallback {
+        final AgentClient.ResultCallback parent;final Handler handler;final Runnable expiry;
+        final java.util.concurrent.atomic.AtomicBoolean done=new java.util.concurrent.atomic.AtomicBoolean();
+        boolean attempted;
+        DeadlineCallback(AgentClient.ResultCallback parent,Handler handler,long timeout){
+            this.parent=parent;this.handler=handler;
+            expiry=()->finish(false,result("timed_out",attempted?JSONObject.NULL:Boolean.FALSE,false,
+                attempted?"Retour JavaScript absent ou résultat non confirmé : observer sans répéter le clic.":"Délai dépassé avant le clic : aucun geste envoyé."));
+            handler.postDelayed(expiry,timeout);
+        }
+        public boolean isActive(){return !done.get()&&parent.isActive();}
+        public boolean isLocal2(){return parent.isLocal2();}public boolean isLocal3(){return parent.isLocal3();}
+        public String inputLease(){return parent.inputLease();}
+        public void finish(boolean ok,String text){if(!done.compareAndSet(false,true))return;handler.removeCallbacks(expiry);parent.finish(ok,text);}
+    }
     private static String value(String raw) {
         try { return new JSONArray("[" + raw + "]").getString(0); }
         catch(Exception ignored) { return ""; }
     }
 
     public static void run(WebView web, JSONObject args, Handler handler,
-                           AgentClient.ResultCallback callback) {
+                           AgentClient.ResultCallback parent) {
+        AgentClient.ResultCallback callback;
+        try { callback=AgentControl.lease(web,false,parent); } catch(Exception e){parent.finish(false,e.getMessage());return;}
+        callback=new DeadlineCallback(callback,handler,Math.max(800L,Math.min(25000L,args.optLong("timeout_ms",args.optBoolean("wait_until_enabled",false)?20000L:10000L))));
+        runBounded(web,args,handler,callback);
+    }
+    private static void runBounded(WebView web,JSONObject args,Handler handler,AgentClient.ResultCallback callback) {
         if(web == null) { callback.finish(false, "Aucune page active."); return; }
         final String selector=args.optString("selector", "");
         final String expectedSelector=args.optString("expected_selector", "");
@@ -84,7 +109,7 @@ public final class VerifiedClick {
                 if(!callback.isActive()||!BrowserWebState.alive(web))return;
                 String state=value(before);
                 if("DONE".equals(state)){
-                    callback.finish(true,"Condition déjà satisfaite : aucun clic supplémentaire.");return;
+                    callback.finish(true,result("already_satisfied",false,false,"Condition déjà satisfaite avant la demande : aucun clic envoyé."));return;
                 }
                 if(!"WAIT".equals(state)){
                     callback.finish(false,"État avant le clic non vérifiable : "+state);return;
@@ -116,6 +141,7 @@ public final class VerifiedClick {
         if(receipts!=null && !receipts.edit().putString(receiptId,fingerprint).commit()){
             callback.finish(false,"Journal d'idempotence indisponible : aucun clic envoyé.");return;
         }
+        if(callback instanceof DeadlineCallback)((DeadlineCallback)callback).attempted=true;
         final long clickedAt=SystemClock.elapsedRealtime();
         web.evaluateJavascript(BrowserScripts.click(JSONObject.quote(selector)),raw->{
             if(!callback.isActive())return;
@@ -134,7 +160,7 @@ public final class VerifiedClick {
                         if(!callback.isActive())return;
                         String state=value(after);
                         if("DONE".equals(state)){
-                            callback.finish(true,"Clic confirmé : condition observée sur la page. Un seul clic a été envoyé.");
+                            callback.finish(true,result("completed",true,true,"Clic confirmé : condition devenue vraie après un seul clic."));
                         }else if(!"WAIT".equals(state)||
                                 SystemClock.elapsedRealtime()-clickedAt>=timeout){
                             callback.finish(false,"Clic envoyé UNE fois ; résultat encore non confirmé ("+

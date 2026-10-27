@@ -38,7 +38,7 @@ final class DirectMcpServer implements AutoCloseable {
     private static final String PREF = "browser_mcp_v1";
     private static final int MAX_BODY = 32768;
     private static final String PROTOCOL = "2025-06-18";
-    interface Reply { void finish(boolean success, String result); }
+    interface Reply { void finish(boolean success, String result); default boolean isActive(){return true;} }
     interface Runner {
         boolean active();
         JSONObject status();

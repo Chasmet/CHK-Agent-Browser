@@ -1,3 +1,12 @@
+## Récupération des commandes et vision privée CHK
+
+- Clic vérifié : délai de 0,8 à 25 secondes, y compris si une réponse JavaScript n’arrive jamais ; aucun rejeu automatique après résultat incertain.
+- Une condition déjà satisfaite produit `already_satisfied`, `action_sent:false`, `outcome_confirmed:false`.
+- Local 3 continue de sonder la file pendant les commandes : jusqu’à quatre tâches reçues, résultats persistants séparés, diagnostics indépendants, entrées sur onglets explicitement distincts. Les commandes qui pourraient modifier le même écran restent ordonnées. La concurrence effective dépend aussi des baux attribués par le serveur PC.
+- Délai de secours indépendant du thread d’interface : 45 secondes pour les commandes courantes ; délais adaptés pour audio et grands fichiers. Les résultats de tâches closes par le serveur sont conservés sans bloquer les suivantes.
+- Capture hors écran : rendu de l’onglet existant sur un affichage privé CHK, sans miroir de l’écran du téléphone. Pixels vérifiés par PixelCopy et comparaison de l’état de page ; restauration de l’onglet ensuite. Délai de 6 secondes, repli explicite DOM/cache si le téléphone refuse ce rendu ou si la page change.
+- Signature et installation par-dessus l’application existante conservées. Aucun changement du serveur PC ni de l’association.
+
 ## Local 3 — contrôle unifié, vision après action et tâches concurrentes (27 octobre 2026)
 
 - Écoute ajoutée via desktop/tool=hearing : vrais extraits WAV de 1 à 5 secondes, mesure des niveaux/silences par passage de 120 secondes maximum, transcription locale fr/en avec position de départ. Les extraits choisis sont transmis au connecteur ; la transcription locale ne téléverse pas le fichier source. Aucun enregistrement automatique du microphone.

@@ -20,22 +20,24 @@ final class AgentControl {
     private AgentControl(){}
     private static final class Snapshot {
         final WeakReference<View> root;final WeakReference<WebView> web;
+        final JSONObject before;
         final String id,target,tab,context,revision,keyboardContext;final long created=SystemClock.elapsedRealtime();
         Snapshot(View root,WebView web,String target,String tab,JSONObject info)throws Exception{
             this.root=new WeakReference<>(root);this.web=new WeakReference<>(web);this.target=target;this.tab=tab;
             id="obs-"+UUID.randomUUID();context=info.getString("context");revision=info.getString("revision");
             keyboardContext=info.getJSONObject("keyboard").getString("context");
+            before=new JSONObject(info.toString());before.remove("jpeg_base64");
         }
     }
     static JSONObject capabilities()throws Exception{
-        return new JSONObject().put("version",1).put("scope","chk_application_only")
+        return new JSONObject().put("version",2).put("scope","chk_application_only")
             .put("operations",new JSONArray(Arrays.asList("capabilities","status","observe","act","parallel")))
             .put("inputs",new JSONArray(Arrays.asList("pointer","keyboard")))
             .put("observation_max_age_ms",MAX_AGE).put("max_parallel_workflows",4)
             .put("tab_targeting","tab_id, sans changer l'onglet affiché")
             .put("same_target_inputs","exclusive; native input excludes other input gestures")
             .put("action_receipts",true).put("automatic_after_observation",true)
-            .put("pixels","real window pixels when available; hidden DOM and cached pixels identified separately")
+            .put("pixels","real window or CHK private display pixels; timeout/unsupported devices return explicit DOM/cache fallback")
             .put("transport","desktop / tool=control; serveur 1.0.4 compatible");
     }
     private interface Outcome{void accept(boolean ok,String text);}
@@ -188,6 +190,14 @@ final class AgentControl {
                     if(!ok||!new JSONObject(observed).getString("revision").equals(snapshot.revision))throw new Exception("L'interface a changé depuis l'observation. Aucun geste envoyé.");
                     JSONObject input=new JSONObject(p.getJSONObject("input").toString()).put("target",snapshot.target);
                     String tool=input.getString("tool");
+                    if(p.has("expect")&&matches(p.getJSONObject("expect"),snapshot.before,input)){
+                        if(finished.compareAndSet(false,true)){
+                            WorkspaceCommands.UI.removeCallbacks(interrupted);
+                            complete(journal,saved,cb,lane,id,true,new JSONObject().put("ok",true).put("state","already_satisfied")
+                                .put("action_attempted",false).put("action_sent",false).put("outcome_confirmed",false)
+                                .put("condition_satisfied_before",true).put("reason","Condition déjà vraie avant l'action : aucun geste envoyé."),null);
+                        }return;
+                    }
                     if(tool.equals("pointer")){
                         input.put("expected_context",snapshot.context).put("expected_revision",snapshot.revision);
                         AgentPointer.execute(app,web,input,guarded);

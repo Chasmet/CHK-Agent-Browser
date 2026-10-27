@@ -89,7 +89,13 @@ final class AgentVision {
     }
     interface Observation{void ready(JSONObject info);void failed(String error);}
     static void observeWeb(Context app,WebView web,Observation cb){
-        settleWeb(app,web,cb,0);
+        java.util.concurrent.atomic.AtomicBoolean ended=new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable timeout=()->{if(ended.compareAndSet(false,true))cb.failed("Observation DOM expirée après 5 secondes ; aucun geste envoyé.");};
+        WorkspaceCommands.UI.postDelayed(timeout,5000L);
+        settleWeb(app,web,new Observation(){
+            public void ready(JSONObject info){if(ended.compareAndSet(false,true)){WorkspaceCommands.UI.removeCallbacks(timeout);cb.ready(info);}}
+            public void failed(String error){if(ended.compareAndSet(false,true)){WorkspaceCommands.UI.removeCallbacks(timeout);cb.failed(error);}}
+        },0);
     }
     private static void settleWeb(Context app,WebView web,Observation cb,int attempt){
         if(!BrowserWebState.alive(web)){cb.failed("Onglet fermé pendant l'observation.");return;}
@@ -134,9 +140,12 @@ final class AgentVision {
             // as a verified visual preview.
             final boolean isWeb=root instanceof WebView;
             final boolean foreground=NativeKeyboard.foreground();
-            if(isWeb&&!foreground){
-                unavailable(web,info,"WebView en arrière-plan : contrôles DOM actuels disponibles, pixels actuels indisponibles.",cb);
-                return;
+            if(isWeb&&(!foreground||!root.isAttachedToWindow()||!root.isShown())){
+                AgentClient.ResultCallback captureOwner=AgentControl.lease(web,false,cb);
+                PrivateWebCapture.capture(app,web,info,captureOwner,new PrivateWebCapture.Result(){
+                    public void ready(Bitmap bitmap){try{finish(bitmap,info,"private_webview_pixels",captureOwner,web);}catch(Exception e){captureOwner.finish(false,e.getMessage());}}
+                    public void unavailable(String reason){try{AgentVision.unavailable(web,info,reason,captureOwner);}catch(Exception e){captureOwner.finish(false,e.getMessage());}}
+                });return;
             }
             final Window window=NativeKeyboard.window();
             if(window!=null&&(window.getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)
