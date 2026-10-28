@@ -63,6 +63,7 @@ final class WorkspaceCapabilities {
         add(all,"media_audio_capabilities","Formats, limites et moteurs d'écoute disponibles.");
         add(all,"video_editor_capabilities","Fonctions Studio réellement disponibles sur ce téléphone.");
         add(all,"video_editor_project_import","Valide puis ouvre un montage JSON depuis Fichiers, sans perdre le projet précédent.","path:string");
+        add(all,"video_editor_subtitles_generate","Sous-titres locaux synchronisés sur les mots, révision obligatoire et résultat à relire.","expected_revision:integer","language:string?");
         add(all,"video_editor_timeline","Modifications atomiques du projet visible : add/update/move/delete/settings. Photos 1..60 s, maximum 100 plans.","expected_revision:integer","operations:array");
         add(all,"video_editor_history","Annuler ou rétablir, historique durable par projet.","expected_revision:integer","redo:boolean?");
         add(all,"video_editor_queue_add","Ajoute 1..10 projets indépendants, sans écraser de sortie ; request_id stable empêche les doubles exports.","request_id:string","projects:array");

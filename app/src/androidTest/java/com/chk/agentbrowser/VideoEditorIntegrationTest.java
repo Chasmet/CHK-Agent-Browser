@@ -56,6 +56,22 @@ public final class VideoEditorIntegrationTest {
         JSONObject changed=project("future-"+UUID.randomUUID()+".mp4").put("aspect_ratio","16:9");invoke("video_editor_project_save",new JSONObject().put("project",changed));JSONObject original=invoke("video_editor_verify_output",new JSONObject());assertEquals(output,original.getString("output"));assertTrue(original.getBoolean("valid"));store.file(output).delete();}
     // Software emulator decoders can wait for end-of-stream at each clip boundary.
     private void awaitExport()throws Exception{String state="";for(int i=0;i<1200;i++){JSONObject current=invoke("video_editor_status",new JSONObject());state=current.getString("state");if(!state.equals("running")&&!state.equals("preparing"))break;Thread.sleep(500);}assertEquals(VideoEditorEngine.get().status().toString(),"completed",state);}
+    @Test public void timedSubtitlesAppearAndDisappearAcrossRealExportClipBoundary()throws Exception{
+        String baseline="stt-base-"+UUID.randomUUID()+".mp4",captioned="stt-cues-"+UUID.randomUUID()+".mp4";
+        JSONObject original=project(baseline);invoke("video_editor_project_save",new JSONObject().put("project",original));invoke("video_editor_export",new JSONObject());awaitExport();
+        JSONObject modified=project(captioned).put("subtitles",new JSONArray().put(new JSONObject().put("start_ms",600).put("end_ms",1150).put("text","SOUS TITRE TEST")));
+        invoke("video_editor_project_save",new JSONObject().put("project",modified));invoke("video_editor_export",new JSONObject());awaitExport();
+        android.media.MediaMetadataRetriever a=new android.media.MediaMetadataRetriever(),b=new android.media.MediaMetadataRetriever();
+        try{a.setDataSource(store.file(baseline).getAbsolutePath());b.setDataSource(store.file(captioned).getAbsolutePath());
+            int before=frameDifference(a,b,300000),during=frameDifference(a,b,800000),across=frameDifference(a,b,1050000),after=frameDifference(a,b,1350000);
+            assertTrue("Subtitle must change actual pixels inside first clip: "+before+"/"+during,during>before+3);
+            assertTrue("Subtitle must remain visible across second clip with speed change: "+across,across>after+3);
+        }finally{a.release();b.release();store.file(baseline).delete();store.file(captioned).delete();}
+    }
+    private int frameDifference(android.media.MediaMetadataRetriever a,android.media.MediaMetadataRetriever b,long timeUs){
+        android.graphics.Bitmap x=a.getScaledFrameAtTime(timeUs,android.media.MediaMetadataRetriever.OPTION_CLOSEST,240,240),y=b.getScaledFrameAtTime(timeUs,android.media.MediaMetadataRetriever.OPTION_CLOSEST,240,240);assertNotNull(x);assertNotNull(y);int count=0;
+        for(int row=130;row<240;row+=3)for(int col=0;col<240;col+=3){int u=x.getPixel(col,row),v=y.getPixel(col,row);int d=Math.abs(android.graphics.Color.red(u)-android.graphics.Color.red(v))+Math.abs(android.graphics.Color.green(u)-android.graphics.Color.green(v))+Math.abs(android.graphics.Color.blue(u)-android.graphics.Color.blue(v));if(d>60)count++;}x.recycle();y.recycle();return count;
+    }
     @Test public void testMutedSpeedExportDoesNotDeadlock()throws Exception{String output="muted-speed-"+UUID.randomUUID()+".mp4";invoke("video_editor_project_save",new JSONObject().put("project",project(output).put("mute_original",true)));invoke("video_editor_export",new JSONObject());awaitExport();JSONObject verified=invoke("video_editor_verify_output",new JSONObject());assertTrue(verified.toString(),verified.getBoolean("valid"));assertFalse(verified.getBoolean("has_audio"));assertEquals(1500,verified.getLong("expected_duration_ms"));store.file(output).delete();}
     @Test public void testCompleteSevenClipPortraitExportAndReplacement()throws Exception{
         String output="complete-"+UUID.randomUUID()+".mp4";JSONObject p=project(output).put("aspect_ratio","9:16");JSONArray clips=new JSONArray();for(int i=0;i<7;i++)clips.put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",3000).put("fade_ms",180).put("filter",i%2==0?"froid":"cinema").put("text",i==0?"Projet complet":""));JSONArray tracks=new JSONArray();for(int i=0;i<7;i++)tracks.put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",3000));p.put("clips",clips).put("audio",tracks).put("mute_original",true);invoke("video_editor_project_save",new JSONObject().put("project",p));

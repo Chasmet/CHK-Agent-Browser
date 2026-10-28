@@ -6,6 +6,7 @@ import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.os.SystemClock;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import org.vosk.Model;
 import org.vosk.Recognizer;
 import java.io.*;
@@ -54,6 +55,35 @@ final class MediaTranscriber {
             .put("model",lang.equals("fr")?FR:EN).put("audio_uploaded",false)
             .put("elapsed_ms",SystemClock.elapsedRealtime()-start)
             .put("warning",transcript.isEmpty()?"Parole non détectée ou non intelligible.":"Transcription automatique à vérifier.");
+    }
+    /** Timings reported by Vosk refer to the decoded excerpt, in seconds. */
+    static JSONArray words(Context app,String path,String language,int seconds,long startMs,AgentClient.ResultCallback active)throws Exception{
+        String lang=language==null?"fr":language.trim().toLowerCase(Locale.ROOT);
+        if(!lang.equals("fr")&&!lang.equals("en"))throw new IOException("Langue disponible : fr ou en.");
+        if(!AgentClient.get(app).isPreviewAllowed())throw new IOException("Active le partage des aperçus audio dans les réglages.");
+        if(seconds<1||seconds>180||startMs<0)throw new IOException("Plage de transcription invalide.");
+        File media=new WorkspaceStore(app).file(path);if(!media.isFile())throw new IOException("Média absent dans Fichiers CHK.");
+        long size=media.length(),modified=media.lastModified();File modelDir=ensureModel(app,lang);JSONArray words=new JSONArray();
+        try(Model model=new Model(modelDir.getAbsolutePath());Recognizer recognizer=new Recognizer(model,OUTPUT_RATE)){
+            recognizer.setWords(true);final PcmResampler[] resampler={null};final int[] previous={0,0};
+            AudioDecoder.read(media,startMs,seconds,(data,rate,channels,time)->{
+                if(resampler[0]==null||previous[0]!=rate||previous[1]!=channels){resampler[0]=new PcmResampler(rate,channels);previous[0]=rate;previous[1]=channels;}
+                byte[] converted=resampler[0].convert(data);
+                if(converted.length>0&&recognizer.acceptWaveForm(converted,converted.length))collectWords(words,recognizer.getResult(),startMs);
+            },active);
+            collectWords(words,recognizer.getFinalResult(),startMs);
+        }
+        if(size!=media.length()||modified!=media.lastModified())throw new IOException("La source audio a changé pendant l'analyse.");
+        return words;
+    }
+    static void collectWords(JSONArray output,String raw,long sourceStart)throws Exception{
+        JSONArray list=new JSONObject(raw).optJSONArray("result");if(list==null)return;
+        for(int i=0;i<list.length();i++){
+            JSONObject w=list.getJSONObject(i);String text=w.optString("word","").trim();
+            double begin=w.optDouble("start",Double.NaN),end=w.optDouble("end",Double.NaN);
+            if(text.isEmpty()||text.length()>80||Double.isNaN(begin)||Double.isNaN(end)||Double.isInfinite(begin)||Double.isInfinite(end)||begin<0||end<=begin||end>181)continue;
+            output.put(new JSONObject().put("text",text).put("start_ms",sourceStart+Math.round(begin*1000)).put("end_ms",sourceStart+Math.round(end*1000)).put("confidence",w.optDouble("conf",0)));
+        }
     }
     static JSONObject modelStatus(Context app)throws Exception{
         File base=new File(app.getFilesDir(),"speech_models");

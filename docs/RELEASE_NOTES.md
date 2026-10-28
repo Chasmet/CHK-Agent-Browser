@@ -1,3 +1,10 @@
+## Sous-titres automatiques synchronisés dans Studio
+
+- Reconnaissance de la parole en local avec Vosk français ou anglais. Le premier téléchargement du modèle peut être nécessaire ; aucun audio n’est envoyé au serveur pour la reconnaissance.
+- Les pistes audio découpées et successives sont analysées avec leurs temps source ; les mots reconnus sont regroupés en courts sous-titres placés sur la timeline. Sans piste séparée, Studio peut analyser le son des vidéos.
+- Les sous-titres sont visibles dans l’aperçu, modifiables (texte, début, fin), et incrustés dans l’export MP4. Le connecteur peut déclencher la génération avec la révision du projet.
+- La reconnaissance de rap ou de musique est approximative : vérifier et corriger texte et horaires. Cette fonction ne réalise pas de synchronisation labiale.
+
 ## Récupération des commandes et vision privée CHK
 
 - Clic vérifié : délai de 0,8 à 25 secondes par phase (attente du bouton puis vérification, 50 secondes maximum au total), y compris si une réponse JavaScript n’arrive jamais ; aucun rejeu automatique après résultat incertain.

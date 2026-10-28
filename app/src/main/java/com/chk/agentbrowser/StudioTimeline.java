@@ -16,6 +16,7 @@ final class StudioTimeline extends View {
         default void trim(int clip,JSONObject value){}
         default void audio(int index){}
         default void text(int index){}
+        default void subtitle(int index){}
         default void add(String kind){}
         default void layer(int index){}
     }
@@ -102,6 +103,8 @@ final class StudioTimeline extends View {
         long textAt=0;boolean captions=false;
         for(int i=0;i<clips.length();i++){JSONObject c=clips.optJSONObject(i);long len=StudioEdits.duration(c);
             if(!c.optString("text").isEmpty()){captions=true;segment(canvas,x(textAt),x(textAt+len),154,184,0xff53457b,"T  "+c.optString("text"));}textAt+=len;}
+        JSONArray subtitles=StudioSubtitles.items(project);
+        for(int i=0;i<subtitles.length();i++){JSONObject cue=subtitles.optJSONObject(i);segment(canvas,x(cue.optLong("start_ms")),x(cue.optLong("end_ms")),154,184,0xff7863b2,"T  "+cue.optString("text"));captions=true;}
         if(!captions)segment(canvas,dp(12),getWidth()-dp(12),154,184,0xff302d40,"＋ Ajouter un texte");
         JSONArray layers=StudioLayers.items(project);for(int i=layers.length()-1;i>=0;i--){JSONObject layer=layers.optJSONObject(i);segment(canvas,x(layer.optLong("offset_ms")),x(layer.optLong("offset_ms")+layer.optLong("duration_ms")),194+i*2,224+i*2,0xff925a2d,"▣ "+(i+1)+" · "+filename(layer.optString("path")));}
         paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff1f6ff);paint.setStrokeWidth(dp(2));canvas.drawLine(getWidth()/2f,dp(27),getWidth()/2f,dp(StudioLayers.items(project).length()>0?230:190),paint);canvas.drawRoundRect(getWidth()/2f-dp(4),dp(27),getWidth()/2f+dp(4),dp(34),dp(2),dp(2),paint);
@@ -155,7 +158,7 @@ final class StudioTimeline extends View {
                     }else if(downY>=dp(111)&&downY<dp(146)){
                         JSONArray a=project.optJSONArray("audio");int hit=-1;long n=0;if(a!=null)for(int i=0;i<a.length();i++){n+=a.optJSONObject(i).optLong("duration_ms");if(at<n){hit=i;break;}}
                         selectedAudio=hit;if(listener!=null){if(hit>=0)listener.audio(hit);else listener.add("audio");}
-                    }else if(downY>=dp(154)&&downY<dp(185)){int index=indexAt(at);if(listener!=null)listener.text(index);}
+                    }else if(downY>=dp(154)&&downY<dp(185)){int hit=-1;JSONArray sub=StudioSubtitles.items(project);for(int i=0;i<sub.length();i++){JSONObject cue=sub.optJSONObject(i);if(at>=cue.optLong("start_ms")&&at<cue.optLong("end_ms")){hit=i;break;}}if(listener!=null){if(hit>=0)listener.subtitle(hit);else listener.text(indexAt(at));}}
                     else seek(at);
                     performClick();
                 }

@@ -58,12 +58,13 @@ public final class VideoEditorActivity extends Activity {
     private TextView fullscreenClock, fullscreenPlay;
     private boolean fullscreenScrubbing;
     private ExoPlayer player, audioPlayer;
-    private boolean alive,scrubbing,saving,resumed,saveQueued,closeAfterSave;
+    private volatile boolean alive;
+    private boolean scrubbing,saving,resumed,saveQueued,closeAfterSave;
     private int selected,previewGeneration,revision;
     private String importKind="video",exportCopyPath="";
     private final Runnable ticker=new Runnable(){public void run(){
         if(!alive||!resumed)return;
-        if(player!=null&&!scrubbing){long pos=timelinePosition();timeline.position(pos);if(!renderedMode&&player.isPlaying()&&audioPlayer!=null&&audioPlayer.getMediaItemCount()>0&&Math.abs(audioTimelinePosition()-pos)>350)seekAudio(pos);String value=time(pos)+" / "+time(total());if(!clock.getText().toString().equals(value))clock.setText(value);String icon=player.isPlaying()?"Ⅱ":"▶";if(!play.getText().toString().equals(icon))play.setText(icon);}
+        if(player!=null&&!scrubbing){long pos=timelinePosition();timeline.position(pos);updateCaption();if(!renderedMode&&player.isPlaying()&&audioPlayer!=null&&audioPlayer.getMediaItemCount()>0&&Math.abs(audioTimelinePosition()-pos)>350)seekAudio(pos);String value=time(pos)+" / "+time(total());if(!clock.getText().toString().equals(value))clock.setText(value);String icon=player.isPlaying()?"Ⅱ":"▶";if(!play.getText().toString().equals(icon))play.setText(icon);}
         if(fullscreenDialog!=null&&fullscreenDialog.isShowing()&&player!=null){
             if(fullscreenClock!=null)fullscreenClock.setText(time(timelinePosition())+" / "+time(total()));
             if(fullscreenPlay!=null)fullscreenPlay.setText(player.isPlaying()?"Ⅱ":"▶");
@@ -144,6 +145,7 @@ public final class VideoEditorActivity extends Activity {
             public void scrubbing(boolean active){scrubbing=active;if(active)pausePreview();}
             public void trim(int index,JSONObject value){if(!editable())return;try{remember();clips().put(index,value);selected=index;save();}catch(Exception e){toast(e.getMessage());}}
             public void audio(int index){selectedAudio=index;pausePreview();toolPage="Audio";updateSelectionTools();}
+            public void subtitle(int index){pausePreview();toolPage="Texte";updateSelectionTools();editSubtitle(index);}
             public void text(int index){selected=index;selectedAudio=-1;pausePreview();seekPreview(start(index));toolPage="Texte";updateSelectionTools();caption();}
             public void add(String kind){addMenu(kind);}
             public void layer(int index){toolPage="Calques";updateSelectionTools();if(index>=0)layerSettings(index);else layersMenu();}
@@ -195,6 +197,52 @@ public final class VideoEditorActivity extends Activity {
             }).show();
     }
 
+    private void generateSubtitles(){
+        if(project==null||clips().length()==0||saving||importing){toast("Ouvre un projet avec une vidéo et attends sa sauvegarde.");return;}
+        final String snapshot=project.toString();final int base=revision;final String id=project.optString("project_id");
+        String replace=StudioSubtitles.items(project).length()>0?" Les sous-titres actuels seront remplacés si l'analyse réussit.":"";
+        new AgentDialog.Builder(this).setTitle("Sous-titres automatiques · STT")
+            .setMessage("La parole des pistes audio est analysée sur ton téléphone. En l'absence de piste séparée, Studio utilise le son des vidéos. Les temps reconnus sont placés sur la timeline."+replace+"\n\nLe rap et la musique peuvent entraîner des erreurs : relis et corrige les textes et les temps. Le modèle français peut nécessiter un premier téléchargement.")
+            .setNegativeButton("Annuler",null).setPositiveButton("Générer",(d,n)->{
+                java.util.concurrent.atomic.AtomicBoolean cancelled=new java.util.concurrent.atomic.AtomicBoolean();
+                ProgressDialog progress=new ProgressDialog(this);progress.setTitle("Sous-titres automatiques");progress.setMessage("Préparation de la reconnaissance locale…");progress.setCancelable(false);
+                progress.setButton(DialogInterface.BUTTON_NEGATIVE,"Arrêter",(dialog,which)->cancelled.set(true));progress.show();
+                AgentClient.ResultCallback active=new AgentClient.ResultCallback(){public boolean isActive(){return !cancelled.get()&&alive;}public void finish(boolean ok,String text){}};
+                MediaTranscriber.IO.execute(()->{try{
+                    JSONArray cues=StudioSubtitles.generate(getApplicationContext(),new JSONObject(snapshot),"fr",active,(at,total)->ui.post(()->{if(alive&&!cancelled.get())progress.setMessage("Analyse de la piste "+at+" / "+total+"…");}));
+                    ui.post(()->{if(!alive)return;progress.dismiss();if(cancelled.get())return;
+                        if(project==null||saving||importing||revision!=base||!id.equals(project.optString("project_id"))||!snapshot.equals(project.toString())){toast("Le projet a changé pendant l'analyse : aucun sous-titre ajouté.");return;}
+                        try{remember();project.put("subtitles",cues);toolPage="Texte";save();toast(cues.length()+" sous-titres ajoutés · vérifie les paroles");}catch(Exception e){toast(e.getMessage());}
+                    });
+                }catch(Exception e){ui.post(()->{if(alive){progress.dismiss();if(!cancelled.get())toast("Sous-titres : "+e.getMessage());}});}});
+            }).show();
+    }
+    private void editSubtitles(){
+        if(project==null||saving||importing)return;JSONArray cues=StudioSubtitles.items(project);
+        if(cues.length()==0){toast("Génère d'abord des sous-titres");return;}
+        String[] names=new String[cues.length()];for(int i=0;i<cues.length();i++){JSONObject c=cues.optJSONObject(i);names[i]=time(c.optLong("start_ms"))+" · "+c.optString("text");}
+        new AgentDialog.Builder(this).setTitle("Modifier un sous-titre").setItems(names,(d,index)->editSubtitle(index)).show();
+    }
+    private void editSubtitle(int index){
+        if(project==null||saving||importing)return;JSONObject c=StudioSubtitles.items(project).optJSONObject(index);if(c==null)return;final int base=revision;final String snapshot=project.toString();
+        LinearLayout box=MobileUi.column(this);box.setPadding(dp(16),dp(8),dp(16),dp(8));
+        EditText text=new EditText(this),start=new EditText(this),end=new EditText(this);text.setText(c.optString("text"));text.setHint("Texte");start.setHint("Début en secondes");end.setHint("Fin en secondes");
+        start.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);end.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        start.setText(String.format(Locale.ROOT,"%.3f",c.optLong("start_ms")/1000.0));end.setText(String.format(Locale.ROOT,"%.3f",c.optLong("end_ms")/1000.0));box.addView(text);box.addView(start);box.addView(end);
+        AlertDialog dialog=new AgentDialog.Builder(this).setTitle("Sous-titre "+(index+1)).setView(box).setNegativeButton("Annuler",null).setNeutralButton("Supprimer",null).setPositiveButton("Enregistrer",null).create();
+        dialog.setOnShowListener(ignored->{
+            dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener(v->{try{
+                if(revision!=base||!snapshot.equals(project.toString()))throw new Exception("Projet modifié : rouvre le sous-titre.");
+                long a=Math.round(Double.parseDouble(start.getText().toString().replace(',','.'))*1000),b=Math.round(Double.parseDouble(end.getText().toString().replace(',','.'))*1000);
+                JSONObject copy=new JSONObject(project.toString());copy.getJSONArray("subtitles").getJSONObject(index).put("text",text.getText().toString().trim()).put("start_ms",a).put("end_ms",b);
+                StudioSubtitles.validate(copy,StudioEdits.total(copy));remember();project=copy;save();dialog.dismiss();
+            }catch(Exception e){toast(e.getMessage()==null?"Temps ou texte invalide":e.getMessage());}});
+            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).setOnClickListener(v->{try{
+                if(revision!=base||!snapshot.equals(project.toString()))throw new Exception("Projet modifié : rouvre le sous-titre.");remember();project.getJSONArray("subtitles").remove(index);save();dialog.dismiss();
+            }catch(Exception e){toast(e.getMessage());}});
+        });dialog.show();
+    }
+
     private void clipMenu(){if(!editable())return;new AgentDialog.Builder(this).setTitle("Plans du montage").setItems(new String[]{"Ajouter des vidéos ou photos","Dupliquer le plan","Déplacer le plan","Supprimer le plan"},(d,n)->{switch(n){case 0:addMenu("video");break;case 1:duplicate();break;case 2:move();break;case 3:delete(false,selected);break;}}).show();}
     private void showToolPage(String page){toolPage=page;updateSelectionTools();}
     private void updateSelectionTools(){
@@ -217,7 +265,7 @@ public final class VideoEditorActivity extends Activity {
         }else if(toolPage.equals("Calques")){
             tool("＋","Superposer",()->addMenu("layer"));tool("▣","Calques",()->layersMenu());tool("▶","Aperçu rendu",()->renderedPreview());
         }else if(toolPage.equals("Texte")){
-            tool("T","Texte du plan",()->caption());tool("×","Retirer",()->{if(clip()!=null)put(clip(),"text","");});
+            tool("T","Texte du plan",()->caption());tool("♫","Sous-titres auto",()->generateSubtitles());tool("✎","Modifier sous-titres",()->editSubtitles());tool("×","Retirer",()->{if(clip()!=null)put(clip(),"text","");});
         }else if(toolPage.equals("Effets")){
             tool("▶","Aperçu rendu",()->renderedPreview());tool("✦","Filtres",()->filter());tool("◉","Ajuster",()->gradeManual());tool("↗","Animation",()->photoAnimation());tool("↻","Rotation",()->rotation());
         }else if(toolPage.equals("Analyse")){
@@ -450,7 +498,8 @@ public final class VideoEditorActivity extends Activity {
     private void updateCaption(){
         if(renderedMode){previewCaption.setText("");return;}
         if(previewCaption==null)return;
-        JSONObject c=clip();previewCaption.setText(c==null?"":c.optString("text",""));
+        JSONObject c=clip();String sub=project==null?"":StudioSubtitles.at(project,timelinePosition());
+        String value=!sub.isEmpty()?sub:c==null?"":c.optString("text","");if(!previewCaption.getText().toString().equals(value))previewCaption.setText(value);
     }
     private void pausePreview(){if(player!=null)player.pause();if(audioPlayer!=null)audioPlayer.pause();}
     private void playPreview(){

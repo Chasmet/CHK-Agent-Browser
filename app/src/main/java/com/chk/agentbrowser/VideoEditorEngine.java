@@ -439,6 +439,7 @@ public final class VideoEditorEngine {
             if(sounds.length()>0&&audioDuration>videoDuration+1000)throw new IllegalArgumentException("Audio plus long que la vidéo : raccourcis la piste");
         }
         StudioLayers.validate(context,p,videoDuration);
+        StudioSubtitles.validate(p,videoDuration);
         if(videoDuration>20*60*1000)throw new IllegalArgumentException("Montage limité à 20 minutes");
         String output=p.optString("output","");
         if(!output.toLowerCase(Locale.ROOT).endsWith(".mp4")||output.length()>400)throw new IllegalArgumentException("Destination MP4 obligatoire");
@@ -610,7 +611,9 @@ public final class VideoEditorEngine {
         Composition.Builder builder=sounds.isEmpty()?new Composition.Builder(sequence):new Composition.Builder(sequence,EditedMediaItemSequence.withAudioFrom(sounds));
         if(layered){
             List<EditedMediaItemSequence> sequences=StudioLayers.sequences(context,project,StudioEdits.total(project));sequences.add(sequence);if(!sounds.isEmpty())sequences.add(EditedMediaItemSequence.withAudioFrom(sounds));
-            return new Composition.Builder(sequences).setVideoCompositorSettings(StudioLayers.compositor(project,layerWidth,layerHeight)).build();
+            Composition.Builder layeredBuilder=new Composition.Builder(sequences).setVideoCompositorSettings(StudioLayers.compositor(project,layerWidth,layerHeight));
+            if(StudioSubtitles.items(project).length()>0)layeredBuilder.setEffects(new Effects(Collections.emptyList(),Collections.singletonList(StudioSubtitles.effect(project))));
+            return layeredBuilder.build();
         }
         float aspect=ratio(project.optString("aspect_ratio","source"));
         if(aspect==0){
@@ -618,13 +621,16 @@ public final class VideoEditorEngine {
             int width=metadata.optInt("width",0),height=metadata.optInt("height",0);
             if(width>0&&height>0){aspect=(float)width/height;int rotation=metadata.optInt("rotation",0)+(int)first.optDouble("rotation",0);if(Math.abs(rotation)%180==90)aspect=1f/aspect;}
         }
+        List<androidx.media3.common.Effect> compositionEffects=new ArrayList<>();
         if(aspect>0){
             int quality=project.optInt("resolution",720);
             int width=aspect>=1?Math.max(2,Math.round(quality*aspect/2)*2):quality;
             int height=aspect>=1?quality:Math.max(2,Math.round(quality/aspect/2)*2);
             int layout="fit".equals(project.optString("aspect_mode","fit"))?Presentation.LAYOUT_SCALE_TO_FIT:Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP;
-            builder.setEffects(new Effects(Collections.emptyList(),Collections.singletonList(Presentation.createForWidthAndHeight(width,height,layout))));
+            compositionEffects.add(Presentation.createForWidthAndHeight(width,height,layout));
         }
+        if(StudioSubtitles.items(project).length()>0)compositionEffects.add(StudioSubtitles.effect(project));
+        if(!compositionEffects.isEmpty())builder.setEffects(new Effects(Collections.emptyList(),compositionEffects));
         return builder.build();
     }
     private static void validateVolume(JSONObject clip){double v=clip.optDouble("volume",1);if(Double.isNaN(v)||Double.isInfinite(v)||v<0||v>1)throw new IllegalArgumentException("Volume entre 0 et 1 requis");}

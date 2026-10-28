@@ -38,6 +38,24 @@ public final class WorkspaceCommands {
                 UI.postDelayed(this,1000);
             }});return;
         }
+        if(action.equals("video_editor_subtitles_generate")){
+            if(!args.has("expected_revision")){finish(cb,false,"expected_revision requis pour générer des sous-titres.");return;}
+            final int expected=args.optInt("expected_revision",-1);final String language=args.optString("language","fr");
+            VideoEditorEngine.DISK.execute(()->{try{
+                JSONObject project=VideoEditorEngine.get().load(app);
+                if(project.optInt("revision")!=expected)throw new Exception("Révision périmée : relire le projet Studio.");
+                final String projectId=project.optString("project_id");final String snapshot=project.toString();
+                MediaTranscriber.IO.execute(()->{try{
+                    JSONArray cues=StudioSubtitles.generate(app,new JSONObject(snapshot),language,cb,null);
+                    if(!cb.isActive())return;JSONObject candidate=new JSONObject(snapshot).put("subtitles",cues);
+                    VideoEditorEngine.get().command(app,"video_editor_project_save",new JSONObject().put("project",candidate).put("expected_revision",expected),(ok,result)->{
+                        if(!cb.isActive())return;try{if(!ok){finish(cb,false,result);return;}
+                            JSONObject out=new JSONObject(result).put("subtitle_count",cues.length()).put("engine","vosk_local").put("project_id",projectId).put("timing","word_timestamps").put("audio_uploaded",false).put("warning","Paroles et temps automatiques à vérifier.");finish(cb,true,out.toString());
+                        }catch(Exception e){finish(cb,false,e.getMessage());}
+                    });
+                }catch(Exception e){finish(cb,false,e.getMessage()==null?"Sous-titres indisponibles.":e.getMessage());}});
+            }catch(Exception e){finish(cb,false,e.getMessage());}});return;
+        }
         if(action.startsWith("video_editor_")){
             if(cb.isLocal3()&&action.equals("video_editor_project_save")&&!args.has("expected_revision")){
                 cb.finish(false,"expected_revision requis : relire le projet Studio avant de sauvegarder.");return;
