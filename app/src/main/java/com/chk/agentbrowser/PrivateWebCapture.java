@@ -60,7 +60,11 @@ final class PrivateWebCapture {
                 timeout=()->fail("Rendu privé sans pixels confirmés après 6 secondes.");WorkspaceCommands.UI.postDelayed(timeout,6000L);
                 monitor=new Runnable(){public void run(){if(ended)return;if(!owner.isActive()||!BrowserWebState.alive(web)||web.getParent()!=holder||parent!=null&&AgentVision.visibleWindow(parent)){fail("Capture interrompue : onglet repris, fermé ou autorisation révoquée.");return;}WorkspaceCommands.UI.postDelayed(this,100L);}};
                 WorkspaceCommands.UI.postDelayed(monitor,100L);
-                web.postVisualStateCallback(1,new WebView.VisualStateCallback(){public void onComplete(long id){if(!ended)web.postOnAnimation(()->web.postOnAnimation(()->copy(0)));}});
+                web.postVisualStateCallback(1,new WebView.VisualStateCallback(){public void onComplete(long id){
+                    // VisualState means ready to draw; allow the private surface to compose
+                    // the WebView's layers before reading the actual pixels.
+                    if(!ended){web.invalidate();web.postOnAnimation(()->web.postOnAnimation(()->WorkspaceCommands.UI.postDelayed(()->copy(0),350L)));}
+                }});
             }catch(Exception e){fail(e.getMessage()==null?"Capture privée indisponible.":e.getMessage());}
         }
         void copy(int attempt){
