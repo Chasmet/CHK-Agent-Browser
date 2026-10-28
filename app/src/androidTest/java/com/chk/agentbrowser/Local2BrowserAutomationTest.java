@@ -101,6 +101,19 @@ public final class Local2BrowserAutomationTest {
         Result invalid=scrollDirect(page,new JSONObject().put("direction","sideways"));
         assertFalse(invalid.ok);
     }
+    @Test public void scheduleRadioSelectorSurvivesReactiveIdChange()throws Exception{
+        WebView page=open("example.com","<html><body><input id='dynamic_1' type='radio' name='postSchedule' value='schedule'>"
+            +"<script>document.querySelector('input').addEventListener('change',function(){this.id='dynamic_2';});</script></body></html>");
+        JSONObject form=call("browser_get_form",new JSONObject()).json();
+        JSONArray controls=form.getJSONArray("dynamic_controls");String selector="";
+        for(int i=0;i<controls.length();i++){JSONObject item=controls.getJSONObject(i);if("radio".equals(item.optString("type")))selector=item.getString("selector");}
+        assertTrue("Stable selector required: "+selector,selector.contains("name=")&&selector.contains("value="));
+        JSONArray fields=new JSONArray().put(field(selector,"check",true));
+        JSONObject args=new JSONObject().put("expected_host","example.com").put("fields",fields);
+        assertTrue(nativeCall("browser_fill_fields",args).json().getBoolean("verified"));
+        assertEquals("\\"dynamic_2\\"",eval(page,"document.querySelector('input').id"));
+        assertTrue(nativeCall("browser_verify_fields",args).json().getBoolean("verified"));
+    }
     @Test public void legacyDesktopCarrierFillsAndVerifiesDynamicFields()throws Exception{
         WebView web=open("example.com","<html><body><input id='title'><div id='caption' contenteditable='true'></div>"
             +"<input type='checkbox' id='audience'><select id='visibility'><option value='private'>Private</option><option value='schedule'>Schedule</option></select>"
