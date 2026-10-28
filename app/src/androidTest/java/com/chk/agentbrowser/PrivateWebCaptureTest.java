@@ -16,7 +16,9 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public final class PrivateWebCaptureTest {
-    @Test public void detachedTabProducesRealPixelsWithoutChangingItsIdentity()throws Exception{
+    @Test public void detachedTabProducesRealPixelsWithoutChangingItsIdentity()throws Exception{ captureDetachedTab(false); }
+    @Test public void staleObservationIsRefreshedBeforeReturningPixels()throws Exception{ captureDetachedTab(true); }
+    private void captureDetachedTab(boolean staleObservation)throws Exception{
         Instrumentation ins=InstrumentationRegistry.getInstrumentation();Context app=ins.getTargetContext();
         // Instrumentation disables hardware drawing by default; same setup as Studio encoder tests.
         if(android.os.Build.VERSION.SDK_INT>=29)ins.runOnMainSync(()->android.graphics.HardwareRenderer.setDrawingEnabled(true));
@@ -26,9 +28,12 @@ public final class PrivateWebCaptureTest {
             WebFixture.load(ins,web.get(),"https://private-capture.test/", "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body style='margin:0;background:#ff0000'><div style='position:fixed;top:50%;height:50%;width:100%;background:#0000ff'></div><input id='keep' value='session-preserved' style='display:none'></body></html>","!!document.querySelector('#keep')");
             AtomicReference<JSONObject> observed=new AtomicReference<>();CountDownLatch dom=new CountDownLatch(1);AtomicReference<String> error=new AtomicReference<>();
             ins.runOnMainSync(()->AgentVision.observeWeb(app,web.get(),new AgentVision.Observation(){public void ready(JSONObject info){observed.set(info);dom.countDown();}public void failed(String e){error.set(e);dom.countDown();}}));assertTrue(dom.await(6,TimeUnit.SECONDS));assertNotNull(error.get(),observed.get());
+            if(staleObservation)observed.get().put("revision","deliberately-stale-revision");
             CountDownLatch done=new CountDownLatch(1);AtomicReference<Bitmap> pixels=new AtomicReference<>();
             ins.runOnMainSync(()->PrivateWebCapture.capture(app,web.get(),observed.get(),(ok,text)->{},new PrivateWebCapture.Result(){public void ready(Bitmap bitmap){pixels.set(bitmap);done.countDown();}public void unavailable(String reason){error.set(reason);done.countDown();}}));
-            assertTrue(done.await(10,TimeUnit.SECONDS));assertNotNull(error.get(),pixels.get());Bitmap bitmap=pixels.get();
+            assertTrue(done.await(10,TimeUnit.SECONDS));assertNotNull(error.get(),pixels.get());
+            if(staleObservation)assertNotEquals("deliberately-stale-revision",observed.get().getString("revision"));
+            Bitmap bitmap=pixels.get();
             int red=bitmap.getPixel(bitmap.getWidth()/2,bitmap.getHeight()/4),blue=bitmap.getPixel(bitmap.getWidth()/2,bitmap.getHeight()*3/4);
             assertTrue("Top must contain actual red page pixels: "+red,Color.red(red)>200&&Color.blue(red)<60);
             assertTrue("Bottom must contain actual blue page pixels: "+blue,Color.blue(blue)>200&&Color.red(blue)<60);bitmap.recycle();
