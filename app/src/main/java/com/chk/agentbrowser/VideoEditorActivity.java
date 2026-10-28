@@ -50,6 +50,8 @@ public final class VideoEditorActivity extends Activity {
     private Long editSeek;
     private float restoredZoom=1;
     private boolean auditing;
+    private java.util.concurrent.atomic.AtomicBoolean subtitleJob;
+    private String subtitleProgress="";
 
     private androidx.media3.ui.PlayerView viewer;
     private FrameLayout previewCanvas;
@@ -74,8 +76,8 @@ public final class VideoEditorActivity extends Activity {
         if(renderPreview!=null&&renderPreview.busy()){status.setVisibility(View.VISIBLE);status.setText("Aperçu rendu · "+renderPreview.progress()+" % · toucher pour annuler");ui.postDelayed(this,400);return;}
         JSONObject s=engine.status();String state=s.optString("state");boolean currentOutput=project!=null&&project.optString("output").equals(s.optString("output"));
         if(!state.equals(lastExportState)){lastExportState=state;exportStateAt=android.os.SystemClock.elapsedRealtime();}
-        status.setVisibility(importing||state.equals("running")||state.equals("preparing")||(currentOutput&&(state.equals("failed")||state.equals("completed"))&&android.os.SystemClock.elapsedRealtime()-exportStateAt<6000)?View.VISIBLE:View.GONE);
-        status.setText(importing?"Importation des médias…":"running".equals(state)?"Export MP4 · "+s.optInt("progress_percent")+" %":"preparing".equals(state)?"Préparation du rendu…":"completed".equals(state)?"Export terminé · toucher pour lire / partager":"failed".equals(state)?"Export impossible : "+s.optString("error"):"Montage local · sauvegarde automatique");
+        status.setVisibility(subtitleJob!=null||importing||state.equals("running")||state.equals("preparing")||(currentOutput&&(state.equals("failed")||state.equals("completed"))&&android.os.SystemClock.elapsedRealtime()-exportStateAt<6000)?View.VISIBLE:View.GONE);
+        status.setText(subtitleJob!=null?subtitleProgress:importing?"Importation des médias…":"running".equals(state)?"Export MP4 · "+s.optInt("progress_percent")+" %":"preparing".equals(state)?"Préparation du rendu…":"completed".equals(state)?"Export terminé · toucher pour lire / partager":"failed".equals(state)?"Export impossible : "+s.optString("error"):"Montage local · sauvegarde automatique");
         ui.postDelayed(this,player!=null&&player.isPlaying()?33:600);
     }};
     @Override public void onCreate(Bundle state){super.onCreate(state);alive=true;if(state!=null){exportCopyPath=state.getString("export_copy_path","");editSeek=state.getLong("studio_position",0);selected=state.getInt("studio_selected",0);selectedAudio=state.getInt("studio_audio",-1);toolPage=state.getString("studio_tool_page","Accueil");restoredZoom=state.getFloat("studio_zoom",1);}
@@ -161,7 +163,7 @@ public final class VideoEditorActivity extends Activity {
         mainTools=new LinearLayout(this);navigation.addView(mainTools);
         mainTool(mainTools,"Éditer","scissors",()->showToolPage("Éditer"));mainTool(mainTools,"Audio","audio",()->showToolPage("Audio"));mainTool(mainTools,"Texte","text",()->showToolPage("Texte"));mainTool(mainTools,"Effets","effects",()->showToolPage("Effets"));mainTool(mainTools,"Calques","layers",()->showToolPage("Calques"));mainTool(mainTools,"Format","crop",()->ratioMenu());mainTool(mainTools,"Exports","queue",()->exportQueue());mainTool(mainTools,"Analyse","layers",()->showToolPage("Analyse"));
         updateSelectionTools();
-        status=MobileUi.text(this,"Montage local",11,MobileUi.MUTED);status.setPadding(dp(10),dp(2),dp(10),dp(2));status.setMaxLines(2);FrameLayout.LayoutParams statusLayout=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);canvas.addView(status,statusLayout);status.setBackgroundColor(0xdd15202d);status.setOnClickListener(v->{if(renderPreview!=null&&renderPreview.busy()){renderPreview.cancel();previewHint.setVisibility(View.GONE);status.setVisibility(View.GONE);}else outputMenu();});scope.setOnClickListener(v->{if(selectedAudio>=0)trim(true,selectedAudio);else editMenu();});
+        status=MobileUi.text(this,"Montage local",11,MobileUi.MUTED);status.setPadding(dp(10),dp(2),dp(10),dp(2));status.setMaxLines(2);FrameLayout.LayoutParams statusLayout=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);canvas.addView(status,statusLayout);status.setBackgroundColor(0xdd15202d);status.setOnClickListener(v->{if(renderPreview!=null&&renderPreview.busy()){renderPreview.cancel();previewHint.setVisibility(View.GONE);status.setVisibility(View.GONE);}else if(subtitleJob!=null){subtitleJob.set(true);subtitleJob=null;toast("Analyse des sous-titres arrêtée.");}else outputMenu();});scope.setOnClickListener(v->{if(selectedAudio>=0)trim(true,selectedAudio);else editMenu();});
         engine.command(this,"video_editor_project_read",new JSONObject(),(ok,res)->runOnUiThread(()->{try{if(ok){project=new JSONObject(res);revision=project.optInt("revision",0);draw();preview();String launch=getIntent().getStringExtra("add_path");String jsonPath=getIntent().getStringExtra("project_path");if(jsonPath!=null)addFile("project",jsonPath);else if(launch!=null)addFile("video",launch);}else toast(res);}catch(Exception e){toast(e.getMessage());}}));ui.post(ticker);
     }
     private int dp(int n){return MobileUi.dp(this,n);}
@@ -198,6 +200,7 @@ public final class VideoEditorActivity extends Activity {
     }
 
     private void generateSubtitles(){
+        if(subtitleJob!=null){toast("Une analyse des sous-titres est déjà en cours.");return;}
         if(project==null||clips().length()==0||saving||importing){toast("Ouvre un projet avec une vidéo et attends sa sauvegarde.");return;}
         final String snapshot=project.toString();final int base=revision;final String id=project.optString("project_id");
         String replace=StudioSubtitles.items(project).length()>0?" Les sous-titres actuels seront remplacés si l'analyse réussit.":"";
@@ -205,16 +208,16 @@ public final class VideoEditorActivity extends Activity {
             .setMessage("La parole des pistes audio est analysée sur ton téléphone. En l'absence de piste séparée, Studio utilise le son des vidéos. Les temps reconnus sont placés sur la timeline."+replace+"\n\nLe rap et la musique peuvent entraîner des erreurs : relis et corrige les textes et les temps. Le modèle français peut nécessiter un premier téléchargement.")
             .setNegativeButton("Annuler",null).setPositiveButton("Générer",(d,n)->{
                 java.util.concurrent.atomic.AtomicBoolean cancelled=new java.util.concurrent.atomic.AtomicBoolean();
-                ProgressDialog progress=new ProgressDialog(this);progress.setTitle("Sous-titres automatiques");progress.setMessage("Préparation de la reconnaissance locale…");progress.setCancelable(false);
-                progress.setButton(DialogInterface.BUTTON_NEGATIVE,"Arrêter",(dialog,which)->cancelled.set(true));progress.show();
+                subtitleJob=cancelled;subtitleProgress="Préparation des sous-titres · toucher pour arrêter";
+                status.setVisibility(View.VISIBLE);status.setText(subtitleProgress);
                 AgentClient.ResultCallback active=new AgentClient.ResultCallback(){public boolean isActive(){return !cancelled.get()&&alive;}public void finish(boolean ok,String text){}};
                 MediaTranscriber.IO.execute(()->{try{
-                    JSONArray cues=StudioSubtitles.generate(getApplicationContext(),new JSONObject(snapshot),"fr",active,(at,total)->ui.post(()->{if(alive&&!cancelled.get())progress.setMessage("Analyse de la piste "+at+" / "+total+"…");}));
-                    ui.post(()->{if(!alive)return;progress.dismiss();if(cancelled.get())return;
+                    JSONArray cues=StudioSubtitles.generate(getApplicationContext(),new JSONObject(snapshot),"fr",active,(at,total)->ui.post(()->{if(alive&&!cancelled.get()&&subtitleJob==cancelled){subtitleProgress="Sous-titres · piste "+at+" / "+total+" · toucher pour arrêter";status.setText(subtitleProgress);}}));
+                    ui.post(()->{if(!alive||subtitleJob!=cancelled)return;subtitleJob=null;if(cancelled.get())return;
                         if(project==null||saving||importing||revision!=base||!id.equals(project.optString("project_id"))||!snapshot.equals(project.toString())){toast("Le projet a changé pendant l'analyse : aucun sous-titre ajouté.");return;}
                         try{remember();project.put("subtitles",cues);toolPage="Texte";save();toast("Reconnaissance terminée : enregistrement des sous-titres…");}catch(Exception e){toast(e.getMessage());}
                     });
-                }catch(Exception e){ui.post(()->{if(alive){progress.dismiss();if(!cancelled.get())toast("Sous-titres : "+e.getMessage());}});}});
+                }catch(Exception e){ui.post(()->{if(alive&&subtitleJob==cancelled){subtitleJob=null;if(!cancelled.get())toast("Sous-titres : "+e.getMessage());}});}});
             }).show();
     }
     private void editSubtitles(){
@@ -923,6 +926,6 @@ public final class VideoEditorActivity extends Activity {
         super.onBackPressed();
     }
     @Override protected void onPause(){resumed=false;ui.removeCallbacks(ticker);pausePreview();super.onPause();}
-    @Override protected void onDestroy(){if(renderPreview!=null)renderPreview.cancel();if(studioPicker!=null)studioPicker.cancel();alive=false;previewGeneration++;ui.removeCallbacksAndMessages(null);if(fullscreenDialog!=null)fullscreenDialog.dismiss();if(player!=null)player.release();if(audioPlayer!=null)audioPlayer.release();super.onDestroy();}
+    @Override protected void onDestroy(){if(subtitleJob!=null)subtitleJob.set(true);if(renderPreview!=null)renderPreview.cancel();if(studioPicker!=null)studioPicker.cancel();alive=false;previewGeneration++;ui.removeCallbacksAndMessages(null);if(fullscreenDialog!=null)fullscreenDialog.dismiss();if(player!=null)player.release();if(audioPlayer!=null)audioPlayer.release();super.onDestroy();}
     private static final class JSONObjectSafe extends JSONObject{JSONObjectSafe(String key,Object value){try{put(key,value);}catch(Exception ignored){}}JSONObjectSafe withRevision(int revision){try{put("expected_revision",revision);}catch(Exception ignored){}return this;}}
 }
