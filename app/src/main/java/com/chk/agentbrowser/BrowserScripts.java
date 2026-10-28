@@ -17,6 +17,7 @@ public final class BrowserScripts {
             +"if(hits.length>1)throw Error('Libellé ambigu : '+label);return hits.length===1?hits[0]:null;}"
             +"for(var i=0;i<rs.length;i++){try{var e=rs[i].querySelector(sel);if(e)return e;}catch(x){}}return null;}"
             +"function selectorFor(el){var parts=[],n=el;function unique(s){var count=0;roots().forEach(function(r){try{count+=r.querySelectorAll(s).length;}catch(e){}});return count===1&&deepFind(s)===n;}"
+            +"var t=(el.type||'').toLowerCase();if((t==='radio'||t==='checkbox')&&el.name&&el.value){var stable='input[type='+JSON.stringify(t)+'][name='+JSON.stringify(el.name)+'][value='+JSON.stringify(el.value)+']';if(unique(stable))return stable;}"
             +"while(n&&n.nodeType===1&&parts.length<9){if(n.id&&typeof CSS!=='undefined'&&CSS.escape){var anchor='#'+CSS.escape(n.id);if(unique(anchor)){parts.unshift(anchor);var found=parts.join('>');return deepFind(found)===el?found:'';}}"
             +"var idx=1,sib=n.previousElementSibling;while(sib){if(sib.tagName===n.tagName)idx++;sib=sib.previousElementSibling;}parts.unshift(n.tagName.toLowerCase()+':nth-of-type('+idx+')');n=n.parentElement;}"
             +"var sel=parts.join('>');return deepFind(sel)===el?sel:'';}";
