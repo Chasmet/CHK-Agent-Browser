@@ -27,7 +27,7 @@ final class PrivateWebCapture {
         final Context app;final WebView web;final JSONObject info;final AgentClient.ResultCallback owner;final Result result;
         ViewGroup parent;ViewGroup.LayoutParams layout;int index,visibility;int left,top,right,bottom;boolean preraster;
         ImageReader reader;VirtualDisplay display;Presentation presentation;FrameLayout holder;boolean ended,moved;
-        Runnable timeout,monitor;String expected;Bitmap pending;
+        Runnable timeout,monitor;String expected;Bitmap pending;int revisionRetries;
         Session(Context app,WebView web,JSONObject info,AgentClient.ResultCallback owner,Result result){this.app=app;this.web=web;this.info=info;this.owner=owner;this.result=result;}
         void start(){
             try{
@@ -83,7 +83,20 @@ final class PrivateWebCapture {
                     AgentVision.observeWeb(app,web,new AgentVision.Observation(){
                         public void ready(JSONObject current){
                             if(ended){bitmap.recycle();return;}
-                            if(!owner.isActive()||!expected.equals(AgentVision.context(web))||!info.optString("revision").equals(current.optString("revision"))){bitmap.recycle();fail("La page a changé pendant la capture privée.");return;}
+                            if(!owner.isActive()||!expected.equals(AgentVision.context(web))){bitmap.recycle();fail("Onglet ou dimensions remplacés pendant la capture privée.");return;}
+                            if(!info.optString("revision").equals(current.optString("revision"))){
+                                bitmap.recycle();
+                                // The move to the private display or a live page can change
+                                // the DOM. Capture again against a fresh observation, never
+                                // label the discarded pixels as matching the new revision.
+                                if(revisionRetries++>=2){fail("La page change encore pendant la capture privée ; réessayer lorsque son contenu est stable.");return;}
+                                try{
+                                    java.util.Iterator<String> keys=current.keys();
+                                    while(keys.hasNext()){String key=keys.next();info.put(key,current.get(key));}
+                                    WorkspaceCommands.UI.postDelayed(()->copy(0),150L);
+                                }catch(Exception e){fail("Actualisation de l’observation impossible : "+e.getMessage());}
+                                return;
+                            }
                             ended=true;cleanup();result.ready(bitmap);
                         }
                         public void failed(String error){bitmap.recycle();fail(error);}
