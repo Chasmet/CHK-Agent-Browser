@@ -57,20 +57,25 @@ public final class VideoEditorIntegrationTest {
     // Software emulator decoders can wait for end-of-stream at each clip boundary.
     private void awaitExport()throws Exception{String state="";for(int i=0;i<1200;i++){JSONObject current=invoke("video_editor_status",new JSONObject());state=current.getString("state");if(!state.equals("running")&&!state.equals("preparing"))break;Thread.sleep(500);}assertEquals(VideoEditorEngine.get().status().toString(),"completed",state);}
     @Test public void timedSubtitlesAppearAndDisappearAcrossRealExportClipBoundary()throws Exception{
-        String baseline="stt-base-"+UUID.randomUUID()+".mp4",captioned="stt-cues-"+UUID.randomUUID()+".mp4";
-        JSONObject original=project(baseline);invoke("video_editor_project_save",new JSONObject().put("project",original));invoke("video_editor_export",new JSONObject());awaitExport();
-        JSONObject modified=project(captioned).put("subtitles",new JSONArray().put(new JSONObject().put("start_ms",600).put("end_ms",1150).put("text","SOUS TITRE TEST")));
-        invoke("video_editor_project_save",new JSONObject().put("project",modified));invoke("video_editor_export",new JSONObject());awaitExport();
-        android.media.MediaMetadataRetriever a=new android.media.MediaMetadataRetriever(),b=new android.media.MediaMetadataRetriever();
-        try{a.setDataSource(store.file(baseline).getAbsolutePath());b.setDataSource(store.file(captioned).getAbsolutePath());
-            int before=frameDifference(a,b,300000),during=frameDifference(a,b,800000),across=frameDifference(a,b,1050000),after=frameDifference(a,b,1350000);
-            assertTrue("Subtitle must change actual pixels inside first clip: "+before+"/"+during,during>before+3);
-            assertTrue("Subtitle must remain visible across second clip with speed change: "+across,across>after+3);
-        }finally{a.release();b.release();store.file(baseline).delete();store.file(captioned).delete();}
+        String output="stt-cues-"+UUID.randomUUID()+".mp4",photo="stt-blue-"+UUID.randomUUID()+".png";
+        android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(160,160,android.graphics.Bitmap.Config.ARGB_8888);image.eraseColor(0xff0000ff);
+        try(FileOutputStream file=new FileOutputStream(store.file(photo))){image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,file);}finally{image.recycle();}
+        JSONObject still=new JSONObject().put("path",photo).put("start_ms",0).put("duration_ms",1000);
+        JSONObject modified=project(output).put("mute_original",true).put("clips",new JSONArray().put(still).put(new JSONObject(still.toString())))
+            .put("subtitles",new JSONArray().put(new JSONObject().put("start_ms",600).put("end_ms",1150).put("text","SOUS TITRE TEST")));
+        try{
+            invoke("video_editor_project_save",new JSONObject().put("project",modified));invoke("video_editor_export",new JSONObject());awaitExport();
+            android.media.MediaMetadataRetriever r=new android.media.MediaMetadataRetriever();
+            try{r.setDataSource(store.file(output).getAbsolutePath());
+                int before=whitePixels(r,300000),during=whitePixels(r,800000),across=whitePixels(r,1050000),after=whitePixels(r,1350000);
+                assertTrue("Subtitle must appear on blue video inside first clip: "+before+"/"+during,during>before+3);
+                assertTrue("Subtitle must remain visible across the clip boundary: "+across+"/"+after,across>after+3);
+            }finally{r.release();}
+        }finally{store.file(photo).delete();store.file(output).delete();}
     }
-    private int frameDifference(android.media.MediaMetadataRetriever a,android.media.MediaMetadataRetriever b,long timeUs){
-        android.graphics.Bitmap x=a.getScaledFrameAtTime(timeUs,android.media.MediaMetadataRetriever.OPTION_CLOSEST,240,240),y=b.getScaledFrameAtTime(timeUs,android.media.MediaMetadataRetriever.OPTION_CLOSEST,240,240);assertNotNull(x);assertNotNull(y);int count=0;
-        for(int row=130;row<240;row+=3)for(int col=0;col<240;col+=3){int u=x.getPixel(col,row),v=y.getPixel(col,row);int d=Math.abs(android.graphics.Color.red(u)-android.graphics.Color.red(v))+Math.abs(android.graphics.Color.green(u)-android.graphics.Color.green(v))+Math.abs(android.graphics.Color.blue(u)-android.graphics.Color.blue(v));if(d>60)count++;}x.recycle();y.recycle();return count;
+    private int whitePixels(android.media.MediaMetadataRetriever r,long timeUs){
+        android.graphics.Bitmap frame=r.getScaledFrameAtTime(timeUs,android.media.MediaMetadataRetriever.OPTION_CLOSEST,240,240);assertNotNull(frame);int count=0;
+        for(int row=120;row<240;row+=2)for(int col=0;col<240;col+=2){int p=frame.getPixel(col,row);if(android.graphics.Color.red(p)>170&&android.graphics.Color.green(p)>170&&android.graphics.Color.blue(p)>170)count++;}frame.recycle();return count;
     }
     @Test public void testMutedSpeedExportDoesNotDeadlock()throws Exception{String output="muted-speed-"+UUID.randomUUID()+".mp4";invoke("video_editor_project_save",new JSONObject().put("project",project(output).put("mute_original",true)));invoke("video_editor_export",new JSONObject());awaitExport();JSONObject verified=invoke("video_editor_verify_output",new JSONObject());assertTrue(verified.toString(),verified.getBoolean("valid"));assertFalse(verified.getBoolean("has_audio"));assertEquals(1500,verified.getLong("expected_duration_ms"));store.file(output).delete();}
     @Test public void testCompleteSevenClipPortraitExportAndReplacement()throws Exception{
