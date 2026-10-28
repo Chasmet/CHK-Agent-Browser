@@ -111,7 +111,7 @@ public final class Local2BrowserAutomationTest {
         JSONArray fields=new JSONArray().put(field(selector,"check",true));
         JSONObject args=new JSONObject().put("expected_host","example.com").put("fields",fields);
         assertTrue(nativeCall("browser_fill_fields",args).json().getBoolean("verified"));
-        assertEquals("\\"dynamic_2\\"",eval(page,"document.querySelector('input').id"));
+        assertEquals("\"dynamic_2\"",eval(page,"document.querySelector('input').id"));
         assertTrue(nativeCall("browser_verify_fields",args).json().getBoolean("verified"));
     }
     @Test public void legacyDesktopCarrierFillsAndVerifiesDynamicFields()throws Exception{
