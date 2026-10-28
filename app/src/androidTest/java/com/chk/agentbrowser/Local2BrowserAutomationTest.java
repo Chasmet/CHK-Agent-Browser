@@ -114,6 +114,14 @@ public final class Local2BrowserAutomationTest {
         assertEquals("\"dynamic_2\"",eval(page,"document.querySelector('input').id"));
         assertTrue(nativeCall("browser_verify_fields",args).json().getBoolean("verified"));
     }
+    @Test public void contentEditableNotifiesReactiveInputHandler()throws Exception{
+        WebView page=open("example.com","<html><body><div id='caption' contenteditable='true'>Original</div><output id='preview'></output>"
+            +"<script>document.querySelector('#caption').addEventListener('input',function(e){if(e.inputType==='insertText')document.querySelector('#preview').textContent=this.textContent;});</script></body></html>");
+        JSONArray fields=new JSONArray().put(field("#caption","text","Dans la brume #CHK"));
+        JSONObject args=new JSONObject().put("expected_host","example.com").put("fields",fields);
+        assertTrue(nativeCall("browser_fill_fields",args).json().getBoolean("verified"));
+        assertEquals("\"Dans la brume #CHK\"",eval(page,"document.querySelector('#preview').textContent"));
+    }
     @Test public void legacyDesktopCarrierFillsAndVerifiesDynamicFields()throws Exception{
         WebView web=open("example.com","<html><body><input id='title'><div id='caption' contenteditable='true'></div>"
             +"<input type='checkbox' id='audience'><select id='visibility'><option value='private'>Private</option><option value='schedule'>Schedule</option></select>"
