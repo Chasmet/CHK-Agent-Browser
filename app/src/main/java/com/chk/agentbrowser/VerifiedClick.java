@@ -131,7 +131,7 @@ public final class VerifiedClick {
                     }else if("WAIT".equals(status)||"MISSING".equals(status)){
                         if(SystemClock.elapsedRealtime()-start>=timeout)
                             callback.finish(false,"Bouton toujours désactivé/absent après attente ; aucun clic envoyé.");
-                        else handler.postDelayed(waitButton[0],350L);
+                        else handler.postDelayed(waitButton[0],150L);
                     }else callback.finish(false,"Bouton non vérifiable : "+status);
                 });
             });
@@ -171,13 +171,13 @@ public final class VerifiedClick {
                                 SystemClock.elapsedRealtime()-clickedAt>=timeout){
                             callback.finish(false,"Clic envoyé UNE fois ; résultat encore non confirmé ("+
                                     state+"). Ne pas répéter. Vérifier la page ou le post.");
-                        }else handler.postDelayed(verify[0],350L);
+                        }else handler.postDelayed(verify[0],150L);
                     });
                 }catch(RuntimeException e){
                     callback.finish(false,"Clic envoyé ; page interrompue. Ne pas répéter sans inspection.");
                 }
             };
-            handler.postDelayed(verify[0],400L);
+            handler.post(verify[0]);
         });
     }
 }

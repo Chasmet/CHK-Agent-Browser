@@ -347,7 +347,7 @@ public final class Local3Client {
         final int session=generation, idLength=p.getString("app_id","").length();
         final String id=p.getString("app_id",""),secret=p.getString("secret","");
         io.execute(()->{
-            long delay=2500L;
+            long delay=1000L;
             try{
                 if(session!=generation||!running||idLength!=36)return;
                 try{syncConsent(id,secret);}catch(Exception e){permissionStatus="Serveur à mettre à jour : "+safe(e);}

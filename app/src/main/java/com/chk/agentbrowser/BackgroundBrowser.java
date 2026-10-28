@@ -309,8 +309,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                     PublicCommentCollector.start(app,current,args,main,cb);return;
                 }
                 case "scroll":{
-                    int offset=(int)(current.getHeight()*0.7f);if("up".equals(args.optString("direction")))offset=-offset;
-                    current.scrollBy(0,offset);cb.finish(true,"Défilement effectué.");return;
+                    BrowserScroll.run(current,args,main,cb);return;
                 }
                 case "click_verified":{
                     VerifiedClick.run(current,args,main,cb);
