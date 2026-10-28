@@ -116,15 +116,15 @@ final class BrowserAutomation {
             if(!same(web,page,version)){cb.finish(false,"Page modifiée durant la saisie : relire avant de continuer.");return;}
             try{
                 JSONObject initial=new JSONObject(decode(raw));
-                if(!initial.optBoolean("ok")){cb.finish(false,initial.toString());return;}
+                if(!initial.optBoolean("ok")){if(write)initial.put("effect_uncertain",true).put("retry_command",false).put("guidance","Des champs peuvent avoir changé : relire le formulaire avant toute reprise.");cb.finish(false,initial.toString());return;}
                 UI.postDelayed(()->{
                     if(!cb.isActive())return;
                     if(!same(web,page,version)){cb.finish(false,"Page remplacée avant la relecture du formulaire.");return;}
                     web.evaluateJavascript(BrowserScripts.formFields(fields.toString(),false),proof->{
                         if(!cb.isActive())return;
                         if(!same(web,page,version)){cb.finish(false,"Formulaire remplacé avant sa vérification.");return;}
-                        try{JSONObject result=new JSONObject(decode(proof));cb.finish(result.optBoolean("ok"),result.toString());}
-                        catch(Exception e){cb.finish(false,"Relecture du formulaire impossible.");}
+                        try{JSONObject result=new JSONObject(decode(proof));if(write&&!result.optBoolean("ok"))result.put("effect_uncertain",true).put("retry_command",false).put("guidance","Saisie effectuée, relecture incomplète : inspecter les valeurs avant toute reprise.");cb.finish(result.optBoolean("ok"),result.toString());}
+                        catch(Exception e){cb.finish(false,write?"Relecture impossible : des champs peuvent avoir changé. Inspecter avant toute reprise.":"Relecture du formulaire impossible.");}
                     });
                 },write?500L:0L);
             }catch(Exception e){cb.finish(false,"Formulaire non vérifiable.");}
