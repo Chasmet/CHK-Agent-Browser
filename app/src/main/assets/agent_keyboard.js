@@ -50,6 +50,14 @@
     return matches[0];
   }
   function value(el) { return el.isContentEditable ? el.textContent : String(el.value || ''); }
+  // Editors such as ProseMirror represent each visible line as a separate node.
+  // textContent can concatenate those nodes without the line breaks the user sees.
+  function sameValue(el, expected) {
+    if (value(el) === expected) return true;
+    if (!el.isContentEditable) return false;
+    var normalize = function (text) { return String(text || '').replace(/\r\n/g, '\n').replace(/\n+$/, ''); };
+    return normalize(el.innerText) === normalize(expected);
+  }
   function cpLength(text) { return Array.from(text).length; }
   function offset(text, at) { var points = Array.from(text); if (!Number.isInteger(at) || at < 0 || at > points.length) throw Error('Position de curseur hors du champ.'); return points.slice(0, at).join('').length; }
   function clip(text, limit) { return Array.from(String(text)).slice(0, limit).join(''); }
@@ -131,7 +139,7 @@
     var view=el.ownerDocument.defaultView;
     if(!emitted)try {el.dispatchEvent(new view.InputEvent('input',{bubbles:true,inputType:'insertText',data:text}));} catch(ignore) {el.dispatchEvent(new view.Event('input',{bubbles:true}));}
     el.dispatchEvent(new view.Event('change',{bubbles:true}));h.expected=value(el);
-    if (h.expected!==text) throw Error('La page a filtré la saisie : inspecte sa valeur réelle.');
+    if (!sameValue(el,text)) throw Error('La page a filtré la saisie : inspecte sa valeur réelle.');
     return text;
   }
   function mutation(el,op,p) {
@@ -185,7 +193,7 @@
     saved.results.forEach(function (row) {
       if(!row.ok)return;
       try {var el=state.nodes.get(row.selector);if(!usable(el))throw Error('Champ remplacé pendant la saisie.');
-        if(row.expected!==undefined && value(el)!==row.expected)throw Error('La page a changé la valeur après la saisie.');
+        if(row.expected!==undefined && !sameValue(el,row.expected))throw Error('La page a changé la valeur après la saisie.');
         if(row.checked!==undefined && el.checked!==row.checked)throw Error('La page a changé l’état de la case.');
         row.field=describe(el);row.verified=true;succeeded++;
       }catch(e){row.ok=false;row.error=e.message;row.verified=false;}
