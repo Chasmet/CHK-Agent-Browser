@@ -28,7 +28,8 @@ final class WebKeyboard {
             web.evaluateJavascript(invocation(context,p),raw->{
                 if(!cb.isActive())return;
                 try{JSONObject out=result(raw);
-                    if(!out.optBoolean("ok")){cb.finish(false,out.toString());return;}
+                    // A partial fill can still have a receipt: wait for the site to settle before reporting counts.
+                    if(!out.optBoolean("ok") && out.optString("receipt","").isEmpty()){cb.finish(false,out.toString());return;}
                     if(out.optBoolean("native_enter")){
                         web.requestFocus();boolean down=web.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_ENTER));boolean up=web.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_ENTER));
                         out.remove("native_enter");out.put("key_sent",down||up).put("submission_confirmed",false);cb.finish(down||up,out.toString());return;
