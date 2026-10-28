@@ -24,7 +24,7 @@ final class Local3TaskPolicy {
             if(op.equals("status")||op.equals("capabilities"))return "read";
             if(p.optString("target").equals("web")&&!p.optString("tab_id").isEmpty()&&(op.equals("observe")||op.equals("act")))return "tab:"+p.optString("tab_id");
         }
-        if(name.equals("desktop")&&p.optString("tool").equals("hearing")&&!p.optString("operation").equals("media"))return "audio";
+        if(name.equals("video_editor_subtitles_generate")||name.equals("desktop")&&p.optString("tool").equals("hearing")&&!p.optString("operation").equals("media"))return "audio";
         return "exclusive";
     }
     static boolean conflicts(String a,String b){

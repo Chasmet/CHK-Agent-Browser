@@ -212,7 +212,7 @@ public final class VideoEditorActivity extends Activity {
                     JSONArray cues=StudioSubtitles.generate(getApplicationContext(),new JSONObject(snapshot),"fr",active,(at,total)->ui.post(()->{if(alive&&!cancelled.get())progress.setMessage("Analyse de la piste "+at+" / "+total+"…");}));
                     ui.post(()->{if(!alive)return;progress.dismiss();if(cancelled.get())return;
                         if(project==null||saving||importing||revision!=base||!id.equals(project.optString("project_id"))||!snapshot.equals(project.toString())){toast("Le projet a changé pendant l'analyse : aucun sous-titre ajouté.");return;}
-                        try{remember();project.put("subtitles",cues);toolPage="Texte";save();toast(cues.length()+" sous-titres ajoutés · vérifie les paroles");}catch(Exception e){toast(e.getMessage());}
+                        try{remember();project.put("subtitles",cues);toolPage="Texte";save();toast("Reconnaissance terminée : enregistrement des sous-titres…");}catch(Exception e){toast(e.getMessage());}
                     });
                 }catch(Exception e){ui.post(()->{if(alive){progress.dismiss();if(!cancelled.get())toast("Sous-titres : "+e.getMessage());}});}});
             }).show();
@@ -234,6 +234,7 @@ public final class VideoEditorActivity extends Activity {
             dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener(v->{try{
                 if(revision!=base||!snapshot.equals(project.toString()))throw new Exception("Projet modifié : rouvre le sous-titre.");
                 long a=Math.round(Double.parseDouble(start.getText().toString().replace(',','.'))*1000),b=Math.round(Double.parseDouble(end.getText().toString().replace(',','.'))*1000);
+                if(b>total())throw new Exception("Le sous-titre dépasse la durée du montage.");
                 JSONObject copy=new JSONObject(project.toString());copy.getJSONArray("subtitles").getJSONObject(index).put("text",text.getText().toString().trim()).put("start_ms",a).put("end_ms",b);
                 StudioSubtitles.validate(copy,StudioEdits.total(copy));remember();project=copy;save();dialog.dismiss();
             }catch(Exception e){toast(e.getMessage()==null?"Temps ou texte invalide":e.getMessage());}});
