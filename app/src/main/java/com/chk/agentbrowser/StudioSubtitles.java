@@ -63,13 +63,21 @@ final class StudioSubtitles {
             }
         }
     }
+    private static SpannableString styled(String value){SpannableString text=new SpannableString(value);
+        text.setSpan(new ForegroundColorSpan(Color.WHITE),0,text.length(),0);text.setSpan(new BackgroundColorSpan(0x99000000),0,text.length(),0);
+        text.setSpan(new AbsoluteSizeSpan(32),0,text.length(),0);return text;}
     static androidx.media3.common.Effect effect(JSONObject project)throws Exception{
-        final JSONObject copy=new JSONObject(project.toString());
+        JSONArray input=items(project);final long[] starts=new long[input.length()],ends=new long[input.length()];
+        final SpannableString[] text=new SpannableString[input.length()];
+        for(int i=0;i<input.length();i++){JSONObject cue=input.getJSONObject(i);starts[i]=cue.getLong("start_ms");ends[i]=cue.getLong("end_ms");text[i]=styled(cue.getString("text"));}
+        final SpannableString empty=new SpannableString("\u00a0");empty.setSpan(new ForegroundColorSpan(Color.TRANSPARENT),0,empty.length(),0);
         final StaticOverlaySettings settings=new StaticOverlaySettings.Builder().setBackgroundFrameAnchor(0,-0.75f).build();
         TextOverlay overlay=new TextOverlay(){
-            public SpannableString getText(long presentationTimeUs){String value=at(copy,Math.max(0,presentationTimeUs/1000));boolean empty=value.isEmpty();
-                SpannableString s=new SpannableString(empty?"\u00a0":value);s.setSpan(new ForegroundColorSpan(empty?Color.TRANSPARENT:Color.WHITE),0,s.length(),0);
-                if(!empty)s.setSpan(new BackgroundColorSpan(0x99000000),0,s.length(),0);s.setSpan(new AbsoluteSizeSpan(32),0,s.length(),0);return s;}
+            public SpannableString getText(long presentationTimeUs){
+                long time=Math.max(0,presentationTimeUs/1000);int lo=0,hi=starts.length-1,index=-1;
+                while(lo<=hi){int mid=(lo+hi)>>>1;if(starts[mid]<=time){index=mid;lo=mid+1;}else hi=mid-1;}
+                return index>=0&&time<ends[index]?text[index]:empty;
+            }
             public OverlaySettings getOverlaySettings(long presentationTimeUs){return settings;}
         };
         return new androidx.media3.effect.OverlayEffect(java.util.Collections.singletonList(overlay));
