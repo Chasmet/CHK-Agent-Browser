@@ -63,7 +63,7 @@ final class PrivateWebCapture {
                 web.postVisualStateCallback(1,new WebView.VisualStateCallback(){public void onComplete(long id){
                     // VisualState means ready to draw; allow the private surface to compose
                     // the WebView's layers before reading the actual pixels.
-                    if(!ended){web.invalidate();web.postOnAnimation(()->web.postOnAnimation(()->WorkspaceCommands.UI.postDelayed(()->copy(0),350L)));}
+                    if(!ended){web.invalidate();web.postOnAnimation(()->web.postOnAnimation(()->WorkspaceCommands.UI.postDelayed(()->copy(0),180L)));}
                 }});
             }catch(Exception e){fail(e.getMessage()==null?"Capture privée indisponible.":e.getMessage());}
         }
@@ -93,7 +93,7 @@ final class PrivateWebCapture {
                                 try{
                                     java.util.Iterator<String> keys=current.keys();
                                     while(keys.hasNext()){String key=keys.next();info.put(key,current.get(key));}
-                                    WorkspaceCommands.UI.postDelayed(()->copy(0),150L);
+                                    WorkspaceCommands.UI.postDelayed(()->copy(0),100L);
                                 }catch(Exception e){fail("Actualisation de l’observation impossible : "+e.getMessage());}
                                 return;
                             }
