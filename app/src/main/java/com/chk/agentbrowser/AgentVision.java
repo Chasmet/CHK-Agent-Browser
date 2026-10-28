@@ -211,13 +211,13 @@ final class AgentVision {
     }
     private static void unavailable(WebView web,JSONObject info,String reason,AgentClient.ResultCallback cb)throws Exception{
         info.put("capture_source","unavailable_background_webview").put("visual_verified",false)
-            .put("capture_available",false).put("capture_current",false).put("reason",reason);
+            .put("capture_available",false).put("capture_current",false).put("capture_status","unavailable").put("reason",reason);
         JSONObject frame=webFrames.get(web);
         if(frame!=null&&frame.optString("context").equals(info.optString("context"))
             &&frame.optString("url").equals(info.optString("url"))){
             long age=android.os.SystemClock.elapsedRealtime()-frame.optLong("elapsed_at");
             if(age>=0&&age<=3000L){
-                info.put("capture_source","cached_window_pixels").put("capture_available",true)
+                info.put("capture_source","cached_window_pixels").put("capture_available",true).put("capture_status","cached")
                     .put("capture_age_ms",age).put("captured_at",frame.getLong("captured_at"))
                     .put("capture_revision",frame.getString("revision")).put("jpeg_base64",frame.getString("jpeg_base64"));
             }
@@ -235,6 +235,7 @@ final class AgentVision {
         byte[] bytes=null;try{for(int quality=65;quality>=17;quality-=12){ByteArrayOutputStream out=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.JPEG,quality,out);bytes=out.toByteArray();if(bytes.length<=140000)break;}}finally{bitmap.recycle();}
         if(bytes==null||bytes.length>140000)throw new Exception("Capture trop volumineuse.");
         info.put("capture_source",source).put("capture_available",true)
+            .put("capture_status",source.equals("retained_view_render")?"unverified":"current")
             .put("capture_current",!source.equals("retained_view_render"))
             .put("visual_verified",!source.equals("retained_view_render"))
             .put("captured_at",System.currentTimeMillis()).put("capture_age_ms",0)
