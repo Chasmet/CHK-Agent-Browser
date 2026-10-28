@@ -1,3 +1,15 @@
+## CHK Browser Local 3 — fiabilité YouTube et Suno (préparation après 1.0.454)
+
+- Le ciblage par libellé exact `label:Importer des vidéos` accepte désormais les véritables éléments ARIA `role=menuitem`, notamment les menus YouTube Studio, ainsi que les options et onglets. Les libellés ambigus sont toujours refusés.
+- Les menus d'importation sont également prioritaires dans la lecture DOM. Cette amélioration évite les sélecteurs CSS non standards comme `:has-text()`.
+- La saisie `browser_type` dans les éditeurs riches préserve la structure de l'éditeur et vérifie le texte réellement rendu, y compris ses sauts de ligne. Une saisie refusée est signalée explicitement, jamais validée à tort.
+- Le clavier avancé `chk://keyboard` accepte, après inspection, l'équivalence entre paragraphes visibles et texte saisi ; les valeurs rejetées après le rendu ne sont plus annoncées comme une action MCP réussie.
+- Aucune simulation de publication, aucun upload supposé confirmé à partir de `selected`. Une programmation YouTube requiert toujours la preuve `Programmée` avec date/heure correctes.
+- Paquet Android `com.chk.agentbrowser`, Local 3, permissions, données et signature persistante inchangés. Aucun changement des trois routes MCP, du serveur PC ni de l'identité Tailscale.
+- Vérifications ajoutées : menu YouTube accessible, refus de libellés ambigus, rendu multiligne Suno et saisie réellement rejetée.
+
+**Limite :** ces correctifs améliorent les commandes individuelles, mais ne démontrent pas à eux seuls que le workflow complet de publication YouTube ou de génération Suno aboutit en arrière-plan. Les tests sur les sites réels restent indispensables.
+
 ## Sous-titres automatiques synchronisés dans Studio
 
 - Reconnaissance de la parole en local avec Vosk français ou anglais. Le premier téléchargement du modèle peut être nécessaire ; aucun audio n’est envoyé au serveur pour la reconnaissance.

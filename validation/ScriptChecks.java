@@ -46,6 +46,10 @@ public final class ScriptChecks {
             BrowserScripts.clickState("\"#submit\"").getBytes("UTF-8"));
         java.nio.file.Files.write(root.resolve("semantic-click.js"),
             BrowserScripts.click("\"label:Envoyer\"").getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("rich-lyrics-type.js"),
+            BrowserScripts.type("\"label:Lyrics editor\"","\"ligne 1\\nligne 2\"").getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("youtube-menu-click.js"),
+            BrowserScripts.click("\"label:Importer des vidéos\"").getBytes("UTF-8"));
         java.nio.file.Files.write(root.resolve("condition.js"),
             BrowserScripts.condition("\"#done\"","\"Saved successfully\"","\"/done\"").getBytes("UTF-8"));
     }

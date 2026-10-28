@@ -118,6 +118,37 @@ assert.equal(semanticClicks,1);
 semanticDocument.querySelectorAll=()=>[sendButton,{...sendButton}];
 assert.match(vm.runInNewContext(semanticClick,{document:semanticDocument}),/Libellé ambigu/);
 assert.equal(semanticClicks,1);
+// YouTube Studio uses role=menuitem (not a button). A stable semantic label
+// must target exactly the observed menu item, never an unrelated item.
+const menuDoc={};
+let uploadsOpened=0;
+const uploadMenu={tagName:'DIV',nodeType:1,innerText:'Importer des vidéos',disabled:false,
+  getAttribute:k=>k==='role'?'menuitem':null,
+  getClientRects:()=>[{}],scrollIntoView(){},click(){uploadsOpened++;}};
+const otherMenu={...uploadMenu,innerText:'Créer un post',click(){throw Error('wrong menu item');}};
+menuDoc.querySelectorAll=()=>[uploadMenu,otherMenu];menuDoc.querySelector=()=>null;
+const clickUpload=fs.readFileSync(root+'/youtube-menu-click.js','utf8');
+assert.equal(vm.runInNewContext(clickUpload,{document:menuDoc}),'Clic effectué');
+assert.equal(uploadsOpened,1);
+menuDoc.querySelectorAll=()=>[uploadMenu,{...uploadMenu}];
+assert.match(vm.runInNewContext(clickUpload,{document:menuDoc}),/Libellé ambigu/);
+assert.equal(uploadsOpened,1);
+// Suno / ProseMirror: paragraphs carry visible line breaks that textContent omits.
+const richDoc={},richSelection={removeAllRanges(){},addRange(){}};
+const richField={nodeType:1,tagName:'DIV',isContentEditable:true,disabled:false,readOnly:false,
+  innerText:'',textContent:'',getAttribute:k=>k==='aria-label'?'Lyrics editor':null,
+  getClientRects:()=>[{}],scrollIntoView(){},focus(){},dispatchEvent(){},
+  ownerDocument:richDoc};
+richDoc.querySelectorAll=()=>[richField];richDoc.querySelector=()=>null;
+richDoc.createRange=()=>({selectNodeContents(){}});
+richDoc.getSelection=()=>richSelection;
+richDoc.execCommand=(operation,unused,txt)=>{
+  richField.textContent=txt.replace(/\n/g,'');richField.innerText=txt;return true;
+};
+const richScript=fs.readFileSync(root+'/rich-lyrics-type.js','utf8');
+assert.equal(vm.runInNewContext(richScript,{document:richDoc,Event}), 'Saisie effectuée');
+richDoc.execCommand=()=>{richField.textContent='ancien';richField.innerText='ancien';return true;};
+assert.equal(vm.runInNewContext(richScript,{document:richDoc,Event}), 'Saisie riche non confirmée');
 const submit={disabled:true,getAttribute:()=>null,closest:()=>null};
 const clickDoc={querySelector:s=>s==='#submit'?submit:null,querySelectorAll:()=>[]};
 assert.equal(vm.runInNewContext(clickState,{document:clickDoc}),'WAIT');

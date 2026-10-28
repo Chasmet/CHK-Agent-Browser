@@ -28,7 +28,8 @@ final class WebKeyboard {
             web.evaluateJavascript(invocation(context,p),raw->{
                 if(!cb.isActive())return;
                 try{JSONObject out=result(raw);
-                    if(!out.optBoolean("ok")&&!out.has("results")){cb.finish(false,out.toString());return;}
+                    // A partial fill can still have a receipt: wait for the site to settle before reporting counts.
+                    if(!out.optBoolean("ok") && out.optString("receipt","").isEmpty()){cb.finish(false,out.toString());return;}
                     if(out.optBoolean("native_enter")){
                         web.requestFocus();boolean down=web.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_ENTER));boolean up=web.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_ENTER));
                         out.remove("native_enter");out.put("key_sent",down||up).put("submission_confirmed",false);cb.finish(down||up,out.toString());return;
@@ -38,7 +39,7 @@ final class WebKeyboard {
                     new Handler(Looper.getMainLooper()).postDelayed(()->{
                         if(!cb.isActive())return;
                         try{JSONObject verify=new JSONObject().put("operation","verify").put("receipt",receipt).put("expected_context",out.getString("context"));
-                            web.evaluateJavascript(invocation(context,verify),checked->{if(!cb.isActive())return;try{JSONObject finalState=result(checked);cb.finish(finalState.has("results")||finalState.optBoolean("ok"),finalState.toString());}catch(Exception e){cb.finish(false,"Saisie peut-être appliquée : la vérification de la page a été interrompue.");}});
+                            web.evaluateJavascript(invocation(context,verify),checked->{if(!cb.isActive())return;try{JSONObject finalState=result(checked);cb.finish(finalState.optBoolean("ok"),finalState.toString());}catch(Exception e){cb.finish(false,"Saisie peut-être appliquée : la vérification de la page a été interrompue.");}});
                         }catch(Exception e){cb.finish(false,"Saisie peut-être appliquée : contexte web interrompu, relis la page.");}
                     },160L);
                 }catch(Exception e){cb.finish(false,"Le clavier web n’a pas renvoyé de résultat exploitable.");}
