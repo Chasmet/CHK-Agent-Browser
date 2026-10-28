@@ -91,10 +91,13 @@ public final class Local2BrowserAutomationTest {
     }
     @Test public void scrollMeasuresInnerListAndRejectsInvalidDirection()throws Exception{
         WebView page=open("example.com","<html><body><div id='list' style='height:180px;width:260px;overflow-y:scroll'><div style='height:2000px'>Long list</div></div></body></html>");
-        JSONObject args=new JSONObject().put("direction","down").put("selector","#list").put("pixels",140);
+        JSONObject args=new JSONObject().put("direction","down").put("pixels",140);
         JSONObject outcome=scrollDirect(page,args).json();
         assertTrue(outcome.toString(),outcome.getBoolean("movement_verified"));
         assertTrue(Double.parseDouble(eval(page,"document.querySelector('#list').scrollTop"))>0);
+        JSONObject reverse=scrollDirect(page,new JSONObject().put("direction","up").put("selector","#list").put("pixels",140)).json();
+        assertTrue(reverse.toString(),reverse.getBoolean("movement_verified"));
+        assertEquals(0.0,Double.parseDouble(eval(page,"document.querySelector('#list').scrollTop")),0.01);
         Result invalid=scrollDirect(page,new JSONObject().put("direction","sideways"));
         assertFalse(invalid.ok);
     }
