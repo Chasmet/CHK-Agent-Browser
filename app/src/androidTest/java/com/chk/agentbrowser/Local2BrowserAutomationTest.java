@@ -84,6 +84,20 @@ public final class Local2BrowserAutomationTest {
         instrument.runOnMainSync(()->web.evaluateJavascript(script,v->{value.set(v);done.countDown();}));
         assertTrue(done.await(10,TimeUnit.SECONDS));return value.get();
     }
+    private Result scrollDirect(WebView web,JSONObject args)throws Exception{
+        Result result=new Result();CountDownLatch done=new CountDownLatch(1);
+        instrument.runOnMainSync(()->BrowserScroll.run(web,args,WorkspaceCommands.UI,(ok,text)->{result.ok=ok;result.text=text;done.countDown();}));
+        assertTrue("Scroll callback timed out",done.await(10,TimeUnit.SECONDS));return result;
+    }
+    @Test public void scrollMeasuresInnerListAndRejectsInvalidDirection()throws Exception{
+        WebView page=open("example.com","<html><body><div id='list' style='height:180px;width:260px;overflow-y:scroll'><div style='height:2000px'>Long list</div></div></body></html>");
+        JSONObject args=new JSONObject().put("direction","down").put("selector","#list").put("pixels",140);
+        JSONObject outcome=scrollDirect(page,args).json();
+        assertTrue(outcome.toString(),outcome.getBoolean("movement_verified"));
+        assertTrue(Double.parseDouble(eval(page,"document.querySelector('#list').scrollTop"))>0);
+        Result invalid=scrollDirect(page,new JSONObject().put("direction","sideways"));
+        assertFalse(invalid.ok);
+    }
     @Test public void legacyDesktopCarrierFillsAndVerifiesDynamicFields()throws Exception{
         WebView web=open("example.com","<html><body><input id='title'><div id='caption' contenteditable='true'></div>"
             +"<input type='checkbox' id='audience'><select id='visibility'><option value='private'>Private</option><option value='schedule'>Schedule</option></select>"
