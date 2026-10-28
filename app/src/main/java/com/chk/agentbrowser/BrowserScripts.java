@@ -110,7 +110,7 @@ public final class BrowserScripts {
             + ";var modal=document.querySelector('[role=dialog][aria-modal=true]')||document.querySelector('[role=dialog]');var scope=sel?deepFind(sel):modal;if"
             + "(sel&&!scope)return JSON.stringify({ok:false,error:'Zone de défilement introuvable',selector:sel});var listRoots=scope?[scope]:[document];var candida"
             + "tes=[],seen=new Set();function visible(e){var r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.height>32&&r.width>35&&r.bottom>0&&r.rig"
-            + "ht>0&&r.top<innerHeight&&r.left<innerWidth&&s.display!=='none'&&s.visibility!=='hidden';}function inspect(root){var es=[root];try{es=es.concat(Ar"
+            + "ht>0&&r.top<innerHeight&&r.left<innerWidth&&s.display!=='none'&&s.visibility!=='hidden';}function inspect(root){var es=root.nodeType===1?[root]:[];try{es=es.concat(Ar"
             + "ray.from(root.querySelectorAll('*')).slice(0,4000));}catch(ignore){}for(var el of es){if(seen.has(el))continue;seen.add(el);if(!visible(el))conti"
             + "nue;var sty=getComputedStyle(el);var scrollable=el.scrollHeight>el.clientHeight+10&&(sty.overflowY==='auto'||sty.overflowY==='scroll'||sty.overfl"
             + "owY==='overlay'||el.hasAttribute('data-scroll-container'));if(scrollable){var r=el.getBoundingClientRect();candidates.push({el:el,score:(scope&&s"
