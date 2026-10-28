@@ -164,7 +164,7 @@ public final class AgentKeyboardIntegrationTest {
             .put(new JSONObject().put("selector",control(state,"Montant").getString("selector")).put("text","12,5"))
             .put(new JSONObject().put("selector",control(state,"Refus").getString("selector")).put("text","remplacé"))
             .put(new JSONObject().put("selector","#readonly").put("text","interdit"));
-        Reply result=webCall(new JSONObject().put("operation","fill").put("expected_context",state.getString("context")).put("fields",fields));assertTrue(result.text,result.ok);assertFalse(result.json().getBoolean("ok"));assertEquals(2,result.json().getInt("succeeded"));assertEquals(2,result.json().getInt("failed"));
+        Reply result=webCall(new JSONObject().put("operation","fill").put("expected_context",state.getString("context")).put("fields",fields));assertFalse(result.text,result.ok);assertFalse(result.json().getBoolean("ok"));assertEquals(2,result.json().getInt("succeeded"));assertEquals(2,result.json().getInt("failed"));
         assertEquals("\"Idée 📝\"",js("document.getElementById('name').value"));assertEquals("\"12.5\"",js("document.getElementById('amount').value"));assertEquals("1",js("window.inputs"));assertEquals("\"intact\"",js("document.getElementById('readonly').value"));
     }
     @Test public void webCursorUnicodeUndoAndNextField()throws Exception{
