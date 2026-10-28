@@ -11,7 +11,7 @@ public final class BrowserScripts {
             +"if((el.tagName||'').toLowerCase()==='iframe'){try{var d=el.contentDocument;if(d){out.push(d);scan(d);}}catch(e){}}});}"
             +"scan(document);roots.cached=out;return out;}"
             +"function deepFind(sel){var rs=roots();if(sel.indexOf('label:')===0){var label=sel.slice(6).trim().replace(/\\s+/g,' '),hits=[];"
-            +"rs.forEach(function(root){Array.from(root.querySelectorAll('button,a,input,textarea,select,[role=button],[role=checkbox],[contenteditable=true]')).forEach(function(e){"
+            +"rs.forEach(function(root){Array.from(root.querySelectorAll('button,a,input,textarea,select,[role=button],[role=checkbox],[role=menuitem],[role=option],[role=tab],[contenteditable=true]')).forEach(function(e){"
             +"var name=(e.getAttribute('aria-label')||e.getAttribute('title')||e.getAttribute('placeholder')||e.innerText||'').trim().replace(/\\s+/g,' ');"
             +"if(name===label&&e.getClientRects().length&&hits.indexOf(e)<0)hits.push(e);});});"
             +"if(hits.length>1)throw Error('Libellé ambigu : '+label);return hits.length===1?hits[0]:null;}"
@@ -30,10 +30,10 @@ public final class BrowserScripts {
     public static String readPage() {
         return "(function(){"+finder()
             + "var out={text:(document.body&&document.body.innerText||'').slice(0,5000),elements:[],media:[],forms:0,ready:document.readyState,document_url:(typeof location!=='undefined'?location.href:''),visibility:(document.visibilityState||'unknown')};"
-            + "var rs=roots(),nodes=[];rs.forEach(function(r){try{nodes=nodes.concat(Array.from(r.querySelectorAll('input,textarea,select,button,a,[role=button],[role=checkbox],[role=radio],[contenteditable=true],[tabindex=\"0\"]')));}catch(e){}});"
+            + "var rs=roots(),nodes=[];rs.forEach(function(r){try{nodes=nodes.concat(Array.from(r.querySelectorAll('input,textarea,select,button,a,[role=button],[role=checkbox],[role=radio],[role=menuitem],[role=option],[role=tab],[contenteditable=true],[tabindex=\"0\"]')));}catch(e){}});"
             + "function label(el){return (el.getAttribute('aria-label')||el.getAttribute('title')||el.placeholder||el.innerText||el.name||'').trim().replace(/\\s+/g,' ').slice(0,120);}"
             + "function score(el){var tag=(el.tagName||'').toLowerCase(),v=label(el).toLowerCase();"
-            + "if(v.indexOf('add assets')>=0||v.indexOf('add from drive')>=0||v.indexOf('upload')>=0||v.indexOf('save as draft')>=0||v.indexOf('enregistrer')>=0)return 180;"
+            + "if((el.getAttribute('role')||'')==='menuitem')return 190;if(v.indexOf('add assets')>=0||v.indexOf('add from drive')>=0||v.indexOf('upload')>=0||v.indexOf('importer')>=0||v.indexOf('save as draft')>=0||v.indexOf('enregistrer')>=0)return 180;"
             + "if((el.type||'').toLowerCase()==='file')return 170;if(tag==='input'||tag==='textarea'||tag==='select')return 130;"
             + "if(v.indexOf('icon')>=0||v.indexOf('screenshot')>=0||v.indexOf('description')>=0)return 110;"
             + "if(el.closest&&el.closest('header,nav,footer'))return 5;if(tag==='a')return 20;return 40;}"
@@ -135,10 +135,10 @@ public final class BrowserScripts {
         return "(function(){try{"+finder()+highlight()+"var el=deepFind("+selectorLiteral+");"
             + "if(!el)return 'Champ introuvable';if(['password','file','hidden'].indexOf((el.type||'').toLowerCase())>=0)return 'Champ sensible bloqué';"
             + "if(el.disabled||el.readOnly)return 'Champ non modifiable';if(el.scrollIntoView)el.scrollIntoView({block:'center'});mark(el);el.focus();"
-            + "if(el.isContentEditable){el.textContent="+textLiteral+";}else{if(!('value' in el))return 'Champ non saisissable';"
+            + "if(el.isContentEditable){var doc=el.ownerDocument,range=doc.createRange(),s=doc.getSelection();range.selectNodeContents(el);s.removeAllRanges();s.addRange(range);if(!doc.execCommand('insertText',false,"+textLiteral+"))return 'Éditeur riche non compatible';}else{if(!('value' in el))return 'Champ non saisissable';"
             + "var proto=Object.getPrototypeOf(el),setter=null;while(proto&&!setter){var desc=Object.getOwnPropertyDescriptor(proto,'value');setter=desc&&desc.set;proto=Object.getPrototypeOf(proto);}"
             + "if(setter)setter.call(el,"+textLiteral+");else el.value="+textLiteral+";}"
-            + "el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return 'Saisie effectuée';"
+            + "el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));if(el.isContentEditable){var wanted="+textLiteral+",actual=(el.innerText||'').replace(/\\r\\n/g,'\\n').replace(/\\n+$/,'');if(actual!==wanted.replace(/\\r\\n/g,'\\n').replace(/\\n+$/,'')&&(el.textContent||'')!==wanted)return 'Saisie riche non confirmée';}return 'Saisie effectuée';"
             + "}catch(e){return 'Erreur : '+e.message;}})()";
     }
 
@@ -154,7 +154,7 @@ public final class BrowserScripts {
             +"if(k==='check'&&['checkbox','radio'].indexOf(t)<0&&['checkbox','radio','switch'].indexOf(role)<0)throw Error('Case ou bouton radio attendu');"
             +"if(k==='check'&&t==='radio'&&f.value===false)throw Error('Choisir une autre option radio explicitement');"
             +"targets.push(el);}"
-            +"function val(el,k){return k==='check'?('checked' in el?!!el.checked:el.getAttribute('aria-checked')==='true'):String(el.isContentEditable?el.textContent:el.value);}"
+            +"function val(el,k){return k==='check'?('checked' in el?!!el.checked:el.getAttribute('aria-checked')==='true'):String(el.isContentEditable?(el.innerText||el.textContent):el.value);}"
             +"for(var i=0;i<fields.length;i++){var f=fields[i],el=targets[i],k=f.kind||'text';"
             + (write?"if(val(el,k)!==f.value){if(k==='check')el.click();else{if(el.isContentEditable){el.focus();var doc=el.ownerDocument,range=doc.createRange(),sel=doc.getSelection();range.selectNodeContents(el);sel.removeAllRanges();sel.addRange(range);var command=f.value===''?'delete':'insertText';if(!doc.execCommand(command,false,f.value))throw Error('Saisie éditable non confirmée par le navigateur');}else{var proto=Object.getPrototypeOf(el),setter=null;while(proto&&!setter){var d=Object.getOwnPropertyDescriptor(proto,'value');setter=d&&d.set;proto=Object.getPrototypeOf(proto);}if(setter)setter.call(el,f.value);else el.value=f.value;}el.dispatchEvent(new Event('input',{bubbles:true,composed:true}));el.dispatchEvent(new Event('change',{bubbles:true,composed:true}));}}":"")
             +"var actual=val(el,k),ok=el.isConnected&&actual===f.value;out.push({selector:f.selector,kind:k,matches:ok});"
@@ -180,7 +180,7 @@ public final class BrowserScripts {
 
     public static String valueMatches(String selectorLiteral,String expectedLiteral){
         return "(function(){try{"+finder()+"var el=deepFind("+selectorLiteral+");"
-            +"if(!el||el.disabled)return false;return String(el.isContentEditable?el.textContent:el.value)==="+expectedLiteral+";"
+            +"if(!el||el.disabled)return false;return (String(el.isContentEditable?el.textContent:el.value)==="+expectedLiteral+"||(el.isContentEditable&&String(el.innerText||'').replace(/\\r\\n/g,'\\n').replace(/\\n+$/,'')===String("+expectedLiteral+").replace(/\\r\\n/g,'\\n').replace(/\\n+$/,'')));"
             +"}catch(e){return false;}})()";
     }
 
@@ -326,7 +326,7 @@ public final class BrowserScripts {
             +"else if(el.hasAttribute('aria-checked'))ctrl.checked=el.getAttribute('aria-checked')==='true';"
             +"if(ctrl.invalid&&errors.length<12)errors.push({label:name,role:role});"
             +"if(dynamic.length<35)dynamic.push(ctrl);}"
-            +"rs.forEach(function(root){var controls=[];try{controls=Array.from(root.querySelectorAll('input,textarea,select,button,[role=radio],[role=checkbox],[role=switch],[role=combobox],[contenteditable=true],[aria-invalid=true]'));}catch(e){}"
+            +"rs.forEach(function(root){var controls=[];try{controls=Array.from(root.querySelectorAll('input,textarea,select,button,[role=radio],[role=checkbox],[role=switch],[role=combobox],[role=menuitem],[role=option],[contenteditable=true],[aria-invalid=true]'));}catch(e){}"
             +"controls.forEach(describe);});"
             +"return JSON.stringify({forms:forms.slice(0,8),count:forms.length,dynamic_controls:dynamic,validation_errors:errors});"
             +"}catch(e){return JSON.stringify({forms:[],count:0,dynamic_controls:[],validation_errors:[],error:e.message});}})()";
