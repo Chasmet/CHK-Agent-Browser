@@ -19,6 +19,7 @@ final class StudioEdits {
     }
     /** Sequential soundtrack follows project end, without changing or deleting any source. */
     static void fitAudio(JSONObject project)throws Exception {
+        if(StudioAudio.enabled(project))return;
         JSONArray sounds=project.optJSONArray("audio");if(sounds==null)return;
         long available=total(project);JSONArray out=new JSONArray();
         for(int i=0;i<sounds.length()&&available>=500;i++){
@@ -37,7 +38,7 @@ final class StudioEdits {
     }
     static void duplicate(JSONObject project,int index)throws Exception {
         JSONArray clips=project.getJSONArray("clips"),out=new JSONArray();
-        for(int i=0;i<clips.length();i++){out.put(clips.get(i));if(i==index)out.put(new JSONObject(clips.getJSONObject(i).toString()));}
+        for(int i=0;i<clips.length();i++){out.put(clips.get(i));if(i==index){JSONObject copy=new JSONObject(clips.getJSONObject(i).toString());copy.remove("studio_id");out.put(copy);}}
         project.put("clips",out);
     }
 }

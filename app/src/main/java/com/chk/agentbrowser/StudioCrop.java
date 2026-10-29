@@ -1,7 +1,9 @@
 package com.chk.agentbrowser;
 
-import android.graphics.Matrix;
-import androidx.media3.effect.MatrixTransformation;
+import androidx.media3.common.Effect;
+import androidx.media3.effect.Crop;
+import androidx.media3.effect.ScaleAndRotateTransformation;
+import java.util.*;
 import org.json.JSONObject;
 
 /** Non-destructive, per-clip source crop. Coordinates are normalized top-left. */
@@ -15,6 +17,7 @@ final class StudioCrop {
         if(!value.has("y"))value.put("y",0);
         if(!value.has("width"))value.put("width",1);
         if(!value.has("height"))value.put("height",1);
+        if(!value.has("ratio"))value.put("ratio","free");
         if(!value.has("degrees"))value.put("degrees",0);
         if(!value.has("flip_horizontal"))value.put("flip_horizontal",false);
         if(!value.has("flip_vertical"))value.put("flip_vertical",false);
@@ -46,6 +49,8 @@ final class StudioCrop {
             }
             case "move":{
                 double dx=args.getDouble("dx"),dy=args.getDouble("dy");
+                if(args.optString("units","normalized").equals("pixels")){if(sw<=0||sh<=0)throw new Exception("Dimensions source requises");dx/=sw;dy/=sh;}
+                else if(!args.optString("units","normalized").equals("normalized"))throw new Exception("Unités invalides");
                 if(!Double.isFinite(dx)||!Double.isFinite(dy))throw new Exception("Déplacement non fini");
                 c.put("x",Math.max(0,Math.min(1-c.getDouble("width"),c.getDouble("x")+dx)));
                 c.put("y",Math.max(0,Math.min(1-c.getDouble("height"),c.getDouble("y")+dy)));
@@ -53,6 +58,8 @@ final class StudioCrop {
             }
             case "resize":{
                 double w=args.getDouble("width"),h=args.getDouble("height");
+                if(args.optString("units","normalized").equals("pixels")){if(sw<=0||sh<=0)throw new Exception("Dimensions source requises");w/=sw;h/=sh;}
+                else if(!args.optString("units","normalized").equals("normalized"))throw new Exception("Unités invalides");
                 if(!Double.isFinite(w)||!Double.isFinite(h))throw new Exception("Dimensions non finies");
                 c.put("width",w);c.put("height",h);
                 c.put("x",Math.min(c.getDouble("x"),1-w));
@@ -68,23 +75,24 @@ final class StudioCrop {
             case "reset":return read(new JSONObject());
             default:throw new Exception("Opération de recadrage inconnue");
         }
+        String ratio=args.optString("ratio",c.optString("ratio","free"));
+        if(!Arrays.asList("free","9:16","16:9","1:1","4:5").contains(ratio))throw new Exception("Ratio non pris en charge");
+        c.put("ratio",ratio);
+        if((operation.equals("set")||operation.equals("resize"))&&!ratio.equals("free")){
+            if(sw<=0||sh<=0)throw new Exception("Dimensions source requises");String[] parts=ratio.split(":");double wanted=Double.parseDouble(parts[0])/Double.parseDouble(parts[1])*sh/sw;
+            double w=c.getDouble("width"),h=c.getDouble("height");if(w/h>wanted)w=h*wanted;else h=w/wanted;c.put("width",w).put("height",h);
+        }
         validate(c);return c;
     }
     /** Same Media3 effect object is used for preview and final export. */
-    static MatrixTransformation effect(JSONObject clip)throws Exception{
-        final JSONObject c=read(clip);
-        final float x=(float)c.getDouble("x"),y=(float)c.getDouble("y");
-        final float w=(float)c.getDouble("width"),h=(float)c.getDouble("height");
-        final float rotation=(float)c.getDouble("degrees");
-        final boolean fh=c.getBoolean("flip_horizontal"),fv=c.getBoolean("flip_vertical");
-        return timeUs->{
-            Matrix m=new Matrix();
-            m.setScale(1f/w,1f/h);
-            // Incoming GPU coordinates are centered [-1,+1], Y axis up.
-            m.postTranslate((1-w-2*x)/w,(h+2*y-1)/h);
-            if(fh||fv)m.postScale(fh?-1f:1f,fv?-1f:1f);
-            if(rotation!=0)m.postRotate(rotation);
-            return m;
-        };
+    static List<Effect> effects(JSONObject clip)throws Exception{
+        JSONObject c=read(clip);float x=(float)c.getDouble("x"),y=(float)c.getDouble("y"),w=(float)c.getDouble("width"),h=(float)c.getDouble("height");
+        List<Effect> out=new ArrayList<>();
+        // Crop.configure changes output dimensions: anisotropic scaling alone stretched the frame.
+        out.add(new Crop(2*x-1,2*(x+w)-1,1-2*(y+h),1-2*y));
+        out.add(new ScaleAndRotateTransformation.Builder()
+            .setScale(c.optBoolean("flip_horizontal")?-1:1,c.optBoolean("flip_vertical")?-1:1)
+            .setRotationDegrees((float)c.getDouble("degrees")).build());
+        return out;
     }
 }

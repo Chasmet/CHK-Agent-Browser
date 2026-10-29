@@ -205,10 +205,12 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebViewClient(new WebViewClient(){
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                android.webkit.WebResourceResponse blocked=TorNetworkGuard.blockedOnion(request.getUrl().toString());if(blocked!=null)return blocked;
                 android.webkit.WebResourceResponse local=BrowserStreamUploader.intercept(view,request);
                 return local==null?super.shouldInterceptRequest(view,request):local;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
+                if(BrowserPolicy.onionUrl(request.getUrl().toString())){toast(".onion nécessite Tor Browser et une connexion Tor vérifiée");return true;}
                 String scheme=request.getUrl().getScheme();
                 if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme))return false;
                 if(request.isForMainFrame()&&request.hasGesture()&&BrowserSiteSettings.external(MainActivity.this,request.getUrl().toString()))return true;

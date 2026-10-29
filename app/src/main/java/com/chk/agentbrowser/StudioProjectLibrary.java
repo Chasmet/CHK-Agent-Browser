@@ -38,11 +38,12 @@ final class StudioProjectLibrary {
             p.put("created_at",System.currentTimeMillis());
             p.put("updated_at",System.currentTimeMillis());
         }
+        boolean audioIds=StudioAudio.ids(p);
         File archive=entry(app,id,false);
         if(archive.exists()){JSONObject saved=read(archive);if(saved.optInt("revision")>p.optInt("revision")){p=saved;write(current,p);}}
         else write(archive,p);
-        if(initialized)write(archive,p);
-        if(initialized||migrated||!current.isFile())write(current,p);
+        if(initialized||audioIds)write(archive,p);
+        if(initialized||migrated||audioIds||!current.isFile())write(current,p);
         return p;
     }
     static JSONObject blank()throws Exception{
@@ -93,6 +94,7 @@ final class StudioProjectLibrary {
         String id=current.getString("project_id");
         if(p.has("project_id")&&!id.equals(p.optString("project_id")))
             throw new IllegalStateException("Projet différent du montage ouvert");
+        StudioAudio.ids(p);
         p.put("project_id",id);
         p.put("created_at",current.optLong("created_at",System.currentTimeMillis()));
         p.put("updated_at",System.currentTimeMillis());
@@ -122,6 +124,7 @@ final class StudioProjectLibrary {
         JSONObject before=active(app);
         JSONObject p=new JSONObject(value.toString());
         String id=UUID.randomUUID().toString();
+        StudioAudio.ids(p);
         p.put("project_id",id).put("created_at",System.currentTimeMillis())
             .put("updated_at",System.currentTimeMillis())
             .put("revision",before.optInt("revision",0)+1);
