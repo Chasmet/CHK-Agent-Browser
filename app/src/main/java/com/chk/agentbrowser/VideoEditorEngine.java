@@ -646,10 +646,22 @@ public final class VideoEditorEngine {
         soundtrack.addAll(parallelAudio);
         List<EditedMediaItemSequence> allSequences=new ArrayList<>();allSequences.add(sequence);allSequences.addAll(soundtrack);
         Composition.Builder builder=new Composition.Builder(allSequences);
+        boolean audioActive=external;
+        if(original)for(int i=0;i<clips.length();i++){
+            JSONObject clip=clips.optJSONObject(i);
+            if(!StudioImages.isImage(store.file(clip.optString("path")))&&!clip.optBoolean("mute",false)
+                &&(!anySolo||clip.optBoolean("solo",false)))audioActive=true;
+        }
+        final List<androidx.media3.common.audio.AudioProcessor> masterAudio=
+            audioActive&&project.optBoolean("master_limiter",true)?
+                Collections.singletonList(new StudioAudioMaster()):Collections.emptyList();
         if(layered){
             List<EditedMediaItemSequence> sequences=StudioLayers.sequences(context,project,StudioEdits.total(project));sequences.add(sequence);sequences.addAll(soundtrack);
             Composition.Builder layeredBuilder=new Composition.Builder(sequences).setVideoCompositorSettings(StudioLayers.compositor(project,layerWidth,layerHeight));
-            if(StudioSubtitles.items(project).length()>0)layeredBuilder.setEffects(new Effects(Collections.emptyList(),Collections.singletonList(StudioSubtitles.effect(project))));
+            List<androidx.media3.common.Effect> videoEffects=new ArrayList<>();
+            if(StudioSubtitles.items(project).length()>0)videoEffects.add(StudioSubtitles.effect(project));
+            if(!masterAudio.isEmpty()||!videoEffects.isEmpty())
+                layeredBuilder.setEffects(new Effects(masterAudio,videoEffects));
             return layeredBuilder.build();
         }
         float aspect=ratio(project.optString("aspect_ratio","source"));
@@ -667,7 +679,7 @@ public final class VideoEditorEngine {
             compositionEffects.add(Presentation.createForWidthAndHeight(width,height,layout));
         }
         if(StudioSubtitles.items(project).length()>0)compositionEffects.add(StudioSubtitles.effect(project));
-        if(!compositionEffects.isEmpty())builder.setEffects(new Effects(Collections.emptyList(),compositionEffects));
+        if(!compositionEffects.isEmpty()||!masterAudio.isEmpty())builder.setEffects(new Effects(masterAudio,compositionEffects));
         return builder.build();
     }
     private static List<androidx.media3.common.audio.AudioProcessor> advancedVolumeProcessors(JSONObject clip,JSONObject project,boolean music,long offset){
