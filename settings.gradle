@@ -3,7 +3,7 @@ dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_P
     google(); mavenCentral()
     exclusiveContent {
         forRepository { maven { url 'https://raw.githubusercontent.com/guardianproject/gpmaven/5fdb8dbcfe98d1b7e027e2f99bc086709870b005' } }
-        filter { includeGroup 'info.guardianproject' }
+        filter { includeModule 'info.guardianproject', 'tor-android' }
     }
 } }
 rootProject.name = 'CHK-Agent-Browser'
