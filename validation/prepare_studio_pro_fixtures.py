@@ -4,8 +4,8 @@ import hashlib, json, subprocess, urllib.request
 
 root = Path('app/src/androidTest/assets/pro-studio')
 root.mkdir(parents=True, exist_ok=True)
-url = 'https://download.pytorch.org/torchaudio/tutorial-assets/8463-287645-0000.flac'
-speech = root / 'speech.flac'
+url = 'https://download.pytorch.org/torchaudio/tutorial-assets/Lab41-SRI-VOiCES-src-sp0307-ch127535-sg0042.wav'
+speech = root / 'speech-source.wav'
 if not speech.exists():
     with urllib.request.urlopen(url, timeout=60) as response:
         data=response.read(5_000_001)
@@ -25,9 +25,9 @@ ffmpeg('-f','lavfi','-i','aevalsrc=0.4*sin(2*PI*440*t)+0.2*sin(2*PI*997*t):s=441
        '-ac','2','-c:a','pcm_s16le',str(root/'music.wav'))
 ffmpeg('-f','lavfi','-i','aevalsrc=0.08*sin(2*PI*1600*t):s=48000:d=8',
        '-ac','1','-c:a','pcm_s16le',str(root/'fx.wav'))
-(root/'ATTRIBUTION.txt').write_text('LibriSpeech 8463-287645-0000, from the PyTorch torchaudio tutorial assets.\n'
-    'Corpus: Vassil Panayotov, Guoguo Chen, Daniel Povey and Sanjeev Khudanpur; source audiobooks: LibriVox.\n'
+(root/'ATTRIBUTION.txt').write_text('VOiCES Lab41-SRI-VOiCES-src-sp0307-ch127535-sg0042, from the PyTorch torchaudio tutorial assets.\n'
+    'Corpus: Voices Obscured in Complex Environmental Settings (VOiCES), Colleen Richey et al. (2018), Lab41 / SRI International.\n'
     'License: Creative Commons Attribution 4.0, https://creativecommons.org/licenses/by/4.0/\n'
-    'Corpus and license: https://www.openslr.org/12\nSource: '+url+'\n'
+    'Corpus and license: https://iqtlabs.github.io/voices/\nSource: '+url+'\n'
     'Modified here: first six seconds, gain 0.45, silence padding, mono 48kHz; embedded in a generated test video.\n')
 print('PASS: generated public human voice, 44.1kHz stereo music, 48kHz mono FX and vertical quadrant video')
