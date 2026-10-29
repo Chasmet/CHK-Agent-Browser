@@ -66,7 +66,7 @@ final class StudioCropPreview {
                         }catch(Exception e){
                             callback.completed(false,"Capture rendue non vérifiée : "+e.getMessage());
                         }finally{
-                            media.release();renderer.cancel();
+                            try{media.release();}catch(Exception ignored){}renderer.cancel();
                         }
                     });
                 }
