@@ -10,6 +10,7 @@ import javax.net.ssl.*;
 import org.json.*;
 
 /** HTTP/1.1 inside a Tor CONNECT tunnel. Destination hosts are never resolved on the device. */
+@androidx.annotation.RequiresApi(29)
 final class TorHttp {
     static final String DIAGNOSTIC="https://check.torproject.org/api/ip";
     static final class Reply {int code;String url,type,body,sha256;JSONArray redirects;}

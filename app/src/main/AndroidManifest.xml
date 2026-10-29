@@ -49,10 +49,10 @@
         <activity android:name=".CutStudioLibraryActivity" android:exported="false" />
         <activity android:name=".CutStudioSettingsActivity" android:exported="false" />
         <activity android:name=".CutStudioActivity" android:exported="false" android:screenOrientation="portrait" />
-        <service android:name=".TorRuntimeService" android:exported="false" android:process=":tor" android:enabled="@bool/tor_integrated_supported" android:foregroundServiceType="specialUse">
+        <service android:name=".TorRuntimeService" tools:targetApi="29" android:exported="false" android:process=":tor" android:enabled="@bool/tor_integrated_supported" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-requested isolated Tor circuit for the separate CHK Tor space" />
         </service>
-        <activity android:name=".TorWebActivity" android:exported="false" android:process=":tor" android:enabled="@bool/tor_integrated_supported" />
+        <activity android:name=".TorWebActivity" tools:targetApi="29" android:exported="false" android:process=":tor" android:enabled="@bool/tor_integrated_supported" />
         <activity android:name=".TorEntryActivity" android:exported="false" />
         <activity android:name=".StudioProjectsActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".VideoEditorActivity" android:exported="false" android:screenOrientation="portrait" />

@@ -30,6 +30,7 @@ final class TorBridge {
     };
     private TorBridge(){}
     static JSONObject error(String reason){try{return new JSONObject().put("state","failed").put("error",reason).put("outcome_confirmed",false);}catch(Exception impossible){throw new IllegalStateException(impossible);}}
+    private static void invalidate(String reason){READY.clear();for(String id:new ArrayList<>(PENDING.keySet()))complete(id,false,error(reason));}
     private static void lost(){remote=null;binding=false;READY.clear();for(String id:new ArrayList<>(PENDING.keySet()))complete(id,false,error("TOR_PROCESS_EXITED_OR_DISCONNECTED"));}
     private static void complete(String id,boolean ok,JSONObject value){Result cb=PENDING.remove(id);Runnable timeout=TIMEOUTS.remove(id);if(timeout!=null)MAIN.removeCallbacks(timeout);if(cb!=null)cb.done(ok,value);}
     static void request(Context c,JSONObject args,Result cb){
@@ -49,6 +50,7 @@ final class TorBridge {
             if(!ok){cb.done(false,state);return;}
             if(args.has("session_id")&&!args.optString("session_id").equals(state.optString("session_id"))){cb.done(false,error("TOR_SESSION_MISMATCH"));return;}
             int pid=state.optInt("engine_process_id",-1),http=state.optInt("http_tunnel_port"),socks=state.optInt("socks_port");
+            invalidate("TOR_DISCONNECT_REQUESTED");
             IO.execute(()->{try{
                 ActivityManager am=(ActivityManager)app.getSystemService(Context.ACTIVITY_SERVICE);
                 if(pid<=0||pid==Process.myPid()||!isTorProcess(am,app,pid))throw new Exception("TOR_PROCESS_IDENTITY_UNCONFIRMED");
@@ -58,7 +60,7 @@ final class TorBridge {
                 while(SystemClock.elapsedRealtime()<until&&(isTorProcess(am,app,pid)||listening(http)||listening(socks)))Thread.sleep(100);
                 if(isTorProcess(am,app,pid)||listening(http)||listening(socks))throw new Exception("TOR_DISCONNECT_NOT_CONFIRMED");
                 JSONObject result=new JSONObject().put("state","completed").put("connection_state","disconnected").put("tor_connected",false).put("tor_verified",false).put("process_stopped",true).put("listeners_closed",true).put("verified_disconnect",true);
-                MAIN.post(()->{remote=null;binding=false;try{app.unbindService(CONNECTION);}catch(Exception ignored){}cb.done(true,result);});
+                MAIN.post(()->{invalidate("TOR_DISCONNECTED");remote=null;binding=false;try{app.unbindService(CONNECTION);}catch(Exception ignored){}cb.done(true,result);});
             }catch(Exception e){MAIN.post(()->cb.done(false,error(e.getMessage())));}});
         });
     }

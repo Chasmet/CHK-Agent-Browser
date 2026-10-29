@@ -34,6 +34,17 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug lintDebug :app:assembleDebugAndroidTest :tor-wrapper:lintDebug
+      - name: Explain Android validation failures
+        if: failure()
+        run: |
+          python3 - <<'PYERR'
+          from pathlib import Path
+          for root in ('app', 'tor-wrapper'):
+              for report in Path(root+'/build/intermediates').rglob('lint-results-debug.txt'):
+                  lines=report.read_text().splitlines()
+                  for n,line in enumerate(lines):
+                      if 'Error:' in line: print('\n'.join(lines[n:n+5]))
+          PYERR
       - name: KVM
         run: sudo chmod 666 /dev/kvm
       - name: Real Tor circuit and onion on Android
