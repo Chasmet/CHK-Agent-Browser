@@ -204,13 +204,13 @@ public final class AgentKeyboardIntegrationTest {
     @Test public void unsupportedRichCommandNeverMutatesFrameworkDom()throws Exception{
         load("<body id='ready'><div contenteditable='true' aria-label='Légende'><b>intact</b></div><script>document.execCommand=function(){return false;};</script></body>");
         JSONObject state=webState();Reply result=webCall(command("replace",state,control(state,"Légende")).put("text","nouveau"));
-        assertFalse(result.text,result.ok);assertEquals("\"<b>intact</b>\"",js("document.querySelector('[contenteditable]').innerHTML"));
+        assertFalse(result.text,result.ok);assertEquals("<b>intact</b>",new JSONArray("["+js("document.querySelector('[contenteditable]').innerHTML")+"]").getString(0));
     }
 
     @Test public void dialogAfterLargeLibraryOwnsTextFieldsAndShortSelectors()throws Exception{
-        load("<body id='ready'><main id='library'></main><div role='dialog' aria-modal='true' style='position:fixed;inset:0;background:white'><h1>Création active</h1><input aria-label='Titre du morceau' value='Brume'><div contenteditable='true' aria-label='Lyrics editor'>Paroles</div></div><script>document.getElementById('library').innerHTML='<button>Ancienne bibliothèque</button>'.repeat(6000);</script></body>");
+        load("<body id='ready'><main id='library'></main><div role='dialog' aria-modal='true' style='position:fixed;left:0;top:0;right:0;bottom:0;background:white'><h1>Création active</h1><input aria-label='Titre du morceau' value='Brume'><div contenteditable='true' aria-label='Lyrics editor'>Paroles</div></div><script>document.getElementById('library').innerHTML='<button>Ancienne bibliothèque</button>'.repeat(6000);</script></body>");
         JSONObject page=new JSONObject(new JSONArray("["+js(BrowserScripts.readPage())+"]").getString(0));
-        assertTrue(page.getString("text").contains("Création active"));assertFalse(page.getString("text").contains("Ancienne bibliothèque"));
+        assertTrue(page.toString(),page.getString("text").contains("Création active"));assertFalse(page.toString(),page.getString("text").contains("Ancienne bibliothèque"));
         assertEquals("Titre du morceau",page.getJSONArray("elements").getJSONObject(0).getString("label"));
         assertTrue(page.getJSONArray("elements").getJSONObject(0).getString("selector").length()<100);
         JSONObject form=new JSONObject(new JSONArray("["+js(BrowserScripts.getForm())+"]").getString(0));

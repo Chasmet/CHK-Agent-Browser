@@ -55,7 +55,15 @@ public final class StudioLayersIntegrationTest {
         assertTrue("Green second layer before top layer",Color.green(before)>170&&Color.red(before)<70);assertTrue("First layer stays on top",Color.red(during)>180&&Color.green(during)<70);assertTrue("Green second layer restored after top layer",Color.green(after)>170&&Color.red(after)<70);assertTrue("Third layer keeps its own position",Color.red(corner)>170&&Color.green(corner)>170&&Color.blue(corner)<70);
     }
     @Test public void videoLayerHasSourceFramesAndDisappearsAfterEnd()throws Exception {
-        JSONObject p=project("-video-pip").put("layers",new JSONArray().put(layer(video,500,1000)));export(p);String output=p.getString("output");blue(pixel(output,200,50,50));int c=pixel(output,1000,50,50);assertTrue("Video PiP must replace the blue center",Color.red(c)>70||Color.green(c)>70||Color.blue(c)<100);blue(pixel(output,2200,50,50));
+        JSONObject p=project("-video-pip").put("layers",new JSONArray().put(layer(video,500,1000)));export(p);String output=p.getString("output");
+        // The fixture's center lies in a blue stripe, the same color as the
+        // background. Sample two separated points in its stable green stripe,
+        // inside the half-width PiP, only while the layer should be active.
+        for(int y:new int[]{45,55}){
+            blue(pixel(output,200,40,y));blue(pixel(output,2200,40,y));
+            int green=pixel(output,1000,40,y);
+            assertTrue("Video PiP green stripe at y="+y+": "+Integer.toHexString(green),Color.green(green)>140);
+        }
     }
     @Test public void rotatedSourceKeepsItsAspectAndMusicWithLayers()throws Exception {
         JSONObject source=MediaInspection.info(app,video);
