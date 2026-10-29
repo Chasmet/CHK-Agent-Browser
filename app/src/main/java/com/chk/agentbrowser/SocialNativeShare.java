@@ -60,24 +60,45 @@ final class SocialNativeShare {
         return intent;
     }
 
+    /**
+     * Handoff to the installed official social app. Android accepting an Intent
+     * NEVER means upload, publication or schedule was accepted by that service.
+     * Never change the prepared publication's journal status here.
+     */
+    static JSONObject handoff(Activity activity, JSONObject job) throws Exception {
+        if (!"prepared".equals(job.optString("status")))
+            throw new IllegalArgumentException("Fiche non préparée : partage direct refusé pour éviter un doublon.");
+        Intent video = buildShare(activity, job);
+        String caption = job.optString("caption", "");
+        if (!caption.isEmpty()) {
+            ClipboardManager clipboard=(ClipboardManager) activity.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null)
+                clipboard.setPrimaryClip(ClipData.newPlainText("CHK description", caption));
+        }
+        boolean official = true;
+        try {
+            activity.startActivity(new Intent(video).setPackage(targetPackage(job.optString("platform"))));
+        } catch (ActivityNotFoundException | SecurityException unavailable) {
+            official = false;
+            activity.startActivity(Intent.createChooser(video,"Transmettre la vidéo CHK"));
+        }
+        return new JSONObject()
+            .put("ok",true)
+            .put("state", official ? "official_app_opened" : "android_share_chooser_opened")
+            .put("platform",job.optString("platform"))
+            .put("publication_id",job.optString("id"))
+            .put("schedule_requested",job.optString("schedule_at"))
+            .put("remote_verified",false)
+            .put("upload_confirmed",false)
+            .put("schedule_confirmed",false)
+            .put("message","Le MP4 a ete remis a Android. Verifier le compte, l'import et la date dans l'application sociale.");
+    }
+
     static void launch(Activity activity, JSONObject job) {
         try {
-            Intent video = buildShare(activity, job);
-            String caption = job.optString("caption", "");
-            if (!caption.isEmpty()) {
-                ClipboardManager clipboard = (ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE);
-                if (clipboard != null)
-                    clipboard.setPrimaryClip(ClipData.newPlainText("CHK description", caption));
-            }
-            // Try installed official Android app without sharing credentials.
-            try {
-                activity.startActivity(new Intent(video).setPackage(targetPackage(job.optString("platform"))));
-            } catch (ActivityNotFoundException | SecurityException unavailable) {
-                // The official app is absent or rejects the Android share contract.
-                activity.startActivity(Intent.createChooser(video, "Ouvrir le MP4 dans une application sociale"));
-            }
+            JSONObject result = handoff(activity,job);
             Toast.makeText(activity,
-                "MP4 transmis. Publication et horaire restent à confirmer dans l'application officielle.",
+                "Application ouverte : programmation NON confirmée. Vérifier dans le réseau social.",
                 Toast.LENGTH_LONG).show();
         } catch (Exception error) {
             Toast.makeText(activity, "Transmission impossible : "+error.getMessage(), Toast.LENGTH_LONG).show();
