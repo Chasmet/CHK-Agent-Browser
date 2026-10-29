@@ -245,6 +245,20 @@ public final class NativeSocialControlService extends AccessibilityService {
                     if(x<0||y<0||x>getResources().getDisplayMetrics().widthPixels||
                         y>getResources().getDisplayMetrics().heightPixels)
                         throw new Exception("Coordonnées hors de l'écran");
+                    // A pointer is tied to an observed, non-sensitive UI control.
+                    // Never use unrestricted coordinates to bypass a confirmation button.
+                    AccessibilityNodeInfo pointed=find(root,p.getString("path"));
+                    try{
+                        Rect bounds=new Rect();pointed.getBoundsInScreen(bounds);
+                        String label=(clean(pointed.getText())+" "+clean(pointed.getContentDescription()))
+                            .toLowerCase(java.util.Locale.ROOT);
+                        if(pointed.isPassword()||label.matches(".*(publier|publish|poster|post now|programmer|schedule|confirmer la publication).*"))
+                            throw new Exception("Confirmation finale réservée au propriétaire");
+                        if(!bounds.contains((int)x,(int)y)||
+                            bounds.width()>getResources().getDisplayMetrics().widthPixels*0.85f&&
+                            bounds.height()>getResources().getDisplayMetrics().heightPixels*0.7f)
+                            throw new Exception("Tap hors d'un contrôle observé");
+                    }finally{pointed.recycle();}
                     Path line=new Path();line.moveTo(x,y);
                     GestureDescription gesture=new GestureDescription.Builder()
                         .addStroke(new GestureDescription.StrokeDescription(line,0,90)).build();
