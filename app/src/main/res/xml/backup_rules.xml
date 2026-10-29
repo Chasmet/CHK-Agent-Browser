@@ -8,4 +8,7 @@
     <exclude domain="sharedpref" path="browser_mcp_v1.xml" />
     <exclude domain="sharedpref" path="chk_local2_v1.xml" />
     <exclude domain="sharedpref" path="chk_local3_v1.xml" />
+        <exclude domain="root" path="app_webview_chk_tor/" />
+        <exclude domain="root" path="app_TorService/" />
+        <exclude domain="file" path="tor_isolated_receipts.json" />
 </full-backup-content>

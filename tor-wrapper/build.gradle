@@ -1,0 +1,45 @@
+plugins { id 'com.android.library' }
+android {
+    namespace 'org.torproject.jni'
+    compileSdk 36
+    defaultConfig {
+        minSdk 29
+        buildConfigField 'String', 'VERSION_NAME', '"0.4.9.14"'
+        buildConfigField 'int', 'VERSION_CODE', '40914'
+    }
+    buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    sourceSets.main.java.srcDir layout.buildDirectory.dir('generated/tor/source')
+    sourceSets.main.jniLibs.srcDir layout.buildDirectory.dir('generated/tor/native')
+    lint { abortOnError true }
+}
+configurations { pinnedTorNative; pinnedTorSource }
+dependencies {
+    // Resolve as archives, not an Android library: recompile the exact published Java binding
+    // with our JDK 17/SDK 36 instead of importing Java 24 class files and SDK 37 metadata.
+    pinnedTorNative('info.guardianproject:tor-android:0.4.9.14@aar') { transitive = false }
+    pinnedTorSource('info.guardianproject:tor-android:0.4.9.14:sources@jar') { transitive = false }
+    api 'info.guardianproject:jtorctl:0.4.5.7'
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
+    implementation 'androidx.annotation:annotation:1.9.1'
+}
+def prepareTor = tasks.register('preparePinnedTor') {
+    inputs.files configurations.pinnedTorNative, configurations.pinnedTorSource
+    outputs.dir layout.buildDirectory.dir('generated/tor')
+    doLast {
+        def nativeArchive = configurations.pinnedTorNative.singleFile
+        def sourceArchive = configurations.pinnedTorSource.singleFile
+        [[nativeArchive, '28ff2bb6d4d42eabe57183dedd7a97fce77e8ce4b6f5af6fa03993b3ca054edd'],
+         [sourceArchive, '095118a41782a91b9002038461c4c6a65f5c41bc6f5a37323362eceaf0088a2b']].each { pair ->
+            def actual = java.security.MessageDigest.getInstance('SHA-256').digest(pair[0].bytes).encodeHex().toString()
+            if (actual != pair[1]) throw new GradleException('Pinned Tor artifact checksum mismatch: ' + pair[0].name)
+        }
+        copy { from zipTree(sourceArchive); include '**/TorService.java'; into layout.buildDirectory.dir('generated/tor/source') }
+        copy {
+            from zipTree(nativeArchive); include 'jni/**/*.so'
+            eachFile { path = path.substring('jni/'.length()) }; includeEmptyDirs = false
+            into layout.buildDirectory.dir('generated/tor/native')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn prepareTor }

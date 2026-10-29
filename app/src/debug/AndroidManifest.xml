@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug-only IPC for cookie-jar isolation tests. Never shipped in release. -->
+        <service android:name=".TorDebugIsolationService" android:exported="false" android:process=":tor" android:enabled="@bool/tor_integrated_supported" />
+    </application>
+</manifest>

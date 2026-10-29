@@ -151,7 +151,7 @@ public final class Local3Client {
             .put("max_file_bytes",TransferLimits.MAX_FILE_BYTES).put("max_tabs",BrowserPolicy.MAX_TABS)
             .put("active_transport_tasks",inFlight.size()).put("max_transport_tasks",4).put("input_timeout_ms",45000)
             .put("agent_control",AgentControl.capabilities())
-            .put("agent_hearing",AgentHearing.capabilities()).put("studio_transport","desktop / tool=studio / operation=capabilities").put("tor_transport","desktop / tool=tor / operation=status")
+            .put("agent_hearing",AgentHearing.capabilities()).put("studio_transport","desktop / tool=studio / operation=capabilities").put("tor_transport","desktop / tool=tor / operation=capabilities").put("tor_integrated_min_api",29)
             .put("previews_allowed",AgentClient.get(app).isPreviewAllowed())
             .put("capability_sync",capabilityStatus).put("last_action",lastAction)
             .put("last_outcome",lastOutcome).put("result_pending",!p.getString("outbox","").isEmpty());

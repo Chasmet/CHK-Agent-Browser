@@ -1,0 +1,73 @@
+package com.chk.agentbrowser;
+
+import android.app.Activity;
+import android.graphics.*;
+import android.net.http.SslError;
+import android.os.*;
+import android.view.*;
+import android.webkit.*;
+import android.widget.*;
+import java.io.*;
+import java.util.Collections;
+import org.json.JSONObject;
+
+/** A script-free Tor WebView in the :tor process, created only after proxy and circuit proofs. */
+@androidx.annotation.RequiresApi(29)
+public final class TorWebActivity extends Activity {
+    private TorRuntime runtime;
+    private WebView web;
+    private TextView state;
+    private EditText address;
+    boolean resumed;
+    @Override public void onCreate(Bundle saved){
+        super.onCreate(saved);runtime=TorRuntime.get(this);
+        if(!runtime.policy.usable(SystemClock.elapsedRealtime())){finish();return;}
+        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setBackgroundColor(0xff16141e);
+        state=new TextView(this);state.setTextColor(0xffe4ceff);state.setPadding(14,10,14,10);box.addView(state);
+        LinearLayout bar=new LinearLayout(this);address=new EditText(this);address.setSingleLine();address.setTextColor(0xffeeeeee);address.setText("https://check.torproject.org/");address.setHint("Adresse HTTP(S) via Tor");address.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);bar.addView(address,new LinearLayout.LayoutParams(0,-2,1));
+        Button go=new Button(this);go.setText("Aller");go.setOnClickListener(v->action("navigate",address.getText().toString()));bar.addView(go);box.addView(bar);
+        LinearLayout tools=new LinearLayout(this);button(tools,"←",()->action("back",null));button(tools,"→",()->action("forward",null));button(tools,"↻",()->action("reload",null));button(tools,"Stop Tor",()->startActivity(new android.content.Intent(this,TorEntryActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK|android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("disconnect_tor",true)));button(tools,"Retour CHK",this::finish);box.addView(tools);
+        web=new WebView(this);web.setTag("chk_tor_webview");WebSettings settings=web.getSettings();
+        settings.setJavaScriptEnabled(false);settings.setDomStorageEnabled(false);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setGeolocationEnabled(false);settings.setSaveFormData(false);settings.setSafeBrowsingEnabled(false);settings.setSupportMultipleWindows(false);settings.setMediaPlaybackRequiresUserGesture(true);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
+        web.setWebChromeClient(new WebChromeClient(){@Override public void onPermissionRequest(PermissionRequest request){request.deny();}});
+        web.setDownloadListener((url,agent,disposition,type,size)->Toast.makeText(this,"Téléchargement Tor non pris en charge ; aucune requête directe envoyée",Toast.LENGTH_LONG).show());
+        web.setWebViewClient(new WebViewClient(){
+            @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
+                if(!request.isForMainFrame())return !allowed(request.getUrl().toString());
+                try{String url=TorUrlPolicy.checked(request.getUrl().toString());if(!runtime.policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_NOT_CONNECTED");
+                    if(request.isRedirect())return false;action("navigate",url);return true;
+                }catch(Exception e){runtime.pageFailed(e.getMessage());return true;}
+            }
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                if(!allowed(request.getUrl().toString()))return new WebResourceResponse("text/plain","UTF-8",403,"Tor required",Collections.emptyMap(),new ByteArrayInputStream("TOR_REQUEST_BLOCKED".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                return null;
+            }
+            @Override public void onPageStarted(WebView view,String url,Bitmap favicon){runtime.pageStarted(url);}
+            @Override public void onPageFinished(WebView view,String url){runtime.pageFinished(url,view.getTitle());address.setText(url);}
+            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(request.isForMainFrame())runtime.pageFailed("TOR_PAGE_NETWORK_ERROR: "+error.getErrorCode());}
+            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame())runtime.pageFailed("TOR_PAGE_HTTP_ERROR: "+response.getStatusCode());}
+            @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){handler.cancel();runtime.pageFailed("TOR_PAGE_TLS_REJECTED");}
+        });
+        box.addView(web,new LinearLayout.LayoutParams(-1,0,1));setContentView(box);runtime.attach(this,web);
+    }
+    private boolean allowed(String url){if(url.equals("about:blank")||url.startsWith("data:"))return true;try{TorUrlPolicy.checked(url);return runtime.policy.usable(SystemClock.elapsedRealtime());}catch(Exception e){return false;}}
+    private void button(LinearLayout row,String title,Runnable action){Button b=new Button(this);b.setAllCaps(false);b.setText(title);b.setOnClickListener(v->action.run());row.addView(b,new LinearLayout.LayoutParams(0,-2,1));}
+    private void action(String op,String url){try{JSONObject args=runtime.uiArgs(op);if(url!=null)args.put("url",url);runtime.command(args,(ok,value)->{if(!ok)Toast.makeText(this,value.optString("error","Navigation non confirmée"),Toast.LENGTH_LONG).show();});}catch(Exception e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}}
+    private final Runnable tick=new Runnable(){public void run(){if(!resumed)return;try{JSONObject s=runtime.status();state.setText("Tor · "+s.optString("connection_state")+" · "+s.optString("error")+"\nJavaScript désactivé · stockage et réseau séparés de CHK Web");}catch(Exception ignored){}new Handler(Looper.getMainLooper()).postDelayed(this,1000);}};
+    @Override protected void onResume(){super.onResume();resumed=true;if(runtime!=null)runtime.main.post(tick);}
+    @Override protected void onPause(){resumed=false;if(runtime!=null)runtime.main.removeCallbacks(tick);super.onPause();}
+    @Override protected void onDestroy(){if(runtime!=null)runtime.detach(this);if(web!=null){web.stopLoading();web.destroy();web=null;}super.onDestroy();}
+    void capture(TorRuntime.Result cb){
+        if(web==null||!resumed||!hasWindowFocus()){cb.done(false,TorBridge.error("TOR_WINDOW_NOT_VISIBLE"));return;}
+        int[] at=new int[2];web.getLocationInWindow(at);int w=web.getWidth(),h=web.getHeight();if(w<1||h<1){cb.done(false,TorBridge.error("TOR_VIEW_EMPTY"));return;}
+        Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+        try{PixelCopy.request(getWindow(),new Rect(at[0],at[1],at[0]+w,at[1]+h),bitmap,result->{try{
+            if(result!=PixelCopy.SUCCESS)throw new Exception("TOR_PIXEL_COPY_FAILED: "+result);
+            Bitmap small=bitmap;float scale=Math.min(1,720f/Math.max(w,h));if(scale<1)small=Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)),true);
+            ByteArrayOutputStream bytes=new ByteArrayOutputStream();try{small.compress(Bitmap.CompressFormat.JPEG,80,bytes);}finally{if(small!=bitmap)small.recycle();}
+            if(bytes.size()>500000)throw new Exception("TOR_SCREENSHOT_TOO_LARGE");
+            JSONObject value=runtime.status().put("capture_source","pixelcopy_real_tor_window").put("jpeg_base64",android.util.Base64.encodeToString(bytes.toByteArray(),android.util.Base64.NO_WRAP));cb.done(true,value);
+        }catch(Exception e){cb.done(false,TorBridge.error(e.getMessage()));}finally{bitmap.recycle();}},runtime.main);}catch(Exception e){bitmap.recycle();cb.done(false,TorBridge.error(e.getMessage()));}
+    }
+}
