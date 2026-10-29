@@ -4,7 +4,13 @@ import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Path;
+import android.os.Build;
+import android.view.Display;
+import android.util.Base64;
+import java.io.ByteArrayOutputStream;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
@@ -174,6 +180,47 @@ public final class NativeSocialControlService extends AccessibilityService {
             }
             AccessibilityNodeInfo root=targetRoot();
             try{
+                if(op.equals("screenshot")){
+                    // Android 11+ only. FLAG_SECURE and permission errors remain authoritative.
+                    if(Build.VERSION.SDK_INT<30)throw new Exception("Capture native exige Android 11 ou supérieur");
+                    String packageAtRequest=session.getString("target_package");
+                    takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),new TakeScreenshotCallback(){
+                        @Override public void onSuccess(ScreenshotResult result){
+                            try{
+                                if(!NativeSocialSession.isActive(NativeSocialControlService.this,packageAtRequest))
+                                    throw new Exception("Session interrompue pendant la capture");
+                                AccessibilityNodeInfo currentRoot=targetRoot();
+                                currentRoot.recycle();
+                                android.hardware.HardwareBuffer buffer=result.getHardwareBuffer();
+                                try{
+                                    Bitmap original=Bitmap.wrapHardwareBuffer(buffer,result.getColorSpace());
+                                    if(original==null)throw new Exception("Image Android indisponible");
+                                    int width=Math.max(1,Math.round(original.getWidth()*
+                                        Math.min(1f,512f/Math.max(original.getWidth(),original.getHeight()))));
+                                    int height=Math.max(1,Math.round(original.getHeight()*
+                                        Math.min(1f,512f/Math.max(original.getWidth(),original.getHeight()))));
+                                    Bitmap small=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
+                                    Canvas canvas=new Canvas(small);
+                                    canvas.drawBitmap(original,null,new Rect(0,0,width,height),null);
+                                    ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+                                    small.compress(Bitmap.CompressFormat.JPEG,60,bytes);
+                                    small.recycle();
+                                    cb.finish(true,new JSONObject()
+                                        .put("package",packageAtRequest)
+                                        .put("mime_type","image/jpeg")
+                                        .put("width",width).put("height",height)
+                                        .put("image_base64",Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP))
+                                        .put("source","android_accessibility_screenshot")
+                                        .put("outcome_confirmed",false).toString());
+                                }finally{buffer.close();}
+                            }catch(Exception error){if(cb.isActive())cb.finish(false,error.getMessage());}
+                        }
+                        @Override public void onFailure(int errorCode){
+                            if(cb.isActive())cb.finish(false,"Capture Android refusée : "+errorCode);
+                        }
+                    });
+                    return;
+                }
                 if(op.equals("observe")){
                     JSONArray rows=new JSONArray();
                     tree(root,"root",rows,0);
