@@ -44,7 +44,7 @@ final class StudioAutomation {
                 if(action.equals("video_editor_queue_add")){
                     String request=args.getString("request_id");if(!request.matches("[A-Za-z0-9_-]{1,80}"))throw new IOException("request_id invalide");
                     JSONArray jobs=queue.getJSONArray("jobs");
-                    for(int i=0;i<jobs.length();i++)if(request.equals(jobs.getJSONObject(i).optString("request_id"))){cb.completed(true,summary().toString());return;}
+                    for(int i=0;i<jobs.length();i++)if(request.equals(jobs.getJSONObject(i).optString("request_id"))){JSONObject old=jobs.getJSONObject(i);if(old.has("request_fingerprint")&&!old.getString("request_fingerprint").equals(StudioMcp.fingerprint(args)))throw new IOException("REQUEST_ID_REUSED_WITH_DIFFERENT_PARAMETERS");cb.completed(true,summary().toString());return;}
                     JSONArray projects=args.getJSONArray("projects");if(projects.length()<1||projects.length()>10||jobs.length()+projects.length()>40)throw new IOException("1 à 10 projets par ajout, 40 exports conservés maximum");
                     JSONArray staged=new JSONArray();Set<String> outputs=new HashSet<>();
                     for(int i=0;i<jobs.length();i++)outputs.add(jobs.getJSONObject(i).getJSONObject("project").getString("output"));
@@ -53,7 +53,7 @@ final class StudioAutomation {
                         VideoEditorEngine.get().validate(app,p);if(p.getJSONArray("clips").length()==0)throw new IOException("Projet vide");
                         String out=p.getString("output");if(!outputs.add(out)||new WorkspaceStore(app).file(out).exists())throw new IOException("Destination déjà utilisée : "+out);
                         staged.put(new JSONObject().put("id",UUID.randomUUID().toString()).put("request_id",request).put("project",p)
-                            .put("sources",fingerprints(app,p)).put("state","queued").put("created_at",System.currentTimeMillis()));
+                            .put("sources",fingerprints(app,p)).put("request_fingerprint",StudioMcp.fingerprint(args)).put("state","queued").put("created_at",System.currentTimeMillis()));
                     }
                     for(int i=0;i<staged.length();i++)jobs.put(staged.get(i));queue.put("paused",false);saveQueue(app);pump(app);result=summary();
                 }else if(action.equals("video_editor_queue_resume")){
@@ -138,6 +138,7 @@ final class StudioAutomation {
             job.put("finished_at",System.currentTimeMillis());polling=false;saveQueue(app);pump(app);
         }catch(Exception ex){try{job.put("state","failed").put("error",ex.getMessage());saveQueue(app);}catch(Exception ignored){}polling=false;}
     }),1000);}
+    static JSONObject queueSnapshot(Context app)throws Exception{loadQueue(app);return summary();}
     private static JSONObject summary()throws Exception{
         JSONArray rows=new JSONArray();JSONArray jobs=queue.getJSONArray("jobs");for(int i=0;i<jobs.length();i++){JSONObject j=jobs.getJSONObject(i),p=j.getJSONObject("project");
             JSONObject row=new JSONObject(j.toString());row.remove("project");row.remove("sources");row.put("name",p.optString("name")).put("output",p.getString("output"));rows.put(row);}

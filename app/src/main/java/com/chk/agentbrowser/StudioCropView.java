@@ -33,7 +33,7 @@ final class StudioCropView extends View {
     void setCrop(double left,double top,double width,double height){
         x=(float)left;y=(float)top;w=(float)width;h=(float)height;invalidate();
     }
-    void setRatio(float r){ratio=r;if(r>0){float aspect=r/sourceAspect;float nh=Math.min(h,w/aspect);float nw=nh*aspect;w=nw;h=nh;x=Math.min(x,1-w);y=Math.min(y,1-h);}invalidate();}
+    void setRatio(float r){ratio=r;if(r>0){float cx=x+w/2,cy=y+h/2,aspect=r/sourceAspect;h=Math.min(1,1/aspect);w=h*aspect;x=Math.max(0,Math.min(1-w,cx-w/2));y=Math.max(0,Math.min(1-h,cy-h/2));}invalidate();}
     float left(){return x;}float top(){return y;}float widthNorm(){return w;}float heightNorm(){return h;}
     @Override protected void onDraw(Canvas canvas){
         super.onDraw(canvas);
@@ -81,7 +81,8 @@ final class StudioCropView extends View {
                     if(ratio>0){float aspect=ratio/sourceAspect;
                         float newW=right-left,newH=Math.min(bottom-top,newW/aspect);
                         newW=newH*aspect;
-                        right=Math.min(1,left+newW);bottom=Math.min(1,top+newH);
+                        if(grabbed%2==0)left=right-newW;else right=left+newW;
+                        if(grabbed/2==0)top=bottom-newH;else bottom=top+newH;
                     }
                     x=left;y=top;w=right-left;h=bottom-top;
                 }

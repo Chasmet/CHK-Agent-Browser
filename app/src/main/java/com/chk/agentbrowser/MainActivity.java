@@ -180,6 +180,7 @@ public class MainActivity extends Activity {
         showSpace("browser");
         String url=normalize(text);
         if(url.isEmpty()){toast("Adresse non autorisée");return;}
+        if(BrowserPolicy.onionUrl(url)){toast("Domaine .onion bloqué dans Web : ouvrir Tor et vérifier la connexion dans Tor Browser");return;}
         if(current!=null){beginNavigation(current);current.loadUrl(url);}
         ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(),0);
         address.clearFocus();

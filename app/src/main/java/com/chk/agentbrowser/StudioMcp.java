@@ -33,9 +33,9 @@ final class StudioMcp {
             .put("limitations",new JSONArray(Arrays.asList("LUFS and true-peak not measured on Android; independent FFmpeg verification required","speed resampling changes pitch in audio model v2","animated spatial crop is unsupported","Tor network state is not observable from external Tor Browser")));
         JSONObject p=project(app,args);
         if(op.equals("audio_tracks"))return tracks(app,p);
-        if(op.equals("audio_mix_status"))return new JSONObject().put("state","completed").put("engine",VideoEditorEngine.get().status()).put("project_id",p.getString("project_id")).put("revision",p.getInt("revision"));
+        if(op.equals("audio_mix_status"))return new JSONObject().put("state","completed").put("queue",StudioAutomation.queueSnapshot(app)).put("project_id",p.getString("project_id")).put("revision",p.getInt("revision"));
         if(op.equals("audio_analyze")){
-            JSONObject target=clip(p,args),source=source(p,target);long duration=Math.min(target.optLong("duration_ms",10000),args.optLong("duration_ms",120000));
+            JSONObject target=clip(p,args),source=source(p,target);long requestedStart=args.optLong("start_ms");long duration=Math.min(target.optLong("duration_ms",10000)-requestedStart,args.optLong("duration_ms",120000));if(requestedStart<0||duration<=0)throw new IOException("ANALYSIS_RANGE_INVALID");
             JSONObject analysis=StudioAudioAnalysis.measure(app,target.getString("path"),target.optLong("start_ms")+args.optLong("start_ms"),duration,active);
             if(args.optBoolean("detect_speech")){JSONArray spans=StudioAudioMixer.speech(app,p,source.getString("track_id"),active);analysis.put("voice_regions",spans).put("speech_presence_verified",true).put("speech_engine","vosk");}
             return analysis.put("project_id",p.getString("project_id")).put("revision",p.getInt("revision")).put("clip_id",target.getString("studio_id"));

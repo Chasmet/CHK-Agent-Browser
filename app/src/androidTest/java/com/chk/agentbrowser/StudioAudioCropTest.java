@@ -69,4 +69,22 @@ public final class StudioAudioCropTest {
             String[] parts=ratio.split(":");double wanted=Double.parseDouble(parts[0])/Double.parseDouble(parts[1]);assertEquals(wanted,c.getDouble("width")*1080/(c.getDouble("height")*1920),.00001);assertEquals(9000,source.getLong("duration_ms"));
         }
     }
+    @Test public void fourTouchHandlesKeepOppositeCornerAndSourceBounds()throws Exception{
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+            android.content.Context app=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().getTargetContext();
+            for(int corner=0;corner<4;corner++){
+                StudioCropView view=new StudioCropView(app);android.widget.FrameLayout parent=new android.widget.FrameLayout(app);parent.addView(view);view.layout(0,0,400,600);
+                android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(400,600,android.graphics.Bitmap.Config.ARGB_8888);image.eraseColor(android.graphics.Color.RED);view.source(image);view.setCrop(.1,.1,.8,.8);
+                android.graphics.Bitmap screen=android.graphics.Bitmap.createBitmap(400,600,android.graphics.Bitmap.Config.ARGB_8888);view.draw(new android.graphics.Canvas(screen));
+                float x=corner%2==0?40:360,y=corner/2==0?60:540;long now=android.os.SystemClock.uptimeMillis();
+                android.view.MotionEvent down=android.view.MotionEvent.obtain(now,now,android.view.MotionEvent.ACTION_DOWN,x,y,0),move=android.view.MotionEvent.obtain(now,now+20,android.view.MotionEvent.ACTION_MOVE,x+(corner%2==0?15:-15),y+(corner/2==0?20:-20),0),up=android.view.MotionEvent.obtain(now,now+40,android.view.MotionEvent.ACTION_UP,x,y,0);
+                assertTrue(view.onTouchEvent(down));assertTrue(view.onTouchEvent(move));assertTrue(view.onTouchEvent(up));down.recycle();move.recycle();up.recycle();
+                assertTrue(view.left()>=0&&view.top()>=0);assertTrue(view.left()+view.widthNorm()<=1.00001);assertTrue(view.top()+view.heightNorm()<=1.00001);assertTrue(view.widthNorm()<.8);assertTrue(view.heightNorm()<.8);
+                if(corner%2==0)assertEquals(.9,view.left()+view.widthNorm(),.0001);else assertEquals(.1,view.left(),.0001);
+                if(corner/2==0)assertEquals(.9,view.top()+view.heightNorm(),.0001);else assertEquals(.1,view.top(),.0001);
+                for(float ratio:new float[]{9f/16,16f/9,1,4f/5}){view.setRatio(ratio);assertEquals(ratio,view.widthNorm()*400/(view.heightNorm()*600),.0001);}
+                screen.recycle();image.recycle();
+            }
+        });
+    }
 }
