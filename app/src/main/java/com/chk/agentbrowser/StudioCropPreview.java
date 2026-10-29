@@ -38,9 +38,12 @@ final class StudioCropPreview {
                         MediaMetadataRetriever media=new MediaMetadataRetriever();
                         try{
                             media.setDataSource(mp4.getAbsolutePath());
-                            Bitmap frame=media.getScaledFrameAtTime(
-                                Math.min(500000,item.optLong("duration_ms")*500),
-                                MediaMetadataRetriever.OPTION_CLOSEST,480,480);
+                            long instant=Math.min(500000,item.optLong("duration_ms")*500);
+                            // Scaled-frame decoding arrived in Android 8.1/API 27.
+                            // Keep the existing minSdk 23 devices supported.
+                            Bitmap frame=android.os.Build.VERSION.SDK_INT>=27
+                                ?media.getScaledFrameAtTime(instant,MediaMetadataRetriever.OPTION_CLOSEST,480,480)
+                                :media.getFrameAtTime(instant,MediaMetadataRetriever.OPTION_CLOSEST);
                             if(frame==null)throw new IllegalStateException("Aucune image décodable dans le MP4 Media3 de prévisualisation");
                             WorkspaceStore store=new WorkspaceStore(app);
                             if(!store.file("studio-previews").isDirectory())store.mkdir("studio-previews");
