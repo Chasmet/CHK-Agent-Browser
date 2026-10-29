@@ -473,12 +473,15 @@ public class MainActivity extends Activity {
     private void verifyNavigation(WebView target,String requested,long before,int timeout,AgentClient.ResultCallback cb){
         final long deadline=android.os.SystemClock.elapsedRealtime()+Math.min(25000,Math.max(1000,timeout));
         final java.util.concurrent.atomic.AtomicBoolean completed=new java.util.concurrent.atomic.AtomicBoolean();
+        final java.util.concurrent.atomic.AtomicBoolean awaitingJavascript=new java.util.concurrent.atomic.AtomicBoolean();
         final Runnable[] watchdog=new Runnable[1];
         Runnable cancel=()->{if(completed.compareAndSet(false,true)){transferHandler.removeCallbacks(watchdog[0]);cb.finish(false,"Navigation interrompue · onglet fermé ou navigation remplacée.");}};
         Runnable previous=navigationCancels.put(target,cancel);if(previous!=null)previous.run();
         watchdog[0]=()->{if(completed.compareAndSet(false,true)){
             if(navigationCancels.get(target)==cancel)navigationCancels.remove(target);
-            cb.finish(false,"Navigation sans réponse JavaScript avant le délai : résultat inconnu, lire la page avant toute reprise.");
+            cb.finish(false,awaitingJavascript.get()
+                ?"Navigation sans réponse JavaScript avant le délai : résultat inconnu, lire la page avant toute reprise."
+                :"Chargement non confirmé dans le délai. Relis la page avant une nouvelle navigation.");
         }};
         transferHandler.postDelayed(watchdog[0],Math.max(1L,deadline-android.os.SystemClock.elapsedRealtime()));
         Runnable check=new Runnable(){
@@ -500,8 +503,10 @@ public class MainActivity extends Activity {
                     transferHandler.postDelayed(this,150L);return;
                 }
                 long document=BrowserWebState.documentVersion(target);
+                awaitingJavascript.set(true);
                 target.evaluateJavascript("JSON.stringify({url:location.href,ready:document.readyState,title:document.title})",raw->{
                     if(completed.get())return;
+                    awaitingJavascript.set(false);
                     if(!cb.isActive()||current!=target||isFinishing()||isDestroyed()){
                         finish(false,"Navigation interrompue avant la vérification.");return;
                     }
