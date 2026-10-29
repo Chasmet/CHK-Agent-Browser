@@ -54,17 +54,19 @@ public final class SocialPublishingActivity extends Activity {
         root.setPadding(dp(14),dp(8),dp(14),dp(18));root.setBackgroundColor(BG);
         ScrollView scroll=new ScrollView(this);scroll.addView(root);setContentView(scroll);
         root.addView(text("RÉSEAUX · CHK",24,FG));
-        root.addView(text("TikTok, YouTube et Instagram dans CHK : navigateur intégré + passerelle MP4 vers les applications officielles, sans exporter les mots de passe.",13,DIM));
+        root.addView(text("TikTok, YouTube et Instagram : espace intégré à CHK, fichiers MP4 privés et passerelle native pilotable par ChatGPT via MCP.",13,DIM));
+        root.addView(text("Le réseau social garde le contrôle de la publication. Une vidéo transmise n'est PAS programmée.",13,TEAL));
         LinearLayout sites=group(root);
         sites.addView(text("OUVRIR UN STUDIO",15,TEAL));
-        action(sites,"TikTok Studio · importer et programmer",()->open("https://www.tiktok.com/tiktokstudio/upload?from=creator_center&tab=video"));
+        action(sites,"TikTok · Studio intégré au navigateur CHK",()->open("https://www.tiktok.com/tiktokstudio/upload?from=creator_center&tab=video"));
         divider(sites);
         action(sites,"YouTube Studio · vidéos et Shorts",()->open("https://studio.youtube.com/"));
         divider(sites);
         action(sites,"Instagram · créer une publication",()->open("https://www.instagram.com/"));
         LinearLayout help=group(root);
         help.addView(text("Importation : depuis le studio, utilise « Sélectionner une vidéo » puis le sélecteur CHK pour retrouver tes MP4. Le site doit accepter le fichier avant de programmer.",13,DIM));
-        help.addView(text("Partage direct : sélectionne une fiche ci-dessous puis « Envoyer MP4 ». Le fichier et sa légende sont transmis à l’application officielle. Cela ne confirme jamais une programmation.",13,DIM));
+        help.addView(text("Partage direct : une fiche préparée peut ouvrir TikTok, YouTube ou Instagram officiel avec son MP4 et sa légende. ChatGPT peut lancer la même opération via MCP « publication_handoff ».",13,DIM));
+        help.addView(text("Une application Android externe ne peut être affichée à l'intérieur de CHK que si son éditeur autorise cette intégration. Sans API officielle, l'horaire reste à confirmer sur le réseau.",13,DIM));
         help.addView(text("Une fiche préparée par ChatGPT n'est PAS une programmation confirmée. Vérifie toujours la date et l'heure affichées par la plateforme.",13,TEAL));
         LinearLayout planned=group(root);
         planned.addView(text("PUBLICATIONS PRÉPARÉES ET STATUTS",15,TEAL));
@@ -105,7 +107,7 @@ public final class SocialPublishingActivity extends Activity {
                 jobs.addView(row);
                 if("prepared".equals(entry.optString("status"))
                     && ("tiktok".equals(platform)||"youtube".equals(platform)||"instagram".equals(platform))) {
-                    TextView direct=action(jobs,"Envoyer MP4 à l'application "+platform.toUpperCase(),
+                    TextView direct=action(jobs,"Ouvrir "+platform.toUpperCase()+" avec MP4 CHK (non programmé)",
                         ()->sharePrepared(id));
                     direct.setTextSize(13);
                     direct.setBackgroundColor(0xff294c52);
