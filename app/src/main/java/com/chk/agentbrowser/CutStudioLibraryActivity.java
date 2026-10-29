@@ -316,7 +316,15 @@ public final class CutStudioLibraryActivity extends Activity {
                         .setPositiveButton("Ouvrir dans CHK",(d,n)->openPlatformInChk(platform,path,meta))
                         .setNeutralButton("Partager Android",(d,n)->{
                             copyMetadata(text);
-                            shareVideoWithMetadata(video,text);
+                            try{
+                                JSONObject row=new JSONObject()
+                                    .put("path",path)
+                                    .put("platform",platform)
+                                    .put("title",meta.optString("title",""))
+                                    .put("description",meta.optString("description",""))
+                                    .put("hashtags",meta.optString("hashtags",""));
+                                NativeSocialSession.offer(this,workspace,row);
+                            }catch(Exception e){toast("Partage : "+e.getMessage());}
                         })
                         .setNegativeButton("Copier seulement",(d,n)->copyMetadata(text))
                         .show();
