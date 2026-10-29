@@ -15,7 +15,7 @@ final class StudioMix {
         boolean changed=false;Set<String> seen=new HashSet<>();
         for(String array:new String[]{"clips","audio","layers"}){JSONArray a=p.optJSONArray(array);if(a==null)continue;
             for(int i=0;i<a.length();i++){JSONObject c=a.getJSONObject(i);String id=c.optString("clip_id");
-                if(id.isEmpty()||!seen.add(id)){id=UUID.randomUUID().toString();c.put("clip_id",id);seen.add(id);changed=true;}
+                if(!id.matches("[A-Za-z0-9_-]{1,80}")||!seen.add(id)){id=UUID.randomUUID().toString();c.put("clip_id",id);seen.add(id);changed=true;}
                 if(!c.has("track_id")){c.put("track_id",array.equals("clips")?"original":array.equals("audio")?"music":"layers");changed=true;}
             }}return changed;
     }
@@ -37,6 +37,8 @@ final class StudioMix {
         return v;
     }
     static void validateGain(JSONObject o,long duration)throws Exception{
+        for(String key:new String[]{"mute","solo"})if(o.has(key)&&!(o.get(key) instanceof Boolean))throw new IOException(key+" doit être booléen");
+        if(o.has("role")&&!Arrays.asList("voice","music","ambience","fx").contains(o.getString("role")))throw new IOException("Rôle audio inconnu");
         number(o,"volume",1,0,2);number(o,"fade_in_ms",0,0,duration);number(o,"fade_out_ms",0,0,duration);
         JSONArray a=o.optJSONArray("gain_keyframes");if(a==null)return;if(a.length()>1000)throw new IOException("1000 keyframes audio maximum");long before=-1;
         for(int i=0;i<a.length();i++){JSONObject k=a.getJSONObject(i);long at=k.getLong("time_ms");if(at<=before||at<0||at>duration)throw new IOException("Keyframes audio : temps croissants uniques requis");number(k,"volume",1,0,2);before=at;}
@@ -58,7 +60,8 @@ final class StudioMix {
     }
     static double envelope(JSONObject o,double time,double duration){
         double value=o.optDouble("volume",1);JSONArray a=o.optJSONArray("gain_keyframes");
-        if(a!=null&&a.length()>0){JSONObject first=a.optJSONObject(0);value=first.optDouble("volume",1);for(int i=1;i<a.length();i++){JSONObject left=a.optJSONObject(i-1),right=a.optJSONObject(i);double start=left.optDouble("time_ms"),end=right.optDouble("time_ms");if(time<end){double t=Math.max(0,Math.min(1,(time-start)/(end-start)));value=left.optDouble("volume",1)*(1-t)+right.optDouble("volume",1)*t;break;}value=right.optDouble("volume",1);}}
+        if(a!=null&&a.length()>0){int lo=0,hi=a.length()-1;while(lo<hi){int mid=(lo+hi+1)>>>1;if(a.optJSONObject(mid).optDouble("time_ms")<=time)lo=mid;else hi=mid-1;}JSONObject left=a.optJSONObject(lo);value=left.optDouble("volume",1);if(lo<a.length()-1){JSONObject right=a.optJSONObject(lo+1);double t=Math.max(0,Math.min(1,(time-left.optDouble("time_ms"))/(right.optDouble("time_ms")-left.optDouble("time_ms"))));value=value*(1-t)+right.optDouble("volume",1)*t;}}
+
         double fadeIn=o.optDouble("fade_in_ms"),fadeOut=o.optDouble("fade_out_ms");if(fadeIn>0)value*=Math.min(1,Math.max(0,time/fadeIn));if(fadeOut>0)value*=Math.min(1,Math.max(0,(duration-time)/fadeOut));return value;
     }
     static boolean audible(JSONObject p,Source s)throws Exception{
@@ -75,8 +78,11 @@ final class StudioMix {
         return 1-amount*(1-Math.pow(10,d.optDouble("reduction_db",-12)/20));
     }
     static double gain(JSONObject p,Source s,double local)throws Exception{return envelope(s.clip,local,s.length)*envelope(track(p,s.track),s.offset+local,StudioEdits.total(p))*duck(p,s,s.offset+local);}
+    static String voiceSignature(Context app,JSONObject p)throws Exception{
+        StringBuilder value=new StringBuilder();WorkspaceStore store=new WorkspaceStore(app);for(Source source:sources(p)){if(!source.original&&!track(p,source.track).optString("role","music").equals("voice"))continue;File file=store.file(source.clip.getString("path"));value.append(source.clip.optString("clip_id")).append(':').append(source.offset).append(':').append(source.length).append(':').append(source.clip.optLong("start_ms")).append(':').append(source.speed).append(':').append(file.length()).append(':').append(file.lastModified()).append(';');}byte[] hash=java.security.MessageDigest.getInstance("SHA-256").digest(value.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));return android.util.Base64.encodeToString(hash,android.util.Base64.NO_WRAP);
+    }
     static JSONObject catalog(Context app,JSONObject p)throws Exception{
-        JSONArray all=new JSONArray();for(Source s:sources(p)){JSONObject row=new JSONObject().put("clip_id",s.clip.optString("clip_id")).put("track_id",s.track).put("original",s.original).put("path",s.clip.getString("path")).put("offset_ms",s.offset).put("duration_ms",s.length).put("clip",s.clip).put("track",track(p,s.track)).put("audible",audible(p,s));
+        JSONArray all=new JSONArray();for(Source s:sources(p)){JSONObject row=new JSONObject().put("clip_id",s.clip.optString("clip_id")).put("track_id",s.track).put("original",s.original).put("path",s.clip.getString("path")).put("offset_ms",s.offset).put("duration_ms",s.length).put("clip",s.clip).put("track",track(p,s.track)).put("audible",audible(p,s)).put("clip_gain_percent",s.clip.optDouble("volume",1)*100).put("clip_gain_db",StudioPcmMix.level(s.clip.optDouble("volume",1))).put("track_gain_percent",track(p,s.track).optDouble("volume",1)*100).put("track_gain_db",StudioPcmMix.level(track(p,s.track).optDouble("volume",1)));
             row.put("format",MediaInspection.info(app,s.clip.getString("path")));all.put(row);}
         return new JSONObject().put("project_id",p.getString("project_id")).put("revision",p.optInt("revision")).put("clips",all).put("mix_version",p.optInt("audio_mix_version",1)).put("time_unit","project_ms").put("gain_conversion","dB = 20 log10(linear); 0% = silence (-infinity dB)").put("ducking",p.optJSONObject("audio_ducking"));
     }

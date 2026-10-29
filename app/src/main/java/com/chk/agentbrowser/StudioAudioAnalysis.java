@@ -20,7 +20,7 @@ final class StudioAudioAnalysis {
     static JSONArray voices(Context app,JSONObject p,String language,AgentClient.ResultCallback cb)throws Exception{
         JSONArray regions=new JSONArray();WorkspaceStore store=new WorkspaceStore(app);
         for(StudioMix.Source s:StudioMix.sources(p)){
-            if(!StudioMix.audible(p,s)||!s.original&&!StudioMix.track(p,s.track).optString("role","music").equals("voice"))continue;
+            if(!s.original&&!StudioMix.track(p,s.track).optString("role","music").equals("voice"))continue;
             JSONObject info=MediaInspection.info(app,s.clip.getString("path"));boolean has=false;JSONArray streams=info.optJSONArray("tracks");if(streams!=null)for(int i=0;i<streams.length();i++)has|=streams.getJSONObject(i).optString("mime_type").startsWith("audio/");if(!has)continue;
             long start=s.clip.optLong("start_ms"),length=s.clip.optLong("duration_ms");JSONObject measure=levels(store.file(s.clip.getString("path")),start,length,cb);double rms=measure.optDouble("rms_dbfs",-120);
             for(long part=0;part<length;part+=180000){JSONArray words=MediaTranscriber.words(app,s.clip.getString("path"),language,(int)Math.min(180,(length-part+999)/1000),start+part,cb);
@@ -36,7 +36,7 @@ final class StudioAudioAnalysis {
     }
     static JSONObject correlation(float[] expected,float[] actual)throws Exception{
         double best=-1;int offset=0;
-        for(int lag=-800;lag<=800;lag+=8){double xy=0,xx=0,yy=0;for(int i=800;i<Math.min(expected.length,actual.length)-800;i+=8){double a=expected[i],b=actual[i+lag];xy+=a*b;xx+=a*a;yy+=b*b;}double c=xx>1e-9&&yy>1e-9?xy/Math.sqrt(xx*yy):0;if(c>best){best=c;offset=lag;}}
+        for(int lag=-800;lag<=800;lag+=8){double xy=0,xx=0,yy=0;for(int i=800;i<Math.min(expected.length,actual.length)-800;i+=8){double a=expected[i],b=actual[i+lag];xy+=a*b;xx+=a*a;yy+=b*b;}double c=xx>1e-9&&yy>1e-9?xy/Math.sqrt(xx*yy):0;if(c>best+1e-5||Math.abs(c-best)<1e-5&&Math.abs(lag)<Math.abs(offset)){best=c;offset=lag;}}
         return new JSONObject().put("correlation",best).put("audio_offset_ms",offset/8d).put("matches_reference",best>=.85&&Math.abs(offset)<=160).put("scope","sampled decoded audio, +/-100ms lag search, 1ms resolution");
     }
 }

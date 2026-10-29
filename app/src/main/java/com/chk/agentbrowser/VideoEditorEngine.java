@@ -85,7 +85,7 @@ public final class VideoEditorEngine {
                 DISK.execute(()->{try{
                     JSONObject project=args.has("project")?new JSONObject(args.getJSONObject("project").toString()):load(application);validate(application,project);
                     if(project.getJSONArray("clips").length()==0)throw new IllegalArgumentException("Ajoute une vidéo avant d’exporter");
-                    Composition composition=composition(application,project);
+                    Composition composition=composition(application,project,new AgentClient.ResultCallback(){public boolean isActive(){return ticket==exportGeneration;}public void finish(boolean ok,String text){}});
                     MAIN.post(()->{if(ticket!=exportGeneration||!"preparing".equals(state)){cb.completed(false,"Export annulé");return;}startExport(application,project,composition,args.optBoolean("replace",false),ticket,cb);});
                 }catch(Exception ex){synchronized(exportLock){if(ticket==exportGeneration){state="failed";error=ex.getMessage();}}cb.completed(false,ex.getMessage());}});
             });return;
@@ -556,7 +556,8 @@ public final class VideoEditorEngine {
         }catch(Exception ex){throw new IllegalArgumentException("Ratio largeur:hauteur requis (entre 1:5 et 5:1)");}
     }
     /** Used by export and the live CompositionPlayer so previews include real effects. */
-    public Composition composition(Context context,JSONObject project)throws Exception{
+    public Composition composition(Context context,JSONObject project)throws Exception{return composition(context,project,null);}
+    Composition composition(Context context,JSONObject project,AgentClient.ResultCallback active)throws Exception{
         WorkspaceStore store=new WorkspaceStore(context);
         JSONArray clips=project.getJSONArray("clips"),audios=project.optJSONArray("audio");
         List<EditedMediaItem> videos=new ArrayList<>(),sounds=new ArrayList<>();
@@ -569,7 +570,7 @@ public final class VideoEditorEngine {
         java.util.Map<String,Long> sourceDurations=new java.util.HashMap<>();
         boolean external=audios!=null&&audios.length()>0;
         boolean mixed=StudioMix.enabled(project)||external&&project.has("mute_original")&&!project.optBoolean("mute_original");
-        File mix=mixed?StudioPcmMix.render(context,project,null,null):null;
+        File mix=mixed?StudioPcmMix.render(context,project,active,null):null;
         boolean original=!mixed&&!project.optBoolean("mute_original",external);
         for(int i=0;i<clips.length();i++){
             JSONObject c=clips.getJSONObject(i);long len=c.optLong("duration_ms",10000);

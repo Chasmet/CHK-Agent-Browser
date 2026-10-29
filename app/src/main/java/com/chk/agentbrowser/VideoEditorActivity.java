@@ -26,6 +26,7 @@ public final class VideoEditorActivity extends Activity {
     private JSONObject project;
     private LinearLayout tools;
     private StudioTimeline timeline;
+    private ScrollView timelineScroll;
     private LinearLayout mainTools;
     private TextView selectionLabel;
     private int selectedAudio=-1;
@@ -139,7 +140,7 @@ public final class VideoEditorActivity extends Activity {
         format=chip("9:16");format.setTextSize(11);format.setContentDescription("Format du montage");playback.addView(format,new LinearLayout.LayoutParams(dp(44),dp(38)));format.setOnClickListener(v->ratioMenu());
         TextView un=chip("↶");un.setContentDescription("Annuler la dernière modification");playback.addView(un,new LinearLayout.LayoutParams(dp(40),-1));un.setOnClickListener(v->history(false));
         TextView re=chip("↷");re.setContentDescription("Rétablir la modification");playback.addView(re,new LinearLayout.LayoutParams(dp(40),-1));re.setOnClickListener(v->history(true));
-        timeline=new StudioTimeline(this);root.addView(timeline,new LinearLayout.LayoutParams(-1,dp(192)));
+        timeline=new StudioTimeline(this);timelineScroll=new ScrollView(this);timelineScroll.addView(timeline,new ScrollView.LayoutParams(-1,dp(192)));root.addView(timelineScroll,new LinearLayout.LayoutParams(-1,dp(192)));
         timeline.zoomBy(restoredZoom);
         timeline.setListener(new StudioTimeline.Listener(){
             public void move(int from,int to){if(saving||importing)return;try{remember();JSONArray items=clips();Object item=items.remove(from);JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==to)out.put(item);if(i<items.length())out.put(items.get(i));}project.put("clips",out);selected=to;editSeek=start(to);save();}catch(Exception ex){toast(ex.getMessage());}}
@@ -295,7 +296,7 @@ public final class VideoEditorActivity extends Activity {
     private String name(String path){return path.substring(path.lastIndexOf('/')+1);}
     private boolean editable(){if(project==null||saving||importing){toast("Sauvegarde en cours…");return false;}String s=engine.status().optString("state");if(s.equals("running")||s.equals("preparing")){toast("Attends la fin de l’export ou annule-le");return false;}if(clip()==null){toast("Ajoute puis sélectionne une vidéo");return false;}return true;}
     private void remember(){undo.addLast(project.toString());while(undo.size()>30)undo.removeFirst();redo.clear();}
-    private void draw(){if(!alive||project==null)return;applyPreviewFrame();title.setText(project.optString("name","Studio")+" ▾");format.setText(project.optString("aspect_ratio","source").replace("source","Original"));quality.setText(project.optInt("resolution",720)+"p ▾");scope.setText("✓ Projet complet · "+time(total()));selected=Math.max(0,Math.min(selected,clips().length()-1));timeline.getLayoutParams().height=dp(StudioLayers.items(project).length()>0?232:192);timeline.requestLayout();timeline.setProject(project,selected);timeline.audioSelection(selectedAudio);updateSelectionTools();clock.setText(time(timelinePosition())+" / "+time(total()));previewCanvas.findViewWithTag("empty").setVisibility(clips().length()==0?View.VISIBLE:View.GONE);}
+    private void draw(){if(!alive||project==null)return;applyPreviewFrame();title.setText(project.optString("name","Studio")+" ▾");format.setText(project.optString("aspect_ratio","source").replace("source","Original"));quality.setText(project.optInt("resolution",720)+"p ▾");scope.setText("✓ Projet complet · "+time(total()));selected=Math.max(0,Math.min(selected,clips().length()-1));timeline.getLayoutParams().height=dp(StudioTimeline.height(project));timelineScroll.getLayoutParams().height=dp(Math.min(232,StudioTimeline.height(project)));timeline.requestLayout();timeline.setProject(project,selected);timeline.audioSelection(selectedAudio);updateSelectionTools();clock.setText(time(timelinePosition())+" / "+time(total()));previewCanvas.findViewWithTag("empty").setVisibility(clips().length()==0?View.VISIBLE:View.GONE);}
     private void save(){
         if(project==null)return;
         if(saving){saveQueued=true;return;}

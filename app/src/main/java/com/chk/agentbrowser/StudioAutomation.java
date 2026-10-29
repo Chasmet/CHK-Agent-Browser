@@ -133,7 +133,7 @@ final class StudioAutomation {
         }
     }
     private static void poll(Context app,JSONObject job){MAIN.postDelayed(()->IO.execute(()->{
-        try{JSONObject status=VideoEditorEngine.get().status();String state=status.optString("state");
+        try{if(job.optString("state").equals("cancelled")){polling=false;saveQueue(app);pump(app);return;}JSONObject status=VideoEditorEngine.get().status();String state=status.optString("state");
             if(state.equals("running")||state.equals("preparing")){poll(app,job);return;}
             if(state.equals("completed")){
                 JSONObject check=VideoEditorEngine.get().verifyProjectOutput(app,job.getJSONObject("project"));

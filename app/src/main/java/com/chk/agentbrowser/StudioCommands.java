@@ -41,7 +41,7 @@ final class StudioCommands {
                 if(action.startsWith("studio_crop_"))StudioCrop.edit(app,clip(p,args.getString("clip_id")),action,args);
                 else{
                     p.put("audio_mix_version",2);if(!p.has("mute_original"))p.put("mute_original",false);
-                    if(action.equals("studio_audio_set_volume")){JSONObject t=target(p,args);if(args.has("percent")||args.has("db"))t.put("volume",StudioMix.linear(args));
+                    if(action.equals("studio_audio_set_volume")){JSONObject t=target(p,args);if(args.has("role")&&!args.has("track_id"))throw new IOException("Le rôle cible une piste track_id");if(args.has("mute")&&!args.getBoolean("mute")){if(args.optString("track_id").equals("original"))p.put("mute_original",false);else if(args.has("clip_id")&&isVideo(p,t)&&p.optBoolean("mute_original",false))StudioEdits.clipVolume(p,t,t.optDouble("volume",1));}if(args.has("percent")||args.has("db"))t.put("volume",StudioMix.linear(args));
                         for(String key:new String[]{"mute","solo","fade_in_ms","fade_out_ms","role"})if(args.has(key))t.put(key,args.get(key));
                         if(args.has("offset_ms")){if(!args.has("clip_id"))throw new IOException("offset_ms cible un clip");JSONObject c=clip(p,args.getString("clip_id"));if(isVideo(p,c))throw new IOException("Déplacer un plan vidéo via video_editor_timeline");c.put("offset_ms",args.getLong("offset_ms"));}
                         if(args.has("assign_track_id")){if(!args.has("clip_id"))throw new IOException("clip_id requis");StudioMix.settings(p,args.getString("assign_track_id"));clip(p,args.getString("clip_id")).put("track_id",args.getString("assign_track_id"));}
@@ -53,8 +53,9 @@ final class StudioCommands {
                         }
                         List<JSONObject> sorted=new ArrayList<>();for(int i=0;i<frames.length();i++)sorted.add(frames.getJSONObject(i));Collections.sort(sorted,(a,b)->Long.compare(a.optLong("time_ms"),b.optLong("time_ms")));frames=new JSONArray();for(JSONObject f:sorted)frames.put(f);t.put("gain_keyframes",frames);
                     }else if(action.equals("studio_audio_ducking")){JSONObject d=p.optJSONObject("audio_ducking");if(d==null)d=new JSONObject();
+                        if(args.has("limiter_ceiling_db"))p.put("limiter_ceiling_db",args.getDouble("limiter_ceiling_db"));
                         for(String key:new String[]{"enabled","reduction_db","threshold_db","attack_ms","release_ms"})if(args.has(key))d.put(key,args.get(key));
-                        if(args.optBoolean("analyze")){d.put("voice_regions",StudioAudioAnalysis.voices(app,p,args.optString("language","fr"),cb)).put("detector","vosk_local_word_timestamps").put("analysis_revision",p.optInt("revision"));}
+                        if(args.optBoolean("analyze")){d.put("voice_regions",StudioAudioAnalysis.voices(app,p,args.optString("language","fr"),cb)).put("detector","vosk_local_word_timestamps").put("analysis_revision",p.optInt("revision")).put("voice_timeline_signature",StudioMix.voiceSignature(app,p));}
                         if(args.has("voice_regions"))d.put("voice_regions",new JSONArray(args.getJSONArray("voice_regions").toString())).put("detector","explicit_regions");
                         if(d.optBoolean("enabled")&&!d.has("voice_regions"))throw new IOException("Analyser la voix avant d'activer le ducking");p.put("audio_ducking",d);
                     }else if(!action.equals("studio_audio_mix"))throw new IOException("Commande audio inconnue");

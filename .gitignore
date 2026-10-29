@@ -6,3 +6,8 @@ local.properties
 *.keystore
 .idea/
 *.iml
+
+# Generated public speech/media test fixtures (CI only)
+app/src/androidTest/assets/pro-studio/
+
+__pycache__/

@@ -24,7 +24,7 @@ final class StudioCropSheet {
             if(Build.VERSION.SDK_INT>=27)frame=decoder.getScaledFrameAtTime(at,MediaMetadataRetriever.OPTION_CLOSEST,720,720);else frame=decoder.getFrameAtTime(at,MediaMetadataRetriever.OPTION_CLOSEST);
             if(frame==null)throw new IOException("Image source indisponible");final Bitmap bitmap=frame;
             WorkspaceCommands.UI.post(()->{if(activity.isFinishing()){bitmap.recycle();return;}try{show(activity,candidate,index,size,bitmap,apply);}catch(Exception e){bitmap.recycle();Toast.makeText(activity,e.getMessage(),Toast.LENGTH_LONG).show();}});
-        }catch(Exception e){WorkspaceCommands.UI.post(()->Toast.makeText(activity,e.getMessage(),Toast.LENGTH_LONG).show());}finally{decoder.release();}});
+        }catch(Exception e){WorkspaceCommands.UI.post(()->Toast.makeText(activity,e.getMessage(),Toast.LENGTH_LONG).show());}finally{try{decoder.release();}catch(Exception ignored){}}});
         }catch(Exception e){Toast.makeText(activity,e.getMessage(),Toast.LENGTH_LONG).show();}
     }
     private static void show(Activity a,JSONObject candidate,int index,JSONObject size,Bitmap bitmap,Apply apply)throws Exception{

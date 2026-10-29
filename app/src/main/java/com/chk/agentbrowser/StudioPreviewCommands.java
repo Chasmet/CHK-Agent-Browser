@@ -20,9 +20,9 @@ final class StudioPreviewCommands {
                 String folder="StudioPreviews";File dir=new WorkspaceStore(app).file(folder);if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("Dossier d'aperçus inaccessible");String path=folder+"/crop-"+UUID.randomUUID()+".png";File png=new WorkspaceStore(app).file(path);
                 try(FileOutputStream out=new FileOutputStream(png)){if(!frame.compress(Bitmap.CompressFormat.PNG,100,out))throw new IOException("Encodage PNG impossible");out.getFD().sync();}finally{frame.recycle();}
                 JSONObject proof=StudioCrop.describe(app,project,selected).put("state","completed").put("preview_path",path).put("preview_time_ms",at).put("engine","media3_transformer_rendered_mp4_frame").put("resolution",480).put("preview_png_bytes",png.length());reply(cb,true,proof.toString());
-            }catch(Exception e){reply(cb,false,e.getMessage());}finally{decoder.release();WorkspaceCommands.UI.post(preview::cancel);}});}
+            }catch(Exception e){reply(cb,false,e.getMessage());}finally{try{decoder.release();}catch(Exception ignored){}WorkspaceCommands.UI.post(preview::cancel);}});}
             public void failed(String error){reply(cb,false,error);}
-        });});
+        });WorkspaceCommands.UI.postDelayed(new Runnable(){public void run(){if(!cb.isActive()){preview.cancel();return;}if(preview.busy())WorkspaceCommands.UI.postDelayed(this,500);}},500);});
     }
     private static void reply(AgentClient.ResultCallback cb,boolean ok,String text){WorkspaceCommands.UI.post(()->{if(cb.isActive())cb.finish(ok,text);});}
 }

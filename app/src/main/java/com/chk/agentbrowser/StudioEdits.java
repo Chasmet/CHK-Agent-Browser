@@ -31,6 +31,7 @@ final class StudioEdits {
     static void conform(JSONObject project)throws Exception {fitAudio(project);JSONArray layers=StudioLayers.items(project),kept=new JSONArray();long total=total(project);for(int i=0;i<layers.length();i++){JSONObject layer=new JSONObject(layers.getJSONObject(i).toString());long duration=Math.min(layer.optLong("duration_ms"),total-layer.optLong("offset_ms"));if(duration>=(StudioImages.isImage(new java.io.File(layer.optString("path")))?1000:500)){layer.put("duration_ms",duration);kept.put(layer);}}if(project.has("layers"))project.put("layers",kept);JSONArray clips=project.optJSONArray("clips");if(clips!=null)for(int i=0;i<clips.length();i++)clampFade(clips.getJSONObject(i));}
     static long framePosition(long position,int direction,int fps,long total){long frame=Math.max(0,Math.round(position*fps/1000.0)+direction);return Math.max(0,Math.min(Math.max(0,total-1),Math.round(frame*1000.0/fps)));}
     static void clipVolume(JSONObject project,JSONObject target,double volume)throws Exception {
+        if(project.optBoolean("mute_original",false)){JSONArray clips=project.getJSONArray("clips");for(int i=0;i<clips.length();i++)if(clips.getJSONObject(i)!=target)clips.getJSONObject(i).put("mute",true);}
         target.put("volume",volume).put("mute",false);project.put("mute_original",false);
     }
     static void duplicate(JSONObject project,int index)throws Exception {

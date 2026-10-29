@@ -38,6 +38,10 @@ jobs:
         run: gradle wrapper --gradle-version 8.11.1
       - name: Vérifier les scripts navigateur et la reconnexion
         run: bash validation/check.sh
+      - name: Préparer voix publique, audio et vidéo de test
+        run: python3 validation/prepare_studio_pro_fixtures.py
+      - name: Vérifier Tor Browser officiel pour le test réseau isolé
+        run: python3 validation/prepare_tor_browser_test.py
       - name: Compiler APK debug
         run: ./gradlew --no-daemon assembleDebug lintDebug
       - name: Afficher les erreurs Android si la vérification échoue
@@ -57,22 +61,35 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.AgentKeyboardIntegrationTest,com.chk.agentbrowser.StudioLayersIntegrationTest,com.chk.agentbrowser.PrivateWebCaptureTest,com.chk.agentbrowser.Local3RecoveryTest,com.chk.agentbrowser.Local2BrowserAutomationTest,com.chk.agentbrowser.Local2SessionIntegrationTest,com.chk.agentbrowser.StudioSubtitlesTest,com.chk.agentbrowser.VideoEditorIntegrationTest#timedSubtitlesAppearAndDisappearAcrossRealExportClipBoundary
+            adb install -r app/build/tor-browser/tor.apk
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.TorExternalNetworkTest#officialExternalBrowserMustProveTorBeforeAnOnionTest -Pandroid.testInstrumentationRunnerArguments.tor_network_test=true
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.StudioProIntegrationTest,com.chk.agentbrowser.AgentKeyboardIntegrationTest,com.chk.agentbrowser.StudioLayersIntegrationTest,com.chk.agentbrowser.PrivateWebCaptureTest,com.chk.agentbrowser.Local3RecoveryTest,com.chk.agentbrowser.Local2BrowserAutomationTest,com.chk.agentbrowser.Local2SessionIntegrationTest,com.chk.agentbrowser.StudioSubtitlesTest,com.chk.agentbrowser.VideoEditorIntegrationTest#timedSubtitlesAppearAndDisappearAcrossRealExportClipBoundary
             ./gradlew --no-daemon connectedDebugAndroidTest
             adb pull /data/local/tmp/chk-autonomy-fixtures app/build/autonomy-fixtures
+            adb pull /sdcard/Android/data/com.chk.agentbrowser.debug/files/studio-pro app/build/studio-pro-fixtures
+            cp app/build/tor-browser/verified.txt app/build/studio-pro-fixtures/tor-browser-signature.txt
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Vérifier les documents créés par Android avec des lecteurs indépendants
         run: |
-          python -m pip install python-docx==1.2.0 openpyxl==3.1.5 python-pptx==1.0.2 pypdf==6.10.0
+          python -m pip install python-docx==1.2.0 openpyxl==3.1.5 python-pptx==1.0.2 pypdf==6.10.0 numpy==2.2.6
           python validation/check_generated_documents.py app/build/autonomy-fixtures
+          python validation/check_studio_pro_exports.py app/build/studio-pro-fixtures
       - name: Conserver les résultats des tests Android
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: workspace-android-tests-${{ github.run_number }}
           path: app/build/reports/androidTests/
+          retention-days: 2
+          if-no-files-found: ignore
+      - name: Conserver les preuves publiques Studio et Tor
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-pro-verification-${{ github.run_number }}
+          path: app/build/studio-pro-fixtures/
           retention-days: 2
           if-no-files-found: ignore
       - name: Conserver seulement 1 jour dans Actions
@@ -115,7 +132,8 @@ jobs:
           RELEASE_VERSION: 1.0.${{ github.run_number }}
         run: |
           RELAY_RUN=$(gh run list --workflow chk-home-mcp-windows.yml --commit "$GITHUB_SHA" --json databaseId --jq '.[0].databaseId // empty')
-          ASSETS=("CHK-Agent-Browser-${RELEASE_VERSION}.apk")
+          (cd app/build/studio-pro-fixtures && zip -r ../../../CHK-Studio-validation-${RELEASE_VERSION}.zip .)
+          ASSETS=("CHK-Agent-Browser-${RELEASE_VERSION}.apk" "CHK-Studio-validation-${RELEASE_VERSION}.zip")
           if test -n "$RELAY_RUN"; then
             RELAY_RESULT=$(gh run view "$RELAY_RUN" --json conclusion --jq .conclusion)
             test "$RELAY_RESULT" = success
@@ -124,7 +142,7 @@ jobs:
             ASSETS+=(CHK-Home-MCP-1.4.1-Windows.zip)
           fi
           sha256sum "${ASSETS[@]}" > SHA256SUMS.txt
-          gh release create "v${RELEASE_VERSION}" "CHK-Agent-Browser-${RELEASE_VERSION}.apk" \
+          gh release create "v${RELEASE_VERSION}" "CHK-Agent-Browser-${RELEASE_VERSION}.apk" "CHK-Studio-validation-${RELEASE_VERSION}.zip" \
             --title "CHK Agent Browser ${RELEASE_VERSION}" \
             --notes-file docs/RELEASE_NOTES.md
           gh release upload "v${RELEASE_VERSION}" SHA256SUMS.txt
