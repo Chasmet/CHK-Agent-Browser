@@ -51,7 +51,9 @@ final class AgentTasks {
                 throw new Exception("Publication : ID, domaine, cible et résultat observable requis.");
         }
         if(action.equals("desktop")){
-            String tool=p.optString("tool");if(!Arrays.asList("vision","pointer","files","browser","control","hearing").contains(tool))throw new Exception("Pas de tâche ou script imbriqué.");
+            String tool=p.optString("tool");if(!Arrays.asList("vision","pointer","files","browser","control","hearing","studio").contains(tool))throw new Exception("Pas de tâche ou script imbriqué.");
+            if(tool.equals("studio")&&!Arrays.asList("audio_tracks","audio_analyze","audio_set_volume","audio_keyframes","audio_ducking","audio_verify","audio_mix","crop_open","crop_set","crop_move","crop_resize","crop_rotate","crop_flip","crop_apply","crop_preview","capabilities").contains(p.optString("operation")))
+                throw new Exception("Opération Studio non autorisée.");
             if(tool.equals("hearing")&&!Arrays.asList("status","capabilities","media","analyze","transcribe").contains(p.optString("operation")))throw new Exception("Écoute dans une tâche : utiliser analyse ou transcription, puis écouter séparément les extraits.");
             if(tool.equals("control")&&!Arrays.asList("observe","status","capabilities","act").contains(p.optString("operation")))throw new Exception("Opération de contrôle non autorisée dans une tâche.");
             if(tool.equals("browser")&&!Arrays.asList("upload_file","upload_status","get_form","fill_form","verify_form","get_page_status","read_pdf","click_verified","click_when_enabled","download_file","download_status").contains(p.optString("operation")))throw new Exception("Opération navigateur non autorisée dans une tâche.");
@@ -79,6 +81,10 @@ final class AgentTasks {
         }
     }
     private static boolean readOnly(String action,JSONObject p){
+        if(action.equals("desktop")&&p.optString("tool").equals("studio")){
+            return Arrays.asList("audio_tracks","audio_analyze","audio_verify","crop_open","crop_preview","capabilities").contains(p.optString("operation"));
+        }
+
         if(action.equals("video_editor_audio_tracks")||action.equals("video_editor_audio_analyze")||action.equals("video_editor_audio_verify")||
            action.equals("video_editor_crop_open")||action.equals("video_editor_crop_preview"))return true;return action.equals("desktop")&&p.optString("tool").equals("hearing")||action.equals("desktop")&&p.optString("tool").equals("control")&&Arrays.asList("observe","status","capabilities").contains(p.optString("operation"))||action.equals("desktop")&&p.optString("tool").equals("browser")&&Arrays.asList("download_status","upload_status","get_form","verify_form","get_page_status","read_pdf").contains(p.optString("operation"))||action.equals("files_external")&&Arrays.asList("external_roots","external_list","external_read_text").contains(p.optString("operation"))||action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_detect_format","files_copy_content","files_search_content","files_media_inspect","files_verify","files_archive_list","files_archive_read","files_database","files_stat","files_hash","document_read","document_page","media_frame","video_editor_capabilities","video_editor_queue_status","video_editor_status","video_editor_wait","video_editor_verify_output","video_editor_project_read","files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","media_analyze_audio","media_audio_capabilities","media_transcribe","workspace_status","tabs","list_tabs","get_page_status","get_form","wait_for_element","read_page","publication_status","publication_list").contains(action);}
     static JSONObject command(Context c,JSONObject p)throws Exception{
