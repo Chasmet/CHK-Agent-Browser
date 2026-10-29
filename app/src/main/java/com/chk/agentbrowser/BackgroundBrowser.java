@@ -178,6 +178,21 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         app.getSharedPreferences("mobile_ui",0).edit().putString("tabs",urls.toString())
             .putInt("active_tab",Math.max(0,tabs.indexOf(current))).apply();
     }
+    private void startNavigationCheck(WebView web,long before,AgentClient.ResultCallback parent){
+        long deadline=android.os.SystemClock.elapsedRealtime()+20000L;
+        java.util.concurrent.atomic.AtomicBoolean finished=new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable[] expiry=new Runnable[1];
+        AgentClient.ResultCallback guarded=new AgentClient.ResultCallback(){
+            public boolean isActive(){return !finished.get()&&parent.isActive();}
+            public boolean isLocal2(){return parent.isLocal2();}
+            public boolean isLocal3(){return parent.isLocal3();}
+            public String inputLease(){return parent.inputLease();}
+            public void finish(boolean ok,String text){if(finished.compareAndSet(false,true)){main.removeCallbacks(expiry[0]);parent.finish(ok,text);}}
+        };
+        expiry[0]=()->guarded.finish(false,"Navigation sans réponse JavaScript avant le délai : résultat inconnu, lire la page avant toute reprise.");
+        main.postDelayed(expiry[0],20000L);
+        confirmNavigation(web,before,deadline,guarded);
+    }
     private void confirmNavigation(WebView web,long before,long deadline,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
         if(!BrowserWebState.alive(web)){cb.finish(false,"Onglet fermé pendant la navigation.");return;}
@@ -267,7 +282,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             }else if(current==null){current=createWebView();tabs.add(current);}
             long before=BrowserWebState.documentVersion(current);WebView navigated=current;
             loading=true;current.loadUrl(url);saveLast(url);
-            if(shared){confirmNavigation(navigated,before,android.os.SystemClock.elapsedRealtime()+20000L,callback);return;}
+            if(shared){startNavigationCheck(navigated,before,callback);return;}
             callback.finish(true,(resume?"Adresse du navigateur visible reprise dans un nouvel onglet MCP (état des formulaires non transféré) : ":
                 create?"Nouvel onglet "+(tabs.size()-1)+" : ":"Navigation vers ")+url);return;
         }

@@ -18,6 +18,8 @@ public final class ScriptChecks {
             ||RelayPolicy.isTerminalResultStatus(503)||RelayPolicy.isTerminalResultStatus(401))
             throw new AssertionError("Expired result must not block polling; transient errors retry");
         java.nio.file.Path root=java.nio.file.Paths.get(args[0]);
+        java.nio.file.Files.write(root.resolve("scroll-right.js"),BrowserScripts.scrollContainer("right",200,"#horizontal","").getBytes("UTF-8"));
+        java.nio.file.Files.write(root.resolve("scroll-left.js"),BrowserScripts.scrollContainer("left",200,"#horizontal","").getBytes("UTF-8"));
         java.nio.file.Files.write(root.resolve("read.js"),BrowserScripts.readPage().getBytes("UTF-8"));
         java.nio.file.Files.write(root.resolve("scroll-list.js"),
             BrowserScripts.scrollContainer("down",420,"","").getBytes("UTF-8"));

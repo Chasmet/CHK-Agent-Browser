@@ -1,13 +1,21 @@
 (function(){
   'use strict';
-  const started=performance.now(),controls=[],cards=[],scrollables=[],roots=[document],seenRoots=new Set(),seenCards=new Set();
+  const started=performance.now(),controls=[],cards=[],scrollables=[],roots=[document],seenRoots=new Set(),seenCards=new Set(),seenNodes=new Set();
+  let activeDialog=null;
+  function inDialog(el){
+    for(let node=el;node;){
+      if(activeDialog.contains(node))return true;
+      const root=node.getRootNode();node=root&&root.host;
+    }
+    return false;
+  }
   let visits=0,truncated=false;
   function bounds(r){return {x:r.left,y:r.top,width:r.width,height:r.height};}
   function displayed(el){
     const r=el.getBoundingClientRect();
     if(r.width<=0||r.height<=0||r.right<=0||r.bottom<=0||r.left>=innerWidth||r.top>=innerHeight)return null;
     const s=getComputedStyle(el);
-    return s.display==='none'||s.visibility==='hidden'?null:r;
+    return s.display==='none'||s.visibility==='hidden'||s.opacity==='0'||el.closest('[aria-hidden="true"],[inert]')?null:r;
   }
   function text(el,n){
     const v=el.getAttribute('aria-label')||el.getAttribute('title')||el.getAttribute('placeholder')||el.innerText||'';
@@ -30,10 +38,18 @@
     const root=roots.shift();
     if(seenRoots.has(root))continue;seenRoots.add(root);
     let nodes;
-    try{nodes=root.querySelectorAll('*');}catch(e){continue;}
+    try{
+      // Portalled dialogs often occur after thousands of library controls.
+      // Read them before the bounded background scan, and expose their text.
+      const dialogs=Array.from(root.querySelectorAll('[role="dialog"],[aria-modal="true"],dialog[open]')).filter(displayed);
+      for(const dialog of dialogs)if(!activeDialog||!dialog.contains(activeDialog))activeDialog=dialog;
+      nodes=activeDialog&&root.contains(activeDialog)?[activeDialog,...activeDialog.querySelectorAll('*')]:root.querySelectorAll('*');
+    }catch(e){continue;}
     for(const el of nodes){
+      if(seenNodes.has(el))continue;seenNodes.add(el);
       if(++visits>5000){truncated=true;break;}
       if(el.shadowRoot)roots.push(el.shadowRoot);
+      if(activeDialog&&!inDialog(el))continue;
       if(el.matches('input[type="password"],input[type="hidden"],input[type="file"]'))continue;
       let r=null;
       const actionable=el.matches('button,a,input,textarea,select,[contenteditable="true"],[role="textbox"],[role="button"],[role="checkbox"],[role="menuitem"],canvas');
@@ -58,7 +74,8 @@
     }
   }
   return JSON.stringify({
-    text:(document.body?document.body.innerText:'').slice(0,4000),
+    text:((activeDialog||document.body)?(activeDialog||document.body).innerText:'').slice(0,4000),
+    observation_scope:activeDialog?'dialog':'document',
     controls,cards,scrollables,controls_truncated:truncated||controls.length===120,
     cards_truncated:cards.length===32,css_width:innerWidth,css_height:innerHeight,
     scroll_x:scrollX,scroll_y:scrollY,url:location.href,
