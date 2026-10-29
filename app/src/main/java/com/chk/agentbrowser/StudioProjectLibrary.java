@@ -50,7 +50,7 @@ final class StudioProjectLibrary {
             .put("output","Montage-"+System.currentTimeMillis()+"-"+UUID.randomUUID().toString().substring(0,6)+".mp4")
             .put("aspect_ratio","9:16").put("aspect_mode","fit")
             .put("resolution",720).put("revision",0).put("clips",new JSONArray())
-            .put("audio",new JSONArray());
+            .put("mute_original",false).put("audio",new JSONArray());
     }
     private static boolean validId(String id){
         return id!=null&&id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");

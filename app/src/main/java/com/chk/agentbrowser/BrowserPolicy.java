@@ -12,7 +12,7 @@ public final class BrowserPolicy {
             if(value==null||value.length()>2000)return false;
             URI u=new URI(value);String s=u.getScheme();java.net.URL url=new java.net.URL(value);int port=url.getPort();
             return ("http".equalsIgnoreCase(s)||"https".equalsIgnoreCase(s))
-                &&!host(value).isEmpty()&&url.getUserInfo()==null&&u.getRawUserInfo()==null&&port!=0&&port<=65535;
+                &&!host(value).isEmpty()&&!host(value).toLowerCase(Locale.ROOT).endsWith(".onion")&&url.getUserInfo()==null&&u.getRawUserInfo()==null&&port!=0&&port<=65535;
         }catch(Exception e){return false;}
     }
     public static boolean publicUrl(String value){

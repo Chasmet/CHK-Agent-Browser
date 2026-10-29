@@ -264,18 +264,18 @@ public final class VideoEditorActivity extends Activity {
         if(toolPage.equals("Audio")){
             tool("＋","Ajouter",()->addMenu("audio"));tool("◉","Volume",()->volume());
             tool("✂","Découper",()->{if(selectedAudio>=0)trim(true,selectedAudio);else mute();});
-            tool("♫","Son original",()->mute());tool("T","Transcrire",()->transcribeAudio());
-            if(selectedAudio>=0)tool("×","Supprimer",()->delete(true,selectedAudio));
+            tool("♫","Son original",()->mute());tool("T","Transcrire",()->transcribeAudio());tool("▶","Mix rendu",()->renderedPreview());
+            if(selectedAudio>=0){tool("M","Mute",()->audioFlag("mute"));tool("S","Solo",()->audioFlag("solo"));tool("↓","Ducking",()->audioDucking());tool("×","Supprimer",()->delete(true,selectedAudio));}
         }else if(toolPage.equals("Calques")){
             tool("＋","Superposer",()->addMenu("layer"));tool("▣","Calques",()->layersMenu());tool("▶","Aperçu rendu",()->renderedPreview());
         }else if(toolPage.equals("Texte")){
             tool("T","Texte du plan",()->caption());tool("♫","Sous-titres auto",()->generateSubtitles());tool("✎","Modifier sous-titres",()->editSubtitles());tool("×","Retirer",()->{if(clip()!=null)put(clip(),"text","");});
         }else if(toolPage.equals("Effets")){
-            tool("▶","Aperçu rendu",()->renderedPreview());tool("✦","Filtres",()->filter());tool("◉","Ajuster",()->gradeManual());tool("↗","Animation",()->photoAnimation());tool("↻","Rotation",()->rotation());
+            tool("▶","Aperçu rendu",()->renderedPreview());tool("▣","Recadrer",()->crop());tool("✦","Filtres",()->filter());tool("◉","Ajuster",()->gradeManual());tool("↗","Animation",()->photoAnimation());tool("↻","Rotation",()->rotation());
         }else if(toolPage.equals("Analyse")){
             tool("◎","Audit local",()->offlineAudit());tool("◉","Étalonnage",()->gradeMenu());tool("▣","File exports",()->exportQueue());
         }else{
-            tool("✂","Diviser",()->split());tool("◷","Durée",()->trim(false,selected));tool("▷","Vitesse",()->speed());
+            tool("▣","Recadrer",()->crop());tool("✂","Diviser",()->split());tool("◷","Durée",()->trim(false,selected));tool("▷","Vitesse",()->speed());
             tool("◉","Volume",()->{selectedAudio=-1;volume();});tool("▣","Dupliquer",()->duplicate());tool("×","Supprimer",()->delete(false,selected));
             tool("⇄","Déplacer",()->move());tool("◁","−1 image",()->stepFrame(-1));tool("▷","+1 image",()->stepFrame(1));
         }
@@ -496,7 +496,7 @@ public final class VideoEditorActivity extends Activity {
         JSONObject c=clips().optJSONObject(i);
         if(c==null)return;
         player.setPlaybackSpeed((float)c.optDouble("speed",1));
-        player.setVolume(project.optBoolean("mute_original",audio().length()>0)||c.optBoolean("mute",false)?0:(float)c.optDouble("volume",1));
+        player.setVolume(project.optBoolean("mute_original",false)||c.optBoolean("mute",false)?0:(float)c.optDouble("volume",1));
         boolean changed=selected!=i;selected=i;updateCaption();if(changed&&selectedAudio<0)updateSelectionTools();
     }
     private void updateCaption(){
@@ -663,13 +663,72 @@ public final class VideoEditorActivity extends Activity {
     private void volume(){
         if(project==null||saving||importing)return;JSONObject target=selectedAudio>=0?audio().optJSONObject(selectedAudio):clip();if(target==null)return;
         boolean sound=selectedAudio>=0;int base=revision;LinearLayout box=MobileUi.column(this);TextView value=MobileUi.text(this,"",16,MobileUi.TEXT);box.addView(value);
-        SeekBar slider=new SeekBar(this);slider.setTag("studio_volume_slider");slider.setMax(100);slider.setProgress(!sound&&(project.optBoolean("mute_original",audio().length()>0)||target.optBoolean("mute",false))?0:(int)Math.round(target.optDouble("volume",1)*100));box.addView(slider);
-        Runnable update=()->{value.setText("Volume · "+slider.getProgress()+" %");if(sound)audioPlayer.setVolume(slider.getProgress()/100f);else player.setVolume(slider.getProgress()/100f);};
+        SeekBar slider=new SeekBar(this);slider.setTag("studio_volume_slider");slider.setMax(200);slider.setProgress(!sound&&(project.optBoolean("mute_original",audio().length()>0)||target.optBoolean("mute",false))?0:(int)Math.round(target.optDouble("volume",1)*100));box.addView(slider);
+        Runnable update=()->{value.setText("Volume · "+slider.getProgress()+" % · "+(slider.getProgress()==0?"−∞ dB":String.format(Locale.FRANCE,"%+.1f dB",20*Math.log10(slider.getProgress()/100.0))));if(sound&&audioPlayer!=null)audioPlayer.setVolume(Math.min(1f,slider.getProgress()/100f));else if(player!=null)player.setVolume(Math.min(1f,slider.getProgress()/100f));};
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar b,int n,boolean user){update.run();}public void onStartTrackingTouch(SeekBar b){}public void onStopTrackingTouch(SeekBar b){}});
         TextView listen=chip("▶ Écouter / pause");box.addView(listen);listen.setOnClickListener(v->{if(player.isPlaying())pausePreview();else{playPreview();update.run();}});
         update.run();StudioSheet.show(this,sound?"Volume de la piste audio":"Volume du plan",box,()->{pausePreview();if(revision!=base||saving){configureCurrentClip();configureAudio();toast("Projet modifié : rouvre le réglage");return;}try{remember();if(sound)target.put("volume",slider.getProgress()/100.0);else StudioEdits.clipVolume(project,target,slider.getProgress()/100.0);save();}catch(Exception e){toast(e.getMessage());}},()->{pausePreview();configureCurrentClip();configureAudio();});
     }
-    private void configureAudio(){if(audioPlayer==null||audio().length()==0)return;JSONObject c=audio().optJSONObject(Math.min(audio().length()-1,Math.max(0,audioPlayer.getCurrentMediaItemIndex())));if(c!=null)audioPlayer.setVolume((float)c.optDouble("volume",1));}
+    private void configureAudio(){if(audioPlayer==null||audio().length()==0)return;JSONObject c=audio().optJSONObject(Math.min(audio().length()-1,Math.max(0,audioPlayer.getCurrentMediaItemIndex())));if(c!=null)audioPlayer.setVolume(c.optBoolean("mute",false)?0:(float)Math.min(1,c.optDouble("volume",1)));}
+    private void audioFlag(String key){
+        if(project==null||selectedAudio<0||saving)return;
+        try{JSONObject c=audio().getJSONObject(selectedAudio);remember();c.put(key,!c.optBoolean(key,false));save();}
+        catch(Exception e){toast(e.getMessage());}
+    }
+    private void audioDucking(){
+        if(selectedAudio<0||project==null)return;
+        JSONObject c=audio().optJSONObject(selectedAudio);if(c==null)return;
+        if(StudioSubtitles.items(project).length()==0){toast("Ducking : génère d'abord des sous-titres vocaux horodatés.");return;}
+        LinearLayout box=MobileUi.column(this);
+        CheckBox enable=new CheckBox(this);enable.setText("Baisser la musique pendant les paroles reconnues");enable.setChecked(c.optJSONObject("ducking")!=null&&c.optJSONObject("ducking").optBoolean("enabled"));box.addView(enable);
+        SeekBar reduction=new SeekBar(this);reduction.setMax(30);reduction.setProgress(c.optJSONObject("ducking")==null?12:c.optJSONObject("ducking").optInt("reduction_db",12));box.addView(MobileUi.text(this,"Réduction (dB)",13,MobileUi.TEXT));box.addView(reduction);
+        SeekBar attack=new SeekBar(this);attack.setMax(1000);attack.setProgress(c.optJSONObject("ducking")==null?60:c.optJSONObject("ducking").optInt("attack_ms",60));box.addView(MobileUi.text(this,"Attaque (ms)",13,MobileUi.TEXT));box.addView(attack);
+        SeekBar release=new SeekBar(this);release.setMax(2000);release.setProgress(c.optJSONObject("ducking")==null?350:c.optJSONObject("ducking").optInt("release_ms",350));box.addView(MobileUi.text(this,"Relâchement (ms)",13,MobileUi.TEXT));box.addView(release);
+        StudioSheet.show(this,"Ducking · audio "+(selectedAudio+1),box,()->{
+            try{remember();c.put("ducking",new JSONObject().put("enabled",enable.isChecked()).put("reduction_db",reduction.getProgress()).put("attack_ms",attack.getProgress()).put("release_ms",release.getProgress()));save();}
+            catch(Exception e){toast(e.getMessage());}
+        },()->{});
+    }
+    private void crop(){
+        if(!editable()||selectedAudio>=0||clip()==null)return;
+        pausePreview();final JSONObject c=clip();final int base=revision;
+        try{
+            JSONObject crop=StudioCropControl.rect(c);
+            LinearLayout panel=MobileUi.column(this);
+            StudioCropView view=new StudioCropView(this,crop);
+            panel.addView(view,new LinearLayout.LayoutParams(-1,dp(310)));
+            boolean photo=StudioImages.isImage(new java.io.File(c.optString("path")));
+            ThumbnailLoader.load(this,c.getString("path"),c.optLong("start_ms")+c.optLong("duration_ms")/2,!photo,new ThumbnailLoader.Result(){
+                public boolean current(){return alive&&!isDestroyed()&&project!=null&&clip()==c;}
+                public void ready(android.graphics.Bitmap bitmap){view.image(bitmap);}
+            });
+            TextView rect=MobileUi.text(this,"Déplacer : toucher l'intérieur · Taille : quatre poignées · Zoom : pincer",13,MobileUi.TEXT);
+            panel.addView(rect);
+            LinearLayout ratios=new LinearLayout(this);panel.addView(ratios);
+            for(String r:new String[]{"9:16","16:9","1:1","4:5","Libre"}){
+                TextView b=chip(r);b.setTextSize(12);ratios.addView(b,new LinearLayout.LayoutParams(0,dp(44),1));b.setOnClickListener(v->view.ratio(r));
+            }
+            SeekBar rotation=new SeekBar(this);rotation.setMax(360);rotation.setProgress((int)Math.round(crop.optDouble("rotate_deg",0)+180));
+            TextView degrees=MobileUi.text(this,"Rotation : "+(rotation.getProgress()-180)+"°",14,MobileUi.TEXT);
+            panel.addView(degrees);panel.addView(rotation);
+            rotation.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar bar,int at,boolean user){degrees.setText("Rotation : "+(at-180)+"°");}public void onStartTrackingTouch(SeekBar b){}public void onStopTrackingTouch(SeekBar b){}});
+            LinearLayout flags=new LinearLayout(this);panel.addView(flags);
+            CheckBox horizontal=new CheckBox(this),vertical=new CheckBox(this);
+            horizontal.setText("Miroir H");horizontal.setChecked(crop.optBoolean("flip_h"));flags.addView(horizontal);
+            vertical.setText("Miroir V");vertical.setChecked(crop.optBoolean("flip_v"));flags.addView(vertical);
+            TextView reset=MobileUi.action(this,"Réinitialiser cadre");panel.addView(reset);reset.setOnClickListener(v->{view.reset();rotation.setProgress(180);horizontal.setChecked(false);vertical.setChecked(false);});
+            TextView preview=MobileUi.action(this,"Voir l'aperçu réellement rendu après application");panel.addView(preview);preview.setOnClickListener(v->toast("Valide le cadre puis utilise Aperçu rendu : le moteur Media3 applique les mêmes transformations qu'à l'export."));
+            StudioSheet.show(this,"Recadrer le plan "+(selected+1),panel,()->{
+                try{
+                    if(revision!=base||saving){toast("Projet modifié : rouvre Recadrer");return;}
+                    JSONObject target=StudioCropControl.rect(c);JSONObject frame=view.rect();
+                    for(java.util.Iterator<String> it=frame.keys();it.hasNext();){String key=it.next();target.put(key,frame.get(key));}
+                    target.put("rotate_deg",rotation.getProgress()-180).put("flip_h",horizontal.isChecked()).put("flip_v",vertical.isChecked());
+                    StudioCropControl.validate(target);remember();c.put("crop",target);save();
+                }catch(Exception ex){toast(ex.getMessage());}
+            },()->{});
+        }catch(Exception e){toast(e.getMessage());}
+    }
     private void rotation(){if(!editable())return;new AgentDialog.Builder(this).setTitle("Rotation du plan").setItems(new String[]{"0°","90°","180°","−90°"},(d,n)->put(clip(),"rotation",new int[]{0,90,180,-90}[n])).show();}
     private void mute(){if(project==null)return;new AgentDialog.Builder(this).setTitle("Son").setItems(new String[]{"Conserver le son des vidéos","Couper le son des vidéos","Couper ce plan","Rétablir ce plan"},(d,n)->{if(n==0){try{remember();project.put("mute_original",false);for(int i=0;i<clips().length();i++)clips().getJSONObject(i).put("mute",false);save();}catch(Exception e){toast(e.getMessage());}}else if(n==1)put(project,"mute_original",true);else if(clip()!=null)put(clip(),"mute",n==2);}).show();}
     private void move(){new AgentDialog.Builder(this).setTitle("Déplacer le plan").setItems(new String[]{"Vers la gauche","Vers la droite"},(d,n)->{int to=selected+(n==0?-1:1);if(to<0||to>=clips().length())return;try{remember();Object a=clips().get(selected),b=clips().get(to);clips().put(selected,b);clips().put(to,a);selected=to;editSeek=start(to);save();}catch(Exception ignored){}}).show();}
@@ -871,13 +930,13 @@ public final class VideoEditorActivity extends Activity {
         if(kind.equals("layer")){addLayers(paths);return;}
 
         if(project==null||saving||importing)return;
-        if(kind.equals("audio")){long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().optJSONObject(i).optLong("duration_ms");if(remaining<500){toast(total()==0?"Ajoute d’abord une vidéo ou une photo":"La piste audio couvre déjà le montage. Raccourcis-la avant d’ajouter un audio.");return;}}
-        importing=true;String snapshot=project.toString();
+        if(kind.equals("audio")&&total()<500){toast("Ajoute d’abord une vidéo ou une photo");return;}
+        importing=true;String snapshot=project.toString();final long audioOffset=Math.max(0,Math.min(Math.max(0,total()-500),timelinePosition()));
         WorkspaceCommands.IO.execute(()->{try{
             JSONObject copy=new JSONObject(snapshot);JSONArray target=copy.getJSONArray(kind.equals("audio")?"audio":"clips");int maximum=kind.equals("audio")?40:100;
             if(target.length()+paths.size()>maximum)throw new Exception(maximum+" médias maximum");
-            long audioRemaining=StudioEdits.total(copy);for(int i=0;i<copy.getJSONArray("audio").length();i++)audioRemaining-=copy.getJSONArray("audio").getJSONObject(i).optLong("duration_ms");
-            for(String path:paths){JSONObject info=MediaInspection.info(this,path);boolean image=info.optBoolean("image");if(kind.equals("audio")&&image)throw new Exception("Choisis un fichier audio");long duration=image?5000:info.optLong("duration_ms");if(duration<500)throw new Exception("Média trop court : "+path);if(kind.equals("audio")){if(audioRemaining<500)throw new Exception("Le montage est trop court pour tous les audios sélectionnés. Réduis la sélection.");duration=Math.min(duration,audioRemaining);audioRemaining-=duration;}target.put(new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration));}
+            long audioRemaining=StudioEdits.total(copy)-audioOffset;if(kind.equals("audio"))StudioEdits.promoteAudioParallel(copy);
+            for(String path:paths){JSONObject info=MediaInspection.info(this,path);boolean image=info.optBoolean("image");if(kind.equals("audio")&&image)throw new Exception("Choisis un fichier audio");long duration=image?5000:info.optLong("duration_ms");if(duration<500)throw new Exception("Média trop court : "+path);if(kind.equals("audio")){if(audioRemaining<500)throw new Exception("Durée disponible inférieure à 0,5 seconde.");duration=Math.min(duration,audioRemaining);}JSONObject item=new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration);if(kind.equals("audio"))item.put("offset_ms",audioOffset);target.put(item);}
             if(kind.equals("audio"))StudioEdits.fitAudio(copy);engine.validate(this,copy);
             ui.post(()->{importing=false;if(!alive)return;remember();project=copy;selected=clips().length()-1;selectedAudio=kind.equals("audio")?audio().length()-1:-1;save();});
         }catch(Exception e){ui.post(()->{importing=false;toast("Importation : "+e.getMessage());});}});
@@ -890,7 +949,7 @@ public final class VideoEditorActivity extends Activity {
                         toast("Ce fichier est déjà dans le montage. Aucun doublon ajouté.");
                         return;
                     }}
-                    remember();JSONObject c=new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration);if(kind.equals("video"))clips().put(c);else{long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().getJSONObject(i).optLong("duration_ms");if(remaining<500){toast("Ajoute une vidéo ou raccourcis l’audio précédent");return;}c.put("duration_ms",Math.min(duration,remaining));JSONArray a=audio();a.put(c);project.put("audio",a);}selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
+                    remember();JSONObject c=new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration);if(kind.equals("video"))clips().put(c);else{long offset=Math.max(0,Math.min(Math.max(0,total()-500),timelinePosition()));long remaining=total()-offset;if(remaining<500){toast("Ajoute une vidéo avant cet audio");return;}StudioEdits.promoteAudioParallel(project);c.put("duration_ms",Math.min(duration,remaining)).put("offset_ms",offset);JSONArray a=audio();a.put(c);project.put("audio",a);}selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
         if(request==811&&result==RESULT_OK&&data!=null&&data.getData()!=null){android.net.Uri target=data.getData();String path=exportCopyPath;WorkspaceCommands.IO.execute(()->{try(java.io.InputStream in=new java.io.FileInputStream(new WorkspaceStore(this).file(path));java.io.OutputStream out=getContentResolver().openOutputStream(target,"w")){if(out==null)throw new java.io.IOException("Destination indisponible");byte[] buffer=new byte[65536];int count;while((count=in.read(buffer))!=-1)out.write(buffer,0,count);ui.post(()->toast("Montage complet enregistré sur le téléphone"));}catch(Exception e){ui.post(()->toast(e.getMessage()));}});return;}
         if(request!=810||result!=RESULT_OK||data==null||project==null)return;String kind=importKind;int selectedCount=data.getClipData()==null?1:data.getClipData().getItemCount();if(selectedCount>100||kind.equals("video")&&clips().length()+selectedCount>100){toast("Le montage accepte 100 plans maximum. Aucun média ajouté.");return;}ArrayList<android.net.Uri> uris=new ArrayList<>();if(data.getClipData()!=null)for(int i=0;i<Math.min(100,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)uris.add(data.getData());if(uris.isEmpty())return;importing=true;status.setText("Importation de "+uris.size()+" média(s)…");
@@ -914,7 +973,7 @@ public final class VideoEditorActivity extends Activity {
                  JSONObject metadata=MediaInspection.info(this,filename);long duration=metadata.optBoolean("image")?5000:metadata.optLong("duration_ms");
                  if(duration<500)throw new Exception("Média trop court ou durée indisponible");
                  batch.put(new JSONObject().put("path",filename).put("start_ms",0).put("duration_ms",duration));}catch(Exception e){errors.add(e.getMessage());}
-            ui.post(()->{importing=false;if(!alive)return;if(kind.equals("layer")){ArrayList<String> paths=new ArrayList<>();for(int i=0;i<batch.length();i++)paths.add(batch.optJSONObject(i).optString("path"));if(!paths.isEmpty())addLayers(paths);if(!errors.isEmpty())toast(android.text.TextUtils.join("\n",errors));return;}if(batch.length()>0)try{remember();JSONArray target=kind.equals("video")?clips():audio();long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().optJSONObject(i).optLong("duration_ms");for(int i=0;i<batch.length();i++){JSONObject c=batch.getJSONObject(i);if(kind.equals("audio")){if(remaining<500){errors.add("Audio supplémentaire ignoré : le montage vidéo est trop court");break;}long length=Math.min(c.getLong("duration_ms"),remaining);c.put("duration_ms",length);remaining-=length;}target.put(c);}if(kind.equals("audio"))project.put("audio",target);selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}if(!errors.isEmpty())new AgentDialog.Builder(this).setTitle("Importation à vérifier").setMessage(android.text.TextUtils.join("\n",errors)).setPositiveButton("OK",null).show();});
+            ui.post(()->{importing=false;if(!alive)return;if(kind.equals("layer")){ArrayList<String> paths=new ArrayList<>();for(int i=0;i<batch.length();i++)paths.add(batch.optJSONObject(i).optString("path"));if(!paths.isEmpty())addLayers(paths);if(!errors.isEmpty())toast(android.text.TextUtils.join("\n",errors));return;}if(batch.length()>0)try{remember();JSONArray target=kind.equals("video")?clips():audio();long offset=Math.max(0,Math.min(Math.max(0,total()-500),timelinePosition()));long remaining=total()-offset;if(kind.equals("audio"))StudioEdits.promoteAudioParallel(project);for(int i=0;i<batch.length();i++){JSONObject c=batch.getJSONObject(i);if(kind.equals("audio")){if(remaining<500){errors.add("Aucune vidéo disponible à ce point de montage");break;}long length=Math.min(c.getLong("duration_ms"),remaining);c.put("duration_ms",length).put("offset_ms",offset);}target.put(c);}if(kind.equals("audio"))project.put("audio",target);selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}if(!errors.isEmpty())new AgentDialog.Builder(this).setTitle("Importation à vérifier").setMessage(android.text.TextUtils.join("\n",errors)).setPositiveButton("OK",null).show();});
         });
     }
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("export_copy_path",exportCopyPath);if(timeline!=null){state.putLong("studio_position",timeline.playhead());state.putFloat("studio_zoom",timeline.zoomLevel());}state.putInt("studio_selected",selected);state.putInt("studio_audio",selectedAudio);state.putString("studio_tool_page",toolPage);}
