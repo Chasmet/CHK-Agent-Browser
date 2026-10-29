@@ -15,6 +15,36 @@ final class StudioAudioControl {
     private StudioAudioControl(){}
     static boolean handles(String action){return action.startsWith("video_editor_audio_");}
     static void command(Context app,String action,JSONObject args,VideoEditorEngine.Done cb){
+        if("video_editor_audio_mix".equals(action)){
+            // Queue the REAL Media3 export with a stable request ID; an enqueued
+            // render never masquerades as a completed or verified MP4.
+            VideoEditorEngine.DISK.execute(()->{
+                try{
+                    JSONObject current=VideoEditorEngine.get().load(app);
+                    guard(current,args);
+                    JSONObject project=new JSONObject(current.toString());
+                    StudioAutomation.command(app,"video_editor_queue_add",
+                        new JSONObject().put("request_id",args.getString("request_id"))
+                            .put("projects",new JSONArray().put(new JSONObject().put("project",project))),
+                        (ok,reply)->{
+                            if(!ok){cb.completed(false,reply);return;}
+                            try{
+                                JSONObject queue=new JSONObject(reply),rows=queue.getJSONArray("jobs");
+                                JSONObject selected=null;
+                                for(int i=0;i<rows.length();i++)if(args.getString("request_id").equals(rows.getJSONObject(i).optString("request_id")))
+                                    selected=rows.getJSONObject(i);
+                                if(selected==null)throw new IllegalStateException("Aucun export portant cette requête n'a été enregistré.");
+                                JSONObject status=new JSONObject().put("state",selected.optString("state","queued"))
+                                    .put("request_id",args.getString("request_id")).put("project_id",project.optString("project_id"))
+                                    .put("revision",project.optInt("revision")).put("export_id",selected.optString("id"))
+                                    .put("output",project.optString("output")).put("verified",selected.optJSONObject("verification")!=null&&selected.getJSONObject("verification").optBoolean("valid"))
+                                    .put("follow_up","video_editor_queue_status puis video_editor_audio_verify");
+                                cb.completed(true,status.toString());
+                            }catch(Exception ex){cb.completed(false,ex.getMessage());}
+                        });
+                }catch(Exception ex){cb.completed(false,ex.getMessage());}
+            });return;
+        }
         VideoEditorEngine.DISK.execute(()->{
             try{
                 JSONObject p=VideoEditorEngine.get().load(app);
