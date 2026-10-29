@@ -45,7 +45,28 @@ public final class NativeSocialControlService extends AccessibilityService {
     @Override protected void onServiceConnected(){
         super.onServiceConnected();
         current=this;
+        main.post(overlayWatchdog);
     }
+    /** Never let CHK's assistive controls linger on unrelated applications. */
+    private final Runnable overlayWatchdog=new Runnable(){
+        @Override public void run(){
+            if(current!=NativeSocialControlService.this)return;
+            if(overlay!=null){
+                boolean matches=false;
+                try{
+                    JSONObject session=NativeSocialSession.current(NativeSocialControlService.this);
+                    AccessibilityNodeInfo root=getRootInActiveWindow();
+                    if(root!=null){
+                        CharSequence pkg=root.getPackageName();
+                        matches=pkg!=null&&pkg.toString().equals(session.optString("target_package"));
+                        root.recycle();
+                    }
+                }catch(Exception ignored){}
+                if(!matches)hideOverlay();
+            }
+            main.postDelayed(this,1000L);
+        }
+    };
     @Override public void onAccessibilityEvent(AccessibilityEvent event){
         if(event==null)return;
         CharSequence name=event.getPackageName();
@@ -55,6 +76,7 @@ public final class NativeSocialControlService extends AccessibilityService {
     }
     @Override public void onInterrupt(){}
     @Override public void onDestroy(){
+        main.removeCallbacks(overlayWatchdog);
         hideOverlay();
         if(current==this)current=null;
         super.onDestroy();
@@ -77,7 +99,7 @@ public final class NativeSocialControlService extends AccessibilityService {
             TextView back=button("CHK · Retour");
             back.setOnClickListener(v->{
                 try{
-                    Intent intent=new Intent(this,MainActivity.class);
+                    Intent intent=new Intent(this,CutStudioHomeActivity.class);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     startActivity(intent);
                 }catch(Exception ignored){}
@@ -184,7 +206,9 @@ public final class NativeSocialControlService extends AccessibilityService {
                     // Android 11+ only. FLAG_SECURE and permission errors remain authoritative.
                     if(Build.VERSION.SDK_INT<30)throw new Exception("Capture native exige Android 11 ou supérieur");
                     String packageAtRequest=session.getString("target_package");
-                    takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),new TakeScreenshotCallback(){
+                    // On Android 14+, capture the social window instead of the
+                    // CHK overlay. The secure-window policy still applies.
+                    TakeScreenshotCallback captureCallback=new TakeScreenshotCallback(){
                         @Override public void onSuccess(ScreenshotResult result){
                             try{
                                 if(!NativeSocialSession.isActive(NativeSocialControlService.this,packageAtRequest))
@@ -218,7 +242,9 @@ public final class NativeSocialControlService extends AccessibilityService {
                         @Override public void onFailure(int errorCode){
                             if(cb.isActive())cb.finish(false,"Capture Android refusée : "+errorCode);
                         }
-                    });
+                    };
+                    if(Build.VERSION.SDK_INT>=34)takeScreenshotOfWindow(root.getWindowId(),getMainExecutor(),captureCallback);
+                    else takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),captureCallback);
                     return;
                 }
                 if(op.equals("observe")){
