@@ -114,6 +114,7 @@ public class MainActivity extends Activity {
             if(BrowserWebState.alive(current)){beginNavigation(current);current.loadUrl(BrowserWebState.url(current));}
         });
         findViewById(R.id.nav_browser).setOnClickListener(v->showSpace("browser"));
+        findViewById(R.id.nav_tor).setOnClickListener(v->startActivity(new Intent(this,TorGatewayActivity.class)));
         findViewById(R.id.nav_files).setOnClickListener(v->showSpace("files"));
         findViewById(R.id.nav_notes).setOnClickListener(v->showSpace("notes"));
         findViewById(R.id.nav_video).setOnClickListener(v->startActivity(new Intent(this,StudioProjectsActivity.class)));
@@ -169,16 +170,16 @@ public class MainActivity extends Activity {
     private String normalize(String value){
         String t=value==null?"":value.trim();
         if(t.isEmpty())return HOME;
-        if(t.matches("(?i)^https?://.+"))return t;
+        if(t.matches("(?i)^https?://.+"))return TorGatewayActivity.isOnion(t)?"":t;
         if(t.matches("(?i)^(file|javascript|data|intent|content):.*"))return "";
-        if(!t.contains(" ")&&t.contains(".")&&!t.startsWith("."))return "https://"+t;
+        if(!t.contains(" ")&&t.contains(".")&&!t.startsWith("."))return TorGatewayActivity.isOnion("https://"+t)?"":"https://"+t;
         try{return "https://www.google.com/search?q="+URLEncoder.encode(t,"UTF-8");}
         catch(Exception e){return HOME;}
     }
     private void navigate(String text){
         showSpace("browser");
         String url=normalize(text);
-        if(url.isEmpty()){toast("Adresse non autorisée");return;}
+        if(url.isEmpty()){toast("Adresse non autorisée · les sites .onion sont réservés à Tor Browser");return;}
         if(current!=null){beginNavigation(current);current.loadUrl(url);}
         ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(),0);
         address.clearFocus();
@@ -204,12 +205,24 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebViewClient(new WebViewClient(){
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                // Block every .onion subresource before Chromium's ordinary
+                // networking stack can attempt a direct DNS lookup.
+                String hostname=request.getUrl().getHost();
+                if(hostname!=null&&hostname.toLowerCase(java.util.Locale.ROOT).endsWith(".onion"))
+                    return new android.webkit.WebResourceResponse("text/plain","UTF-8",
+                        new java.io.ByteArrayInputStream(new byte[0]));
                 android.webkit.WebResourceResponse local=BrowserStreamUploader.intercept(view,request);
                 return local==null?super.shouldInterceptRequest(view,request):local;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
                 String scheme=request.getUrl().getScheme();
-                if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme))return false;
+                if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme)){
+                    if(!BrowserPolicy.webUrl(request.getUrl().toString())){
+                        if(request.isForMainFrame())toast("Adresse .onion bloquée dans Web : ouvre Tor.");
+                        return true;
+                    }
+                    return false;
+                }
                 if(request.isForMainFrame()&&request.hasGesture()&&BrowserSiteSettings.external(MainActivity.this,request.getUrl().toString()))return true;
                 toast("Lien externe indisponible");return true;
             }
@@ -944,7 +957,7 @@ public class MainActivity extends Activity {
         boolean light=space.equals("files");findViewById(R.id.space_nav).setBackgroundColor(light?0xfff4f6fb:0xff202124);
         getWindow().setStatusBarColor(0xff17181c);getWindow().setNavigationBarColor(light?0xfff4f6fb:0xff202124);
         if(Build.VERSION.SDK_INT>=26){int flags=getWindow().getDecorView().getSystemUiVisibility();getWindow().getDecorView().setSystemUiVisibility(light?flags|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:flags&~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);}
-        String[] spaces={"browser","files","video","cut","notes"},icons={"globe","folder","video","scissors","document"};int[] ids={R.id.nav_browser,R.id.nav_files,R.id.nav_video,R.id.nav_cut,R.id.nav_notes};
+        String[] spaces={"browser","tor","files","video","cut","notes"},icons={"globe","shield","folder","video","scissors","document"};int[] ids={R.id.nav_browser,R.id.nav_tor,R.id.nav_files,R.id.nav_video,R.id.nav_cut,R.id.nav_notes};
         for(int i=0;i<ids.length;i++){TextView v=findViewById(ids[i]);boolean selected=space.equals(spaces[i]);int color=selected?(light?0xff2468cb:0xffc5bfff):(light?0xff687080:0xffbfc2cd);v.setTextSize(11);v.setTextColor(color);v.setCompoundDrawablesWithIntrinsicBounds(null,UiIcons.icon(this,icons[i],color,23),null,null);v.setBackground(selected?MobileUi.bg(this,light?0xffdceaff:0xff393548):null);v.setSelected(selected);v.setFocusable(true);}
         if(!browser&&workspace!=null&&!space.equals(activeSpace))workspace.show(space);
         activeSpace=space;updatePageError();

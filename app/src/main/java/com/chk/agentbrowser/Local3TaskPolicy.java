@@ -17,7 +17,7 @@ final class Local3TaskPolicy {
     }
     static String lane(String a,JSONObject args){
         String name=action(a,args);JSONObject p=args(a,args);
-        if(Arrays.asList("local3_status","browser_status","files_capabilities","video_editor_capabilities").contains(name)
+        if(Arrays.asList("local3_status","browser_status","files_capabilities","video_editor_capabilities","video_editor_audio_tracks","video_editor_audio_analyze","video_editor_audio_verify","video_editor_crop_open").contains(name)
             ||name.equals("browser_tabs")&&p.optString("operation","list").equals("list"))return "read";
         if(name.equals("desktop")&&p.optString("tool").equals("control")){
             String op=p.optString("operation","status");

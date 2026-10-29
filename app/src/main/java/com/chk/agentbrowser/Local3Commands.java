@@ -6,6 +6,8 @@ import org.json.JSONObject;
 final class Local3Commands {
     private Local3Commands(){}
     static String canonicalAction(String action){
+        if(action.startsWith("studio_audio_"))return "video_editor_audio_"+action.substring("studio_audio_".length());
+        if(action.startsWith("studio_crop_"))return "video_editor_crop_"+action.substring("studio_crop_".length());
         switch(action){
             case "video_editor_project_create":return "video_editor_project_new";
             case "video_editor_project_update":return "video_editor_project_save";

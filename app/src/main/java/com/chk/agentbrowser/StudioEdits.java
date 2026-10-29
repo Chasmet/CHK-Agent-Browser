@@ -18,7 +18,19 @@ final class StudioEdits {
         out.put("start_ms",begin).put("duration_ms",length);clampFade(out);return out;
     }
     /** Sequential soundtrack follows project end, without changing or deleting any source. */
+    /** Promote historical sequential tracks to explicit timeline positions without loss. */
+    static void promoteAudioParallel(JSONObject project)throws Exception{
+        if("parallel".equals(project.optString("audio_layout")))return;
+        JSONArray items=project.optJSONArray("audio");long offset=0;
+        if(items!=null)for(int i=0;i<items.length();i++){
+            JSONObject item=items.getJSONObject(i);
+            if(!item.has("offset_ms"))item.put("offset_ms",offset);
+            offset+=item.optLong("duration_ms");
+        }
+        project.put("audio_layout","parallel");
+    }
     static void fitAudio(JSONObject project)throws Exception {
+        if("parallel".equals(project.optString("audio_layout")))return;
         JSONArray sounds=project.optJSONArray("audio");if(sounds==null)return;
         long available=total(project);JSONArray out=new JSONArray();
         for(int i=0;i<sounds.length()&&available>=500;i++){
@@ -32,7 +44,7 @@ final class StudioEdits {
     static long framePosition(long position,int direction,int fps,long total){long frame=Math.max(0,Math.round(position*fps/1000.0)+direction);return Math.max(0,Math.min(Math.max(0,total-1),Math.round(frame*1000.0/fps)));}
     static void clipVolume(JSONObject project,JSONObject target,double volume)throws Exception {
         JSONArray clips=project.getJSONArray("clips");JSONArray audio=project.optJSONArray("audio");
-        if(project.optBoolean("mute_original",audio!=null&&audio.length()>0))for(int i=0;i<clips.length();i++)if(clips.getJSONObject(i)!=target)clips.getJSONObject(i).put("mute",true);
+        // Never mute unrelated clips when editing the volume of this one.
         target.put("volume",volume).put("mute",false);project.put("mute_original",false);
     }
     static void duplicate(JSONObject project,int index)throws Exception {

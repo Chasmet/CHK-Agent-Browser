@@ -43,6 +43,10 @@ final class StudioProjectLibrary {
         else write(archive,p);
         if(initialized)write(archive,p);
         if(initialized||migrated||!current.isFile())write(current,p);
+        if(ensureMediaIds(p)){
+            write(entry(app,p.getString("project_id"),false),p);
+            write(current,p);
+        }
         return p;
     }
     static JSONObject blank()throws Exception{
@@ -50,7 +54,24 @@ final class StudioProjectLibrary {
             .put("output","Montage-"+System.currentTimeMillis()+"-"+UUID.randomUUID().toString().substring(0,6)+".mp4")
             .put("aspect_ratio","9:16").put("aspect_mode","fit")
             .put("resolution",720).put("revision",0).put("clips",new JSONArray())
-            .put("audio",new JSONArray());
+            .put("mute_original",false).put("audio",new JSONArray());
+    }
+    /** Older projects get persistent UUID media identities without changing time,
+     * audio, effects or revision. Duplicated clips receive fresh IDs on save. */
+    static boolean ensureMediaIds(JSONObject p)throws Exception{
+        boolean changed=false;java.util.HashSet<String> seen=new java.util.HashSet<>();
+        for(String kind:new String[]{"clips","audio"}){
+            JSONArray items=p.optJSONArray(kind);if(items==null)continue;
+            for(int i=0;i<items.length();i++){
+                JSONObject clip=items.getJSONObject(i);
+                String id=clip.optString("media_id","");
+                if(!id.matches("[a-f0-9-]{36}")||!seen.add(id)){
+                    do{id=UUID.randomUUID().toString();}while(!seen.add(id));
+                    clip.put("media_id",id);changed=true;
+                }
+            }
+        }
+        return changed;
     }
     private static boolean validId(String id){
         return id!=null&&id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
@@ -96,6 +117,7 @@ final class StudioProjectLibrary {
         p.put("project_id",id);
         p.put("created_at",current.optLong("created_at",System.currentTimeMillis()));
         p.put("updated_at",System.currentTimeMillis());
+        ensureMediaIds(p);
         recordHistory(app,current);
         write(entry(app,id,false),p);
         write(new File(app.getFilesDir(),ACTIVE),p);
@@ -125,6 +147,7 @@ final class StudioProjectLibrary {
         p.put("project_id",id).put("created_at",System.currentTimeMillis())
             .put("updated_at",System.currentTimeMillis())
             .put("revision",before.optInt("revision",0)+1);
+        ensureMediaIds(p);
         // Previous active draft has already been saved independently.
         write(entry(app,id,false),p);
         write(new File(app.getFilesDir(),ACTIVE),p);
@@ -135,6 +158,7 @@ final class StudioProjectLibrary {
         JSONObject p=read(entry(app,id,false));
         if(!id.equals(p.optString("project_id")))throw new java.io.IOException("Projet corrompu");
         p.put("revision",Math.max(p.optInt("revision",0),before.optInt("revision",0))+1);
+        ensureMediaIds(p);
         write(entry(app,id,false),p);
         write(new File(app.getFilesDir(),ACTIVE),p);
         return p;
