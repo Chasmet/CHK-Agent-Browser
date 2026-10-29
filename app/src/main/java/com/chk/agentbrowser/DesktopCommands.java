@@ -12,7 +12,7 @@ final class DesktopCommands {
     static JSONObject parameters(String action,JSONObject args)throws Exception{
         JSONObject p=action.equals("type")?new JSONObject(args.getString("text")):args;
         if(p==null||p.toString().getBytes("UTF-8").length>60000)throw new Exception("Commande IA trop grande (60 Ko maximum).");
-        if(!java.util.Arrays.asList("vision","pointer","files","tasks","terminal","browser","control","hearing").contains(p.optString("tool")))throw new Exception("Outil IA inconnu.");return p;
+        if(!java.util.Arrays.asList("vision","pointer","files","tasks","terminal","browser","control","hearing","studio").contains(p.optString("tool")))throw new Exception("Outil IA inconnu.");return p;
     }
     static boolean nativeTarget(JSONObject command){
         if(!handles(command.optString("action"),command.optJSONObject("args")))return false;
@@ -37,6 +37,19 @@ final class DesktopCommands {
         try{JSONObject p=parameters(action,args);
             if((p.optString("tool").equals("tasks")||p.optString("tool").equals("terminal"))&&p.optString("operation").equals("cancel"))AgentTasks.requestCancel(p.optString("id"));
             switch(p.getString("tool")){
+            case "studio":{
+                String op=p.optString("operation","");
+                String nativeAction;
+                if(op.startsWith("audio_")||op.startsWith("crop_"))
+                    nativeAction="video_editor_"+op;
+                else if(op.equals("capabilities"))nativeAction="video_editor_capabilities";
+                else throw new IllegalArgumentException("Opération Studio inconnue");
+                JSONObject parameters=new JSONObject(p.toString());
+                parameters.remove("tool");parameters.remove("operation");
+                VideoEditorEngine.get().command(c,nativeAction,parameters,(ok,text)->{
+                    if(cb.isActive())cb.finish(ok,text);
+                });return;
+            }
             case "control":AgentControl.execute(c,p,cb);return;
             case "hearing":AgentHearing.execute(c,p,cb);return;
             case "browser":BrowserAutomation.execute(c,web,p,cb);return;
