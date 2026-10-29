@@ -27,10 +27,10 @@ public final class Local3RecoveryTest {
         }finally{ins.runOnMainSync(()->web.get().destroy());}
     }
     @Test public void missingClickAcknowledgementReportsUnknownAndNeverRetries()throws Exception{
-        CountDownLatch done=new CountDownLatch(1);AtomicReference<String> result=new AtomicReference<>();AtomicInteger calls=new AtomicInteger();AtomicReference<WebView> web=new AtomicReference<>();
-        ins.runOnMainSync(()->{WebView w=new WebView(ins.getTargetContext()){@Override public void evaluateJavascript(String script,ValueCallback<String> cb){if(calls.incrementAndGet()==1)cb.onReceiveValue("\"WAIT\"");}};web.set(w);
+        CountDownLatch done=new CountDownLatch(1);AtomicReference<String> result=new AtomicReference<>();AtomicInteger calls=new AtomicInteger(),clickScripts=new AtomicInteger();AtomicReference<WebView> web=new AtomicReference<>();
+        ins.runOnMainSync(()->{WebView w=new WebView(ins.getTargetContext()){@Override public void evaluateJavascript(String script,ValueCallback<String> cb){if(script.contains("el.click();return"))clickScripts.incrementAndGet();if(calls.incrementAndGet()==1)cb.onReceiveValue("\"WAIT\"");}};web.set(w);
             try{VerifiedClick.run(w,new JSONObject().put("selector","#go").put("expected_text","done").put("timeout_ms",800),WorkspaceCommands.UI,(ok,text)->{result.set(text);done.countDown();});}catch(Exception e){throw new RuntimeException(e);}});
-        try{assertTrue(done.await(3,TimeUnit.SECONDS));JSONObject value=new JSONObject(result.get());assertTrue(value.isNull("action_sent"));assertFalse(value.getBoolean("outcome_confirmed"));assertFalse(value.getBoolean("retry_command"));assertEquals(2,calls.get());}
+        try{assertTrue(done.await(3,TimeUnit.SECONDS));JSONObject value=new JSONObject(result.get());assertTrue(value.isNull("action_sent"));assertFalse(value.getBoolean("outcome_confirmed"));assertFalse(value.getBoolean("retry_command"));assertTrue("Independent proof reads are allowed",calls.get()>=2);assertEquals("A lost acknowledgement must never dispatch a second click",1,clickScripts.get());}
         finally{ins.runOnMainSync(()->web.get().destroy());}
     }
     @Test public void alreadySatisfiedDoesNotDispatchClick()throws Exception{
