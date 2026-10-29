@@ -100,12 +100,15 @@ final class AgentTasks {
             }
             if(op.equals("cancel")){active.put(id,false);state.put("state","cancelled");AgentFiles.save(file,state);}
             else if(op.equals("resume")){
-                if(running.contains(id))return summary(state,p.optInt("offset",0));
+                if(running.contains(id)||state.optString("state").equals("completed"))return summary(state,p.optInt("offset",0));
                 if(state.getString("state").equals("cancelled"))throw new Exception("Tâche annulée ; utilise un nouvel identifiant.");
                 JSONArray rows=state.getJSONArray("steps");for(int i=0;i<rows.length();i++){JSONObject step=rows.getJSONObject(i);String status=step.optString("state");
                     if(status.equals("failed")&&p.optBoolean("retry_failed",false))step.put("state","pending");
-                    if(status.equals("uncertain")&&p.optBoolean("retry_uncertain",false))step.put("state","pending");
-                    else if(status.equals("uncertain")&&step.has("verify"))step.put("state","effect_done");
+                    if(status.equals("uncertain")&&step.has("verify"))step.put("state","effect_done");
+                    else if(status.equals("uncertain")&&p.optBoolean("retry_uncertain",false)
+                            &&readOnly(step.optString("action"),step.optJSONObject("args")))step.put("state","pending");
+                    // Never replay an uncertain write, even with retry_uncertain=true.
+                    // Its postcondition must first be observed by a read-only verify step.
                 }AgentFiles.save(file,state);start(c,file,state,local2,local3);
             }else if(!op.equals("status"))throw new Exception("Opération de tâche inconnue.");
         }
@@ -183,6 +186,10 @@ final class AgentTasks {
                 if(verify&&ok){JSONObject rule=row.getJSONObject("verify"),expect=rule.optJSONObject("expect"),contains=rule.optJSONObject("contains");
                     if(expect!=null){Iterator<String> keys=expect.keys();while(keys.hasNext()){String key=keys.next();Object actual=at(result,key),wanted=resolve(app,expect.get(key),state);if(!String.valueOf(actual).equals(String.valueOf(wanted)))ok=false;}}
                     if(contains!=null){Iterator<String> keys=contains.keys();while(keys.hasNext()){String key=keys.next();if(!String.valueOf(at(result,key)).contains(String.valueOf(resolve(app,contains.get(key),state))))ok=false;}}
+                }
+                if(ok&&!verify&&result instanceof JSONObject&&((JSONObject)result).optString("state").equals("action_sent")&&!row.has("verify")){
+                    row.put("state","uncertain").put("result",result).put("error","Geste envoyé sans postcondition : ajouter une vérification indépendante.");
+                    AgentFiles.save(file,state);stop(state,"Action envoyée, résultat non vérifié : aucune répétition automatique.");return;
                 }
                 if(ok){if(!verify){if(result.toString().getBytes("UTF-8").length>26000)result=new JSONObject(Local3Client.compactWorkflowResult(app,result.toString()));row.put("result",result);}row.put("state",verify?"done":"effect_done").remove("error");AgentFiles.save(file,state);WorkspaceCommands.IO.execute(this::next);}
                 else {row.put("state",verify?"verify_failed":"uncertain").put("error",text==null?"Résultat inattendu.":text.substring(0,Math.min(text.length(),500)));AgentFiles.save(file,state);stop(state,verify?"Vérification échouée : l’action déjà exécutée ne sera pas répétée.":"Action non confirmée : aucune répétition automatique.");}

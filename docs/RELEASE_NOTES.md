@@ -1,3 +1,14 @@
+## Correction des accusés MCP et reprises sans doublons — 29 octobre 2026
+
+- Après l'expiration d'un retour `evaluateJavascript`, `VerifiedClick` vérifie indépendamment la nouvelle URL ou la condition DOM pendant une fenêtre bornée, sans envoyer de second clic. Une action reste incertaine sans preuve.
+- `AgentControl` relit la postcondition pendant cinq secondes et distingue `action_sent` de `completed`. Un geste tactile accepté ne suffit plus à prétendre qu'une publication ou un brouillon est terminé.
+- Les workflows terminés ne sont pas relancés par `task_resume`. Les écritures incertaines sont vérifiées avant reprise, même avec `retry_uncertain=true`; seules les lectures sans effet de bord peuvent être réessayées.
+- Les paroles et champs enrichis sont comparés après normalisation prudente des sauts de ligne. Les ambiguïtés de libellé sont éliminées seulement lorsqu'un élément unique est réellement visible.
+- Tests de non-répétition d'un clic retardé, de lecture multiligne et d'un geste envoyé sans preuve d'issue. Aucune modification de CHK Universal Control ni des routes serveur.
+- Distribution par la chaîne GitHub Actions existante : APK signé par la clé persistante déjà utilisée, Release et proposition de mise à jour intégrée. L'installation finale reste soumise à Android.
+
+**Important :** les modifications corrigent les erreurs observées et ajoutent des gardes. Une validation réelle sur Suno et YouTube Studio reste nécessaire après installation ; ni la création musicale ni la programmation vidéo ne peuvent être considérées comme réussies sans preuve du site.
+
 ## Fiabilité des formulaires TikTok, Suno et YouTube — 29 octobre 2026
 
 - Les éditeurs enrichis reçoivent une seule transaction de saisie. Suppression du `beforeinput` synthétique en double, des événements `input/change` redondants et du repli qui forçait la modification du DOM en cas de refus. Le remplacement et l’effacement incluent les hashtags et autres entités non modifiables.

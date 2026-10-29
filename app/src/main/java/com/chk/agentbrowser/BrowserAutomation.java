@@ -116,7 +116,9 @@ final class BrowserAutomation {
             if(!same(web,page,version)){cb.finish(false,"Page modifiée durant la saisie : relire avant de continuer.");return;}
             try{
                 JSONObject initial=new JSONObject(decode(raw));
-                if(!initial.optBoolean("ok")){if(write)initial.put("effect_uncertain",true).put("retry_command",false).put("guidance","Des champs peuvent avoir changé : relire le formulaire avant toute reprise.");cb.finish(false,initial.toString());return;}
+                if(!initial.optBoolean("ok")&&(!write||!"Valeur refusée par la page".equals(initial.optString("error")))){if(write)initial.put("effect_uncertain",true).put("retry_command",false).put("guidance","Des champs peuvent avoir changé : relire le formulaire avant toute reprise.");cb.finish(false,initial.toString());return;}
+                // Rich editors may settle after DOM input; their immediate text can differ
+                // while React/ProseMirror completes the update. Confirm via a fresh read.
                 UI.postDelayed(()->{
                     if(!cb.isActive())return;
                     if(!same(web,page,version)){cb.finish(false,"Page remplacée avant la relecture du formulaire.");return;}

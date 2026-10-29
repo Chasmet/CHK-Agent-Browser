@@ -67,6 +67,18 @@ public final class AgentControlIntegrationTest {
         assertEquals("completed",result.getString("state"));assertTrue(result.toString(),result.getBoolean("outcome_confirmed"));
         assertEquals("\"Texte vérifié\"",js(web,"document.querySelector('#draft').value"));assertTrue(result.getJSONObject("after").has("observation_id"));
     }
+    @Test public void acceptedPointerWithoutEvidenceReportsActionSentNotCompleted()throws Exception{
+        JSONObject seen=observe("web","");
+        JSONObject request=action(seen,pointer(seen,"Exécuter"));
+        Result response=call(request);
+        assertFalse("A gesture without outcome proof must not report success",response.ok);
+        JSONObject result=new JSONObject(response.text);
+        assertEquals("action_sent",result.getString("state"));
+        assertTrue(result.getBoolean("action_sent"));
+        assertFalse(result.getBoolean("outcome_confirmed"));
+        assertTrue(result.getBoolean("effect_uncertain"));
+        assertEquals("1",js(web,"window.clicks||0"));
+    }
     @Test public void conditionTrueBeforeControlActionIsNotAnEffectConfirmation()throws Exception{
         JSONObject seen=observe("web","");JSONObject request=action(seen,pointer(seen,"Exécuter")).put("expect",new JSONObject().put("text_contains","Exécuter"));
         JSONObject result=call(request).json();assertEquals("already_satisfied",result.getString("state"));assertFalse(result.getBoolean("action_sent"));assertFalse(result.getBoolean("outcome_confirmed"));assertEquals("0",js(web,"window.clicks||0"));
@@ -80,7 +92,7 @@ public final class AgentControlIntegrationTest {
         JSONObject done=call(request).json();assertTrue(done.toString(),done.getBoolean("outcome_confirmed"));assertEquals(1,clicks.get());
         JSONObject replay=call(request).json();assertTrue(replay.getBoolean("replayed"));assertTrue(replay.getBoolean("outcome_confirmed"));assertEquals(1,clicks.get());
         java.io.File journal=AgentFiles.journal(app,"control",request.getString("id"));JSONObject saved=AgentFiles.read(journal);saved.remove("result");saved.put("state","executing");AgentFiles.save(journal,saved);
-        assertEquals("unknown",call(request).json().getString("state"));assertEquals(1,clicks.get());
+        Result unknown=call(request);assertFalse(unknown.ok);assertEquals("unknown",new JSONObject(unknown.text).getString("state"));assertEquals(1,clicks.get());
     }
     @Test public void nativeKeyboardIsObservedAndReadBackInSameControl()throws Exception{
         ins.runOnMainSync(()->{EditText edit=new EditText(activity);edit.setHint("Nom du projet");dialog=new AgentDialog.Builder(activity).setTitle("Projet").setView(edit).create();dialog.show();});Thread.sleep(180);
@@ -111,7 +123,7 @@ public final class AgentControlIntegrationTest {
         Result collision=call(action(a,new JSONObject(drag.toString())));assertFalse(collision.text,collision.ok);
         JSONObject key=new JSONObject().put("tool","keyboard").put("operation","replace").put("selector",field(b).getString("selector")).put("text","En parallèle");
         JSONObject typed=call(action(b,key).put("expect",new JSONObject().put("field_value","En parallèle"))).json();assertTrue(typed.toString(),typed.getBoolean("outcome_confirmed"));
-        assertEquals("Other tab input must finish before long gesture",1L,moving.done.getCount());moving.await();assertTrue(moving.text,moving.ok);
+        assertEquals("Other tab input must finish before long gesture",1L,moving.done.getCount());moving.await();assertFalse("Un geste sans condition ne doit pas être marqué comme réussi",moving.ok);assertEquals("action_sent",new JSONObject(moving.text).getString("state"));
         JSONObject tabs=call(new JSONObject().put("operation","status")).json();boolean selected=false;JSONArray list=tabs.getJSONArray("tabs");for(int i=0;i<list.length();i++)if(list.getJSONObject(i).getString("id").equals(b.getString("tab_id")))selected=list.getJSONObject(i).getBoolean("selected");assertTrue(selected);
     }
     @Test public void parallelLaunchesIndependentDurableWorkflowsAndValidatesBeforeStarting()throws Exception{

@@ -23,23 +23,79 @@ public final class VerifiedClick {
         catch(Exception e){return message;}
     }
     private static final class DeadlineCallback implements AgentClient.ResultCallback {
-        final AgentClient.ResultCallback parent;final Handler handler;final Runnable expiry;
+        final AgentClient.ResultCallback parent;
+        final Handler handler;
+        final long timeout;
+        final Runnable expiry;
         final java.util.concurrent.atomic.AtomicBoolean done=new java.util.concurrent.atomic.AtomicBoolean();
-        boolean attempted;final long timeout;final boolean separateVerification;
+        WebView web;
+        String condition, expectedUrl;
+        boolean urlOnly, attempted, reconciling;
+        long reconcileUntil;
         DeadlineCallback(AgentClient.ResultCallback parent,Handler handler,long timeout,boolean separateVerification){
-            this.parent=parent;this.handler=handler;this.timeout=timeout;this.separateVerification=separateVerification;
-            expiry=()->finish(false,result("timed_out",attempted?JSONObject.NULL:Boolean.FALSE,false,
-                attempted?"Retour JavaScript absent ou résultat non confirmé : observer sans répéter le clic.":"Délai dépassé avant le clic : aucun geste envoyé."));
+            this.parent=parent;this.handler=handler;this.timeout=timeout;
+            expiry=()->{
+                if(!isActive())return;
+                if(attempted&&web!=null&&condition!=null&&BrowserWebState.alive(web)){
+                    reconcile();
+                }else finish(false,result("timed_out",attempted?JSONObject.NULL:Boolean.FALSE,false,
+                    attempted?"Retour JavaScript absent : résultat inconnu, ne pas répéter le clic.":"Délai dépassé avant le clic : aucun geste envoyé."));
+            };
             handler.postDelayed(expiry,timeout);
         }
+        void prepare(WebView target,String proof,boolean onlyUrl,String url){
+            web=target;condition=proof;urlOnly=onlyUrl;expectedUrl=url;
+        }
         void attempting(){
-            if(attempted)return;attempted=true;
-            if(separateVerification){handler.removeCallbacks(expiry);handler.postDelayed(expiry,timeout);}
+            if(attempted)return;
+            attempted=true;
+            handler.removeCallbacks(expiry);
+            handler.postDelayed(expiry,timeout);
+        }
+        // Navigation may destroy the JS execution context after el.click() while
+        // changing the page correctly. Observe again without dispatching a click.
+        void reconcile(){
+            if(!isActive()||reconciling)return;
+            reconciling=true;
+            reconcileUntil=SystemClock.elapsedRealtime()+Math.min(9000L,timeout);
+            probe();
+        }
+        void probe(){
+            if(!isActive())return;
+            if(web==null||!BrowserWebState.alive(web)||SystemClock.elapsedRealtime()>reconcileUntil){
+                finish(false,result("timed_out",attempted?JSONObject.NULL:Boolean.FALSE,false,
+                    "Action possiblement exécutée, mais aucun résultat observé. Ne pas répéter ; inspecter la page."));
+                return;
+            }
+            // For an URL-only condition the Android WebView URL remains observable
+            // even if the JavaScript callback is lost during a navigation.
+            if(urlOnly&&expectedUrl!=null&&web.getUrl()!=null&&web.getUrl().contains(expectedUrl)){
+                finish(true,result("completed",JSONObject.NULL,true,
+                    "URL attendue observée après clic incertain, sans deuxième clic."));
+                return;
+            }
+            try{
+                web.evaluateJavascript(condition,raw->{
+                    if(!isActive())return;
+                    if("DONE".equals(value(raw))){
+                        finish(true,result("completed",JSONObject.NULL,true,
+                            "Condition réelle retrouvée après expiration JavaScript, sans répéter le clic."));
+                    }
+                });
+            }catch(RuntimeException ignored){
+                // The renderer may be changing. Only the following observation decides.
+            }
+            handler.postDelayed(this::probe,650L);
         }
         public boolean isActive(){return !done.get()&&parent.isActive();}
-        public boolean isLocal2(){return parent.isLocal2();}public boolean isLocal3(){return parent.isLocal3();}
+        public boolean isLocal2(){return parent.isLocal2();}
+        public boolean isLocal3(){return parent.isLocal3();}
         public String inputLease(){return parent.inputLease();}
-        public void finish(boolean ok,String text){if(!done.compareAndSet(false,true))return;handler.removeCallbacks(expiry);parent.finish(ok,text);}
+        public void finish(boolean ok,String text){
+            if(!done.compareAndSet(false,true))return;
+            handler.removeCallbacks(expiry);
+            parent.finish(ok,text);
+        }
     }
     private static String value(String raw) {
         try { return new JSONArray("[" + raw + "]").getString(0); }
@@ -51,7 +107,7 @@ public final class VerifiedClick {
         AgentClient.ResultCallback callback;
         boolean wait=args.optBoolean("wait_until_enabled",false);
         long budget=Math.max(800L,Math.min(25000L,args.optLong("timeout_ms",wait?20000L:10000L)));
-        try { callback=AgentControl.lease(web,false,parent,budget*(wait?2:1)+1000L); } catch(Exception e){parent.finish(false,e.getMessage());return;}
+        try { callback=AgentControl.lease(web,false,parent,Math.min(60000L,budget*(wait?2:1)+Math.min(9000L,budget)+3000L)); } catch(Exception e){parent.finish(false,e.getMessage());return;}
         callback=new DeadlineCallback(callback,handler,budget,wait);
         runBounded(web,args,handler,callback);
     }
@@ -80,6 +136,8 @@ public final class VerifiedClick {
         final long timeout=Math.max(800L,Math.min(25000L,args.optLong("timeout_ms",waitEnabled?20000L:10000L)));
         final String condition=BrowserScripts.condition(JSONObject.quote(expectedSelector),
                 JSONObject.quote(expectedText),JSONObject.quote(expectedUrl));
+        if(callback instanceof DeadlineCallback)((DeadlineCallback)callback).prepare(web,condition,
+            !expectedUrl.isEmpty()&&expectedSelector.isEmpty()&&expectedText.isEmpty(),expectedUrl);
         final long start=SystemClock.elapsedRealtime();
         final String originalUrl=web.getUrl()==null?"":web.getUrl();
         final SharedPreferences receipts=!receiptId.isEmpty()
@@ -97,11 +155,13 @@ public final class VerifiedClick {
                 }
                 // A delayed site response may have completed since the timeout.
                 // Recheck the postcondition, never dispatch another click.
+                if(callback instanceof DeadlineCallback)((DeadlineCallback)callback).attempting();
                 web.evaluateJavascript(condition,raw->{
                     if(!callback.isActive())return;
                     boolean done="DONE".equals(value(raw));
-                    callback.finish(done,done?"Clic antérieur confirmé : condition observée, aucun nouveau clic.":
-                        "Clic déjà tenté pour "+receiptId+" ; résultat encore incertain. Aucun nouveau clic.");
+                    callback.finish(done,result(done?"completed":"unconfirmed",JSONObject.NULL,done,
+                        done?"Clic antérieur vérifié par observation, aucun nouveau clic.":
+                        "Clic antérieur non confirmé : ne pas le répéter sans nouvelle preuve."));
                 });return;
             }
         }
@@ -169,12 +229,13 @@ public final class VerifiedClick {
                             callback.finish(true,result("completed",true,true,"Clic confirmé : condition devenue vraie après un seul clic."));
                         }else if(!"WAIT".equals(state)||
                                 SystemClock.elapsedRealtime()-clickedAt>=timeout){
-                            callback.finish(false,"Clic envoyé UNE fois ; résultat encore non confirmé ("+
-                                    state+"). Ne pas répéter. Vérifier la page ou le post.");
+                            if(callback instanceof DeadlineCallback)((DeadlineCallback)callback).reconcile();
+                            else callback.finish(false,"Résultat non confirmé ("+state+"). Ne pas répéter.");
                         }else handler.postDelayed(verify[0],150L);
                     });
                 }catch(RuntimeException e){
-                    callback.finish(false,"Clic envoyé ; page interrompue. Ne pas répéter sans inspection.");
+                    if(callback instanceof DeadlineCallback)((DeadlineCallback)callback).reconcile();
+                    else callback.finish(false,"Page interrompue après clic : ne pas répéter.");
                 }
             };
             handler.post(verify[0]);

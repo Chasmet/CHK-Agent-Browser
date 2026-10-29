@@ -124,7 +124,7 @@ final class AgentControl {
                     JSONObject saved=AgentFiles.read(journal);
                     if(!saved.getString("fingerprint").equals(fingerprint))throw new Exception("Cet id appartient à une autre action. Aucun geste rejoué.");
                     JSONObject result=saved.has("result")?saved.getJSONObject("result"):new JSONObject().put("id",id).put("state","unknown").put("outcome_confirmed",false).put("reason","Action interrompue ou encore en cours : observer avant toute nouvelle action.");
-                    result.put("replayed",true);reply(cb,true,result.toString());return;
+                    result.put("replayed",true);reply(cb,result.optBoolean("ok",false),result.toString());return;
                 }
                 WorkspaceCommands.UI.post(()->begin(app,p,cb,id,fingerprint,journal));
             }catch(Exception e){reply(cb,false,message(e));}
@@ -166,17 +166,40 @@ final class AgentControl {
                     JSONObject result;try{result=new JSONObject(text);}catch(Exception ignored){result=new JSONObject().put("message",text);}
                     boolean sent=ok&&result.optBoolean("ok",true);JSONObject inputResult=result;
                     JSONObject afterParams=new JSONObject().put("target",snapshot.target).put("capture",p.optBoolean("capture_after",false));
-                    observeAt(app,snapshot.web.get(),afterParams,wrap(this,(seen,afterText)->{
-                        if(!finished.compareAndSet(false,true))return;WorkspaceCommands.UI.removeCallbacks(interrupted);
-                        try{
-                            JSONObject after=seen?new JSONObject(afterText):new JSONObject().put("observation_error",afterText);
-                            boolean confirmed=sent&&seen&&p.has("expect")&&matches(p.getJSONObject("expect"),after,p.getJSONObject("input"));
-                            JSONObject out=new JSONObject().put("ok",sent).put("id",id).put("state",sent?"completed":"unconfirmed")
-                                .put("action_attempted",true).put("action_sent",sent?Boolean.TRUE:JSONObject.NULL).put("effect_uncertain",!sent)
-                                .put("outcome_confirmed",confirmed).put("input_result",inputResult).put("after",after);
-                            complete(journal,saved,cb,lane,id,sent,out,null);
-                        }catch(Exception e){complete(journal,saved,cb,lane,id,false,null,message(e));}
-                    }));
+                    // DOM transitions can finish after the gesture callback. Read the
+                    // postcondition repeatedly, without sending another input.
+                    final long verificationDeadline=SystemClock.elapsedRealtime()+5000L;
+                    final Runnable[] readAfter=new Runnable[1];
+                    readAfter[0]=()->{
+                        if(finished.get()||!cb.isActive())return;
+                        observeAt(app,snapshot.web.get(),afterParams,wrap(this,(seen,afterText)->{
+                            if(finished.get()||!cb.isActive())return;
+                            try{
+                                JSONObject after=seen?new JSONObject(afterText):new JSONObject().put("observation_error",afterText);
+                                boolean confirmed=sent&&seen&&p.has("expect")&&matches(p.getJSONObject("expect"),after,p.getJSONObject("input"));
+                                if(sent&&!confirmed&&p.has("expect")&&SystemClock.elapsedRealtime()<verificationDeadline){
+                                    WorkspaceCommands.UI.postDelayed(readAfter[0],400L);
+                                    return;
+                                }
+                                if(!finished.compareAndSet(false,true))return;
+                                WorkspaceCommands.UI.removeCallbacks(interrupted);
+                                String state=!sent?"unconfirmed":confirmed?"completed":"action_sent";
+                                JSONObject out=new JSONObject().put("ok",confirmed).put("id",id).put("state",state)
+                                    .put("action_attempted",true).put("action_sent",sent?Boolean.TRUE:JSONObject.NULL)
+                                    .put("effect_uncertain",!confirmed).put("outcome_confirmed",confirmed)
+                                    .put("verified",confirmed).put("retry_command",false)
+                                    .put("input_result",inputResult).put("after",after);
+                                complete(journal,saved,cb,lane,id,confirmed,out,null);
+                            }catch(Exception e){
+                                if(finished.compareAndSet(false,true)){
+                                    WorkspaceCommands.UI.removeCallbacks(interrupted);
+                                    complete(journal,saved,cb,lane,id,false,null,
+                                        "Observation finale impossible après geste : ne pas le répéter. "+message(e));
+                                }
+                            }
+                        }));
+                    };
+                    readAfter[0].run();
                 }catch(Exception e){if(finished.compareAndSet(false,true))complete(journal,saved,cb,lane,id,false,null,message(e));}
             }
         };

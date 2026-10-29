@@ -310,4 +310,23 @@ public final class Local2BrowserAutomationTest {
         request.put("expected_host","wrong.example").put("text","interdit");assertFalse(nativeCall("keyboard",request).ok);assertEquals("\"Brume\"",eval(page,"document.querySelector('input').value"));
     }
 
+
+    @Test public void richLyricsReadbackNormalizesLineEndingsWithoutChangingContent()throws Exception{
+        WebView page=open("example.com","<html><body><div id='lyrics' contenteditable='true'><div>ligne 1</div><div>ligne 2</div></div></body></html>");
+        JSONArray fields=new JSONArray().put(field("#lyrics","text","ligne 1\r\nligne 2"));
+        JSONObject proof=browserCall("verify_form",new JSONObject()
+            .put("expected_host","example.com").put("fields",fields)).json();
+        assertTrue(proof.toString(),proof.getBoolean("verified"));
+        assertTrue(proof.getJSONArray("fields").getJSONObject(0).getBoolean("matches"));
+    }
+    @Test public void delayedClickPostconditionIsObservedWithoutSecondClick()throws Exception{
+        WebView page=open("example.com","<html><body><button id='once' onclick=\"window.calls=(window.calls||0)+1;setTimeout(function(){document.getElementById('status').textContent='Ready'},1200)\">Start</button><p id='status'></p></body></html>");
+        JSONObject args=new JSONObject().put("expected_host","example.com").put("selector","#once")
+            .put("expected_text","Ready").put("timeout_ms",800).put("receipt_id",job);
+        JSONObject proof=browserCall("click_verified",args).json();
+        assertEquals("completed",proof.getString("state"));
+        assertTrue(proof.getBoolean("outcome_confirmed"));
+        assertEquals("1",eval(page,"window.calls"));
+        app.getSharedPreferences("chk-click-once-v1",0).edit().remove(job).commit();
+    }
 }
