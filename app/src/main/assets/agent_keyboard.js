@@ -119,16 +119,26 @@
   }
   function write(el,text,caret,save,edit) {
     if (el.tagName==='SELECT' || el.type==='checkbox' || el.type==='radio') throw Error('Utilise select_option ou check pour ce contrôle.');
-    text=normalize(el,text);before(el,text);el.focus();el.scrollIntoView({block:'center',inline:'nearest'});
+    text=normalize(el,text);
+    // execCommand already sends the editor's beforeinput/input transaction.
+    // A synthetic beforeinput with the same payload can be consumed twice by
+    // framework editors (notably hashtag/entity editors).
+    if (!el.isContentEditable) before(el,text);
+    el.focus();el.scrollIntoView({block:'center',inline:'nearest'});
     var h=history(el), old={text:value(el),selection:selection(el)};
     if (save) {h.undo.push(old);if(h.undo.length>8)h.undo.shift();h.redo=[];}
     var emitted=false, observeInput=function(){emitted=true;};el.addEventListener('input',observeInput,true);
     if (el.isContentEditable) {
-      setSelection(el,edit?edit.from:0,edit?edit.to:value(el).length);
-      var inserted=edit?edit.text:text;
-      if (!el.ownerDocument.execCommand('insertText',false,inserted)) {
-        var range=el.ownerDocument.getSelection().getRangeAt(0);range.deleteContents();range.insertNode(el.ownerDocument.createTextNode(inserted));
+      if (edit) setSelection(el,edit.from,edit.to);
+      else {
+        // Include non-editable entities and empty blocks, not only text nodes.
+        var all=el.ownerDocument.createRange(),richSelection=el.ownerDocument.getSelection();
+        all.selectNodeContents(el);richSelection.removeAllRanges();richSelection.addRange(all);
       }
+      var inserted=edit?edit.text:text;
+      var command=inserted===''?'delete':'insertText';
+      if (!el.ownerDocument.execCommand(command,false,inserted))
+        throw Error('Éditeur riche non compatible : aucune modification DOM forcée. Inspecte sa valeur avant toute reprise.');
     } else {
       var proto=Object.getPrototypeOf(el), setter;
       while(proto&&!setter){var desc=Object.getOwnPropertyDescriptor(proto,'value');setter=desc&&desc.set;proto=Object.getPrototypeOf(proto);}
@@ -137,8 +147,9 @@
     el.removeEventListener('input',observeInput,true);
     try {setSelection(el,Math.min(caret,text.length),Math.min(caret,text.length));}catch(ignore){}
     var view=el.ownerDocument.defaultView;
-    if(!emitted)try {el.dispatchEvent(new view.InputEvent('input',{bubbles:true,inputType:'insertText',data:text}));} catch(ignore) {el.dispatchEvent(new view.Event('input',{bubbles:true}));}
-    el.dispatchEvent(new view.Event('change',{bubbles:true}));h.expected=value(el);
+    if(!el.isContentEditable&&!emitted)try {el.dispatchEvent(new view.InputEvent('input',{bubbles:true,inputType:'insertText',data:text}));} catch(ignore) {el.dispatchEvent(new view.Event('input',{bubbles:true}));}
+    if(!el.isContentEditable)el.dispatchEvent(new view.Event('change',{bubbles:true}));
+    h.expected=value(el);
     if (!sameValue(el,text)) throw Error('La page a filtré la saisie : inspecte sa valeur réelle.');
     return text;
   }

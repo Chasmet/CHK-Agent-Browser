@@ -190,7 +190,8 @@ const modal={scrollHeight:700,clientHeight:700,scrollTop:0,getBoundingClientRect
   contains:element=>element===innerList,getAttribute:()=>null,hasAttribute:()=>false};
 const backgroundPage={scrollHeight:2300,clientHeight:700,scrollTop:0,getBoundingClientRect:()=>rect()};
 const scrollDoc={querySelector:(selector)=>selector.includes('dialog')?modal:null,
-  querySelectorAll:()=>[],scrollingElement:backgroundPage,documentElement:backgroundPage};
+  querySelectorAll:selector=>selector.includes('[role=dialog]')?[modal]:[],scrollingElement:backgroundPage,documentElement:backgroundPage};
+modal.ownerDocument={defaultView:{innerWidth:900,innerHeight:1400,getComputedStyle:()=>({display:'block',visibility:'visible'})}};modal.closest=()=>null;modal.contains=e=>e===innerList||e===modal;
 const scrollContext={document:scrollDoc,innerWidth:900,innerHeight:1400,
   getComputedStyle:e=>({display:'block',visibility:'visible',overflowY:e===innerList?'auto':'visible'})};
 const scrollOutcome=JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/scroll-list.js','utf8'),scrollContext));
@@ -203,3 +204,13 @@ assert.equal(matched.found,true,JSON.stringify(matched));
 assert.equal(matched.moved,false);
 assert.equal(innerList.scrollTop,420);
 console.log('PASS: nested voice picker moved 420 px, page unchanged, target visible without redundant scroll');
+
+const horizontal={nodeType:1,scrollWidth:1200,clientWidth:180,scrollLeft:0,scrollHeight:80,clientHeight:80,
+ getBoundingClientRect:()=>({left:0,right:180,top:0,bottom:80,width:180,height:80}),getAttribute:()=>null,hasAttribute:()=>false,
+ querySelectorAll:()=>[],contains:e=>e===horizontal};
+const horizontalDoc={body:{},querySelector:s=>s==='#horizontal'?horizontal:null,querySelectorAll:s=>s==='*'?[horizontal]:[]};
+const horizontalContext={document:horizontalDoc,innerWidth:400,innerHeight:800,getComputedStyle:()=>({display:'block',visibility:'visible',overflowX:'auto',overflowY:'hidden'})};
+let h=JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/scroll-right.js','utf8'),horizontalContext));
+assert.equal(h.axis,'horizontal');assert.equal(h.scroll_after,200);assert.equal(horizontal.scrollLeft,200);
+h=JSON.parse(vm.runInNewContext(fs.readFileSync(root+'/scroll-left.js','utf8'),horizontalContext));assert.equal(h.scroll_after,0);
+console.log('PASS: measured horizontal scroll and reverse without vertical movement');

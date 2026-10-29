@@ -301,4 +301,13 @@ public final class Local2BrowserAutomationTest {
     private static JSONObject field(String selector,String kind,Object value)throws Exception{
         return new JSONObject().put("selector",selector).put("kind",kind).put("value",value);
     }
+    @Test public void declaredWebKeyboardIsRoutedDirectlyWithHostAndContextGuards()throws Exception{
+        WebView page=open("example.com","<body><input aria-label='Titre' value='ancien'></body>");
+        JSONObject state=nativeCall("keyboard",new JSONObject().put("target","web").put("operation","inspect")).json();
+        JSONObject field=state.getJSONArray("controls").getJSONObject(0);
+        JSONObject request=new JSONObject().put("target","web").put("operation","replace").put("expected_context",state.getString("context")).put("expected_host","example.com").put("selector",field.getString("selector")).put("text","Brume");
+        assertTrue(nativeCall("keyboard",request).ok);assertEquals("\"Brume\"",eval(page,"document.querySelector('input').value"));
+        request.put("expected_host","wrong.example").put("text","interdit");assertFalse(nativeCall("keyboard",request).ok);assertEquals("\"Brume\"",eval(page,"document.querySelector('input').value"));
+    }
+
 }

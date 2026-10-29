@@ -14,7 +14,7 @@ final class BrowserScroll {
         final String url=target.getUrl();
         final long version=BrowserWebState.documentVersion(target);
         final String direction=args.optString("direction","down"),selector=args.optString("selector",""),until=args.optString("until_text","");
-        if(!direction.equals("up")&&!direction.equals("down")||selector.length()>350||until.length()>180){
+        if(!java.util.Arrays.asList("up","down","left","right").contains(direction)||selector.length()>350||until.length()>180){
             callback.finish(false,"Paramètres de défilement invalides.");return;
         }
         final int pixels=Math.max(60,Math.min(2400,args.optInt("pixels",Math.max(350,(int)(target.getHeight()*0.6f)))));

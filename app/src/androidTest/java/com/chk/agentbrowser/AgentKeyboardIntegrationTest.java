@@ -191,4 +191,52 @@ public final class AgentKeyboardIntegrationTest {
         assertTrue(webCall(command("key",state,rich).put("key","END")).ok);assertTrue(webCall(command("insert",state,rich).put("text"," ami")).ok);assertEquals("\"bonjour ami\"",js("document.querySelector('[contenteditable]').textContent"));assertEquals("true",js("!!document.querySelector('[contenteditable] b')"));
         Reply enter=webCall(command("key",state,control(state,"Entrée")).put("key","ENTER"));assertTrue(enter.text,enter.ok);assertFalse(enter.json().getBoolean("submission_confirmed"));for(int i=0;i<25&&!"1".equals(js("window.enters"));i++)Thread.sleep(100);assertEquals("1",js("window.enters"));
     }
+    @Test public void richEditorReceivesOneTransactionAndClearsEntityNodes()throws Exception{
+        load("<body id='ready'><div id='caption' contenteditable='true' aria-label='Légende'>ancien <span contenteditable='false'>#tag</span></div><script>window.syntheticBefore=0;window.editorInputs=0;window.editorChanges=0;var e=document.getElementById('caption');e.addEventListener('beforeinput',event=>{if(!event.isTrusted){window.syntheticBefore++;e.appendChild(document.createTextNode(event.data||''));}});e.addEventListener('input',()=>window.editorInputs++);e.addEventListener('change',()=>window.editorChanges++);</script></body>");
+        JSONObject state=webState(),field=control(state,"Légende");
+        Reply typed=webCall(command("replace",state,field).put("text","CHK #Brume"));assertTrue(typed.text,typed.ok);
+        assertEquals("\"CHK #Brume\"",js("document.getElementById('caption').textContent"));
+        assertEquals("0",js("window.syntheticBefore"));assertEquals("1",js("window.editorInputs"));assertEquals("0",js("window.editorChanges"));
+        Reply cleared=webCall(command("clear",state,field));assertTrue(cleared.text,cleared.ok);
+        assertEquals("\"\"",js("document.getElementById('caption').textContent"));assertEquals("0",js("document.querySelectorAll('#caption [contenteditable=false]').length"));
+        assertEquals("2",js("window.editorInputs"));
+    }
+    @Test public void unsupportedRichCommandNeverMutatesFrameworkDom()throws Exception{
+        load("<body id='ready'><div contenteditable='true' aria-label='Légende'><b>intact</b></div><script>document.execCommand=function(){return false;};</script></body>");
+        JSONObject state=webState();Reply result=webCall(command("replace",state,control(state,"Légende")).put("text","nouveau"));
+        assertFalse(result.text,result.ok);assertEquals("\"<b>intact</b>\"",js("document.querySelector('[contenteditable]').innerHTML"));
+    }
+
+    @Test public void dialogAfterLargeLibraryOwnsTextFieldsAndShortSelectors()throws Exception{
+        load("<body id='ready'><main id='library'></main><div role='dialog' aria-modal='true' style='position:fixed;inset:0;background:white'><h1>Création active</h1><input aria-label='Titre du morceau' value='Brume'><div contenteditable='true' aria-label='Lyrics editor'>Paroles</div></div><script>document.getElementById('library').innerHTML='<button>Ancienne bibliothèque</button>'.repeat(6000);</script></body>");
+        JSONObject page=new JSONObject(new JSONArray("["+js(BrowserScripts.readPage())+"]").getString(0));
+        assertTrue(page.getString("text").contains("Création active"));assertFalse(page.getString("text").contains("Ancienne bibliothèque"));
+        assertEquals("Titre du morceau",page.getJSONArray("elements").getJSONObject(0).getString("label"));
+        assertTrue(page.getJSONArray("elements").getJSONObject(0).getString("selector").length()<100);
+        JSONObject form=new JSONObject(new JSONArray("["+js(BrowserScripts.getForm())+"]").getString(0));
+        JSONArray controls=form.getJSONArray("dynamic_controls");assertEquals(2,controls.length());assertFalse(form.getBoolean("dynamic_truncated"));
+    }
+    @Test public void hiddenDialogCannotCaptureInspectionAndHorizontalScrollIsMeasured()throws Exception{
+        load("<body id='ready'><h1>Page actuelle</h1><div role='dialog' style='display:none'>ancien dialogue</div><div id='horizontal' style='width:180px;height:80px;overflow-x:auto'><div style='width:1200px;height:60px'>large</div></div></body>");
+        JSONObject page=new JSONObject(new JSONArray("["+js(BrowserScripts.readPage())+"]").getString(0));assertTrue(page.getString("text").contains("Page actuelle"));
+        JSONObject moved=new JSONObject(new JSONArray("["+js(BrowserScripts.scrollContainer("right",200,"#horizontal",""))+"]").getString(0));
+        assertTrue(moved.toString(),moved.getBoolean("moved"));assertEquals("horizontal",moved.getString("axis"));assertEquals(200,moved.getInt("scroll_after"));
+        JSONObject restored=new JSONObject(new JSONArray("["+js(BrowserScripts.scrollContainer("left",200,"#horizontal",""))+"]").getString(0));assertEquals(0,restored.getInt("scroll_after"));
+    }
+
+    @Test public void navigationDeadlineSurvivesMissingJavascriptCallback()throws Exception{
+        AtomicReference<WebView> stalled=new AtomicReference<>();AtomicReference<android.webkit.ValueCallback<String>> late=new AtomicReference<>();AtomicInteger finished=new AtomicInteger();CountDownLatch done=new CountDownLatch(1);AtomicReference<String> result=new AtomicReference<>();
+        Field current=MainActivity.class.getDeclaredField("current");current.setAccessible(true);
+        try{
+            main(()->{
+                WebView fake=new WebView(context){@Override public String getUrl(){return "https://fixture.example/";}@Override public void evaluateJavascript(String script,android.webkit.ValueCallback<String> cb){late.set(cb);}};
+                stalled.set(fake);current.set(activity,fake);BrowserWebState.remember(fake,fake.getUrl());BrowserWebState.committed(fake,fake.getUrl());
+                Method verify=MainActivity.class.getDeclaredMethod("verifyNavigation",WebView.class,String.class,long.class,int.class,AgentClient.ResultCallback.class);verify.setAccessible(true);
+                verify.invoke(activity,fake,fake.getUrl(),0L,1000,new AgentClient.ResultCallback(){public void finish(boolean ok,String text){finished.incrementAndGet();result.set(text);done.countDown();}});
+            });
+            assertTrue("Navigation deadline without JS reply",done.await(3,TimeUnit.SECONDS));assertTrue(result.get(),result.get().contains("résultat inconnu"));
+            main(()->{if(late.get()!=null)late.get().onReceiveValue("\"late\"");});assertEquals(1,finished.get());
+        }finally{main(()->{current.set(activity,web);if(stalled.get()!=null)stalled.get().destroy();});}
+    }
+
 }

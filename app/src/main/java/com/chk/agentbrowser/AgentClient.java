@@ -499,7 +499,7 @@ public final class AgentClient {
                     JSONObject cmd = new JSONObject().put("id", "local2-native")
                         .put("action", nativeAction).put("args", nativeArgs);
                     boolean allowed = WorkspaceCommands.handles(nativeAction)
-                        || KeyboardCommands.nativeTarget(cmd)
+                        || KeyboardCommands.handles(nativeAction,nativeArgs)
                         || DesktopCommands.handles(nativeAction,nativeArgs)
                         || nativeAction.equals(PublicationJobs.ACTION_SUBMIT)
                         || nativeAction.equals("download_file") || nativeAction.equals("upload_file") || nativeAction.equals("select_option")

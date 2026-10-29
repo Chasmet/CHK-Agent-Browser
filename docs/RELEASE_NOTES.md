@@ -1,3 +1,14 @@
+## Fiabilité des formulaires TikTok, Suno et YouTube — 29 octobre 2026
+
+- Les éditeurs enrichis reçoivent une seule transaction de saisie. Suppression du `beforeinput` synthétique en double, des événements `input/change` redondants et du repli qui forçait la modification du DOM en cas de refus. Le remplacement et l’effacement incluent les hashtags et autres entités non modifiables.
+- Les fenêtres de dialogue visibles sont inspectées avant la bibliothèque située derrière. Champs prioritaires, sélecteurs courts par attribut unique, et indication explicite des listes tronquées.
+- La commande directe `keyboard` fonctionne aussi pour le web avec les mêmes contrôles de contexte et de domaine que le transport de compatibilité.
+- Navigation visible et en arrière-plan : délai de secours indépendant de la réponse JavaScript. Une réponse tardive ne valide pas une seconde fois la commande ; aucune action n’est rejouée automatiquement.
+- Défilement horizontal gauche/droite mesuré, en complément des listes verticales et des colonnes d’heure ciblées.
+- Mise à jour par le pipeline signé existant ; aucune modification de l’identifiant du paquet, du jumelage ou des fichiers utilisateur.
+
+Ces correctifs sont vérifiés sur des reproductions locales et par les tests Android. Ils ne garantissent pas les changements futurs des sites. La programmation TikTok du test réel précédent n’a pas été validée ; ne pas la considérer comme effectuée.
+
 ## CHK Browser Local 3 — fiabilité YouTube et Suno (préparation après 1.0.454)
 
 - Le ciblage par libellé exact `label:Importer des vidéos` accepte désormais les véritables éléments ARIA `role=menuitem`, notamment les menus YouTube Studio, ainsi que les options et onglets. Les libellés ambigus sont toujours refusés.
