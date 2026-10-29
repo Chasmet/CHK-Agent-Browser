@@ -23,12 +23,12 @@ final class StudioAudioMixer {
             check(active);JSONObject c=sources.getJSONObject(i);File f=store.file(c.getString("path"));
             fingerprints.put(new JSONObject().put("path",c.getString("path")).put("sha256",WorkspaceTransfer.hash(f)));
         }
-        String key=AgentVision.digest(p.toString()+fingerprints.toString());
+        String key=AgentVision.digest(StudioMcp.canonical(audioSignature(p))+fingerprints.toString());
         File folder=new File(app.getCacheDir(),"studio-audio-v2");if(!folder.isDirectory()&&!folder.mkdirs())throw new IOException("MIX_STORAGE_UNAVAILABLE");
         File wav=new File(folder,key+".wav"),receipt=new File(folder,key+".json");
         if(wav.isFile()&&receipt.isFile()){
             JSONObject proof=StudioAutomation.read(receipt);
-            if(proof.optString("wav_sha256").equals(WorkspaceTransfer.hash(wav)))return new Render(wav,proof);
+            if(proof.optString("wav_sha256").equals(WorkspaceTransfer.hash(wav)))return new Render(wav,proof.put("project_id",p.optString("project_id")).put("revision",p.optInt("revision")));
             wav.delete();receipt.delete();
         }
         if(folder.getUsableSpace()<frames*12+32*1024*1024L)throw new IOException("MIX_STORAGE_LOW: espace PCM temporaire insuffisant");
@@ -79,11 +79,15 @@ final class StudioAudioMixer {
                     .put("project_id",p.optString("project_id")).put("revision",p.optInt("revision")).put("source_fingerprints",fingerprints)
                     .put("contributions",contributions).put("peak_before_dbfs",StudioAudio.db(peakBefore)).put("peak_after_dbfs",StudioAudio.db(peakAfter))
                     .put("rms_dbfs",StudioAudio.db(Math.sqrt(energy/(frames*2)))).put("limiter_ceiling_dbfs",-1).put("limiter_affected_frames",limited)
-                    .put("speech_engine",speech.isEmpty()?"disabled":"vosk_words_and_pcm_threshold").put("true_peak_verified",false).put("pitch_preserved_on_speed_change",false);
+                    .put("voice_regions",new JSONObject(speech)).put("speech_engine",speech.isEmpty()?"disabled":"vosk_words_and_pcm_threshold").put("true_peak_verified",false).put("pitch_preserved_on_speed_change",false);
                 // Only reusable, closed files become cache entries.
                 if(!partial.renameTo(wav))throw new IOException("MIX_FINALIZE_FAILED");proof.put("wav_sha256",WorkspaceTransfer.hash(wav));StudioAutomation.write(receipt,proof);progress.update(100);return new Render(wav,proof);
             }
         }finally{raw.delete();partial.delete();}
+    }
+    static JSONObject audioSignature(JSONObject p)throws Exception{
+        JSONObject out=new JSONObject().put("audio_model_version",2).put("mute_original",p.optBoolean("mute_original",false)).put("speech_language",p.optString("speech_language","fr")).put("audio_tracks",p.getJSONArray("audio_tracks"));
+        for(String lane:new String[]{"clips","audio"}){JSONArray input=p.optJSONArray(lane),items=new JSONArray();if(input!=null)for(int i=0;i<input.length();i++){JSONObject c=input.getJSONObject(i),item=new JSONObject();for(String key:new String[]{"studio_id","path","start_ms","duration_ms","speed","volume","mute","track_id","offset_ms","gain_keyframes","audio_fade_in_ms","audio_fade_out_ms"})if(c.has(key))item.put(key,c.get(key));items.put(item);}out.put(lane,items);}return out;
     }
     static boolean hasAudio(JSONObject info){
         JSONArray a=info.optJSONArray("tracks");if(a!=null)for(int i=0;i<a.length();i++)if(a.optJSONObject(i).optString("mime_type").startsWith("audio/"))return true;return info.optBoolean("has_audio");

@@ -24,6 +24,8 @@ final class StudioCrop {
         validate(value);return value;
     }
     static void validate(JSONObject c){
+        for(java.util.Iterator<String> keys=c.keys();keys.hasNext();){String key=keys.next();if(!java.util.Arrays.asList("x","y","width","height","degrees","flip_horizontal","flip_vertical","ratio").contains(key))throw new IllegalArgumentException("Paramètre spatial non pris en charge : "+key);}
+        if(c.has("ratio")&&!java.util.Arrays.asList("free","9:16","16:9","1:1","4:5").contains(c.optString("ratio")))throw new IllegalArgumentException("Ratio non pris en charge");
         double x=c.optDouble("x",Double.NaN),y=c.optDouble("y",Double.NaN);
         double w=c.optDouble("width",Double.NaN),h=c.optDouble("height",Double.NaN);
         double angle=c.optDouble("degrees",0);

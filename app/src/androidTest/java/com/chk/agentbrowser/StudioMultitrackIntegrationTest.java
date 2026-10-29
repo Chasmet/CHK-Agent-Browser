@@ -79,8 +79,29 @@ public final class StudioMultitrackIntegrationTest {
             InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{preview[0]=new StudioRenderPreview(app);preview[0].start(snapshot,new StudioRenderPreview.Result(){public void ready(File f){previewFile.set(f);latch.countDown();}public void failed(String e){error.set(e);latch.countDown();}});});
             assertTrue(latch.await(120,TimeUnit.SECONDS));assertNull(error.get());proof("studio-crop-preview.mp4",previewFile.get());InstrumentationRegistry.getInstrumentation().runOnMainSync(()->preview[0].cancel());
             engine("video_editor_export",new JSONObject().put("replace",true));awaitExport();assertEquals(2000,StudioEdits.total(VideoEditorEngine.get().load(app)));proof("studio-crop-proof.mp4",store.file("studio-crop-proof.mp4"));proof("studio-vertical-source.mp4",store.file("studio-vertical-source.mp4"));
-            JSONObject metadata=MediaInspection.info(app,"studio-crop-proof.mp4");assertEquals(480,metadata.getInt("width"));assertTrue(metadata.getInt("height")>500&&metadata.getInt("height")<560);
+            JSONObject metadata=MediaInspection.info(app,"studio-crop-proof.mp4");assertEquals(480,metadata.getInt("width"));assertTrue(metadata.toString(),metadata.getInt("height")>500&&metadata.getInt("height")<560);
         }finally{store.file(image).delete();}
+    }
+    @Test public void realHumanVoiceSurvivesMusicAndVoskDucking()throws Exception{
+        String speech="human-"+UUID.randomUUID()+".wav";
+        try(InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("vosk-human-speech.wav");OutputStream out=new FileOutputStream(store.file(speech))){byte[] b=new byte[8192];int n;while((n=in.read(b))>0)out.write(b,0,n);}
+        try{
+            JSONObject source=p("studio-human-source.mp4").put("mute_original",true).put("clips",new JSONArray().put(new JSONObject().put("path",video).put("duration_ms",3000)).put(new JSONObject().put("path",video).put("duration_ms",3000)).put(new JSONObject().put("path",video).put("duration_ms",2000)))
+                .put("audio",new JSONArray().put(new JSONObject().put("path",speech).put("duration_ms",8000)));
+            create(source);engine("video_editor_export",new JSONObject().put("replace",true));awaitExport();
+            JSONObject p=new JSONObject(source.toString()).put("name","Human speech and ducking").put("speech_language","en").put("output","studio-human-mixed.mp4").put("mute_original",false)
+                .put("clips",new JSONArray().put(new JSONObject().put("path","studio-human-source.mp4").put("duration_ms",8000).put("volume",1)))
+                .put("audio",new JSONArray().put(new JSONObject().put("path",music).put("duration_ms",3000).put("volume",.15)).put(new JSONObject().put("path",music).put("duration_ms",3000).put("volume",.15)).put(new JSONObject().put("path",music).put("duration_ms",2000).put("volume",.15)));
+            p=create(p);StudioAudio.enable(p);StudioAudio.ids(p);StudioProjectLibrary.save(app,p);
+            StudioAudioMixer.Render baseline=StudioAudioMixer.render(app,p,null,n->{});proof("studio-human-baseline.wav",baseline.wav);
+            StudioAudio.track(p,"audio").put("ducking",new JSONObject().put("enabled",true).put("voice_track_id","original").put("reduction_db",-18).put("threshold_dbfs",-55).put("attack_ms",60).put("release_ms",100));
+            p.put("revision",p.getInt("revision")+1);StudioProjectLibrary.save(app,p);
+            StudioAudioMixer.Render rendered=StudioAudioMixer.render(app,p,null,n->{});JSONArray voice=rendered.proof.getJSONObject("voice_regions").getJSONArray("original");assertTrue("Actual Vosk recognition must find spoken words",voice.length()>3);
+            assertEquals("vosk_words_and_pcm_threshold",rendered.proof.getString("speech_engine"));assertEquals(4,rendered.proof.getJSONArray("contributions").length());
+            proof("studio-human-mixed.wav",rendered.wav);saveProof("studio-human-proof.json",rendered.proof);proof("studio-human-source.mp4",store.file("studio-human-source.mp4"));
+            engine("video_editor_export",new JSONObject().put("replace",true));awaitExport();proof("studio-human-mixed.mp4",store.file("studio-human-mixed.mp4"));
+            assertFalse(StudioAudioAnalysis.measure(app,"studio-human-mixed.mp4",0,8000,null).getBoolean("sample_clipping_detected"));
+        }finally{store.file(speech).delete();}
     }
     void awaitExport()throws Exception{long end=System.currentTimeMillis()+180000;while(System.currentTimeMillis()<end){String state=VideoEditorEngine.get().status().optString("state");if(!state.equals("running")&&!state.equals("preparing")){assertEquals(VideoEditorEngine.get().status().toString(),"completed",state);return;}Thread.sleep(200);}fail("Export timeout");}
     double tone(File f,int frequency)throws Exception{

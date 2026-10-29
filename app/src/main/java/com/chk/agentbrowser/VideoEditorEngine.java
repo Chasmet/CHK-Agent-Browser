@@ -575,6 +575,7 @@ public final class VideoEditorEngine {
         for(int i=0;i<clips.length();i++){
             JSONObject c=clips.getJSONObject(i);long len=c.optLong("duration_ms",10000);
             List<androidx.media3.common.Effect> fx=effects(c.optString("filter","aucun"),len,c.optLong("fade_ms",0));
+            if(c.has("crop"))fx.addAll(StudioCrop.effects(c));
             if(c.has("grade_exposure")||c.has("grade_warmth")||c.has("grade_saturation")||
                c.has("grade_exposure_end")||c.has("grade_warmth_end")||c.has("grade_saturation_end"))
                 fx.add(gradedColor(c,len));
@@ -589,7 +590,6 @@ public final class VideoEditorEngine {
                     matrix.setScale(z,z);matrix.postTranslate(x0+(x1-x0)*t,y0+(y1-y0)*t);return matrix;
                 });
             }
-            if(c.has("crop"))fx.addAll(StudioCrop.effects(c));
             if(c.optDouble("rotation",0)!=0)fx.add(new androidx.media3.effect.ScaleAndRotateTransformation.Builder().setRotationDegrees((float)c.optDouble("rotation")).build());
             String caption=c.optString("text","");
             if(!caption.isEmpty()){

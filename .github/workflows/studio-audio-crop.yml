@@ -39,10 +39,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: |
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.StudioAudioCropTest,com.chk.agentbrowser.StudioMultitrackIntegrationTest,com.chk.agentbrowser.StudioTouchIntegrationTest,com.chk.agentbrowser.Local3IndependenceTest
-            mkdir -p app/build/studio-proof
-            adb exec-out run-as com.chk.agentbrowser.debug tar -C files/studio-proof -cf - . | tar -xf - -C app/build/studio-proof
+          script: bash validation/studio_android_checks.sh
       - name: Independent FFmpeg verification
         run: |
           sudo apt-get update -qq
