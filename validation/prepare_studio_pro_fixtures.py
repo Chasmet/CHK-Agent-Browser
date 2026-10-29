@@ -11,7 +11,10 @@ if not speech.exists():
         data=response.read(5_000_001)
     if len(data)>5_000_000: raise RuntimeError('Speech fixture unexpectedly large')
     speech.write_bytes(data)
-print('Public speech SHA256', hashlib.sha256(speech.read_bytes()).hexdigest())
+digest = hashlib.sha256(speech.read_bytes()).hexdigest()
+if digest != 'c65fcd726d6b08c82c1e5dc7558f863cd8d483e3ed2f4a7bcf271dc1865ada14':
+    raise RuntimeError('Public speech fixture SHA256 changed; review the upstream source')
+print('Public speech SHA256', digest)
 
 def ffmpeg(*args):
     subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y',*args], check=True)

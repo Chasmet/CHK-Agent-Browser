@@ -39,7 +39,10 @@ jobs:
       - name: Vérifier les scripts navigateur et la reconnexion
         run: bash validation/check.sh
       - name: Préparer voix publique, audio et vidéo de test
-        run: python3 validation/prepare_studio_pro_fixtures.py
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg gnupg
+          python3 validation/prepare_studio_pro_fixtures.py
       - name: Vérifier Tor Browser officiel pour le test réseau isolé
         run: python3 validation/prepare_tor_browser_test.py
       - name: Compiler APK debug
