@@ -10,7 +10,7 @@ CHK Universal Control PC 1.0.4 et tous les fichiers `pc/` sont inchangés.
 Le serveur 1.0.4 conserve son catalogue : les nouvelles opérations utilisent son action `desktop` déjà autorisée.
 Utiliser `apps_list` pour choisir l'application Android et relire chaque tâche avec `task_get`.
 Une tâche `queued` ou `running` ne prouve aucune modification.
-Sur le téléphone encore en 1.0.476, l'essai réel `desktop / tool=studio / capabilities` a retourné `failed`, « Outil IA inconnu ».
+Lors du premier contrôle sur le téléphone en 1.0.476, l'essai réel `desktop / tool=studio / capabilities` a retourné `failed`, « Outil IA inconnu ».
 Les nouvelles opérations attendent donc l'installation d'un APK qui les contient.
 
 ```json
@@ -150,3 +150,5 @@ Le rééchantillonnage du mode audio v2 modifie la hauteur lors des changements 
 Le limiteur contrôle les crêtes échantillon ; le true peak inter-échantillons doit être contrôlé indépendamment. La mesure LUFS native utilise la pondération K et les portes BS.1770, pour le mono et la stéréo ; le script FFmpeg la compare au décodage indépendant des exports de test.
 
 Validation AAC : le contrôle indépendant recherche le décalage du signal décodé sur ±2048 échantillons à 48 kHz, refuse tout décalage supérieur à 20 ms et exige un gain médian de voix entre 90 et 110 %. Cette mesure ne prouve pas la synchronisation labiale sur un tournage humain.
+
+Dernière lecture du téléphone : version 1.0.520, correspondant à la Release Cut indépendante de cette branche. Le contrôle `desktop/tool=studio/capabilities` y retourne aussi `failed`, « Outil IA inconnu ». Les nouvelles fonctions Studio/Tor ne sont pas installées.
