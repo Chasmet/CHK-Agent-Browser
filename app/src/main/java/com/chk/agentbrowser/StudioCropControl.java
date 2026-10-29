@@ -65,12 +65,14 @@ final class StudioCropControl {
                 JSONObject crop=rect(c);
                 if(op.equals("open")||op.equals("apply")){
                     if(op.equals("apply"))guard(p,args);
-                    cb.completed(true,view(app,p,id,crop).put("state","completed").toString());
+                    JSONObject info=view(app,p,id,crop).put("state","completed");
+                    if(op.equals("apply"))info.put("applied",true).put("rendered",false)
+                        .put("note","Le projet existant a été relu; exporter pour vérifier les pixels finaux.");
+                    cb.completed(true,info.toString());
                     return;
                 }
                 if(op.equals("preview")){
-                    cb.completed(false,new JSONObject().put("state","unconfirmed")
-                        .put("reason","La capture doit venir du moteur rendu. Dans Studio, utiliser Aperçu rendu ; aucune capture brute ne sera présentée comme exportée.").toString());
+                    StudioCropPreview.render(app,new JSONObject(p.toString()),id,cb);
                     return;
                 }
                 guard(p,args);
