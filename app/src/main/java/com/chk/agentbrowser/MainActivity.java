@@ -114,6 +114,7 @@ public class MainActivity extends Activity {
             if(BrowserWebState.alive(current)){beginNavigation(current);current.loadUrl(BrowserWebState.url(current));}
         });
         findViewById(R.id.nav_browser).setOnClickListener(v->showSpace("browser"));
+        findViewById(R.id.nav_tor).setOnClickListener(v->startActivity(new Intent(this,TorEntryActivity.class)));
         findViewById(R.id.nav_files).setOnClickListener(v->showSpace("files"));
         findViewById(R.id.nav_notes).setOnClickListener(v->showSpace("notes"));
         findViewById(R.id.nav_video).setOnClickListener(v->startActivity(new Intent(this,StudioProjectsActivity.class)));

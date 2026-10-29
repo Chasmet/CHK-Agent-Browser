@@ -276,6 +276,7 @@ public final class VideoEditorActivity extends Activity {
             tool("◎","Audit local",()->offlineAudit());tool("◉","Étalonnage",()->gradeMenu());tool("▣","File exports",()->exportQueue());
         }else{
             tool("✂","Diviser",()->split());tool("◷","Durée",()->trim(false,selected));tool("▷","Vitesse",()->speed());
+            if(clip()!=null)tool("▣","Recadrer",()->cropEditor());
             tool("◉","Volume",()->{selectedAudio=-1;volume();});tool("▣","Dupliquer",()->duplicate());tool("×","Supprimer",()->delete(false,selected));
             tool("⇄","Déplacer",()->move());tool("◁","−1 image",()->stepFrame(-1));tool("▷","+1 image",()->stepFrame(1));
         }
@@ -496,7 +497,7 @@ public final class VideoEditorActivity extends Activity {
         JSONObject c=clips().optJSONObject(i);
         if(c==null)return;
         player.setPlaybackSpeed((float)c.optDouble("speed",1));
-        player.setVolume(project.optBoolean("mute_original",audio().length()>0)||c.optBoolean("mute",false)?0:(float)c.optDouble("volume",1));
+        player.setVolume(project.optBoolean("mute_original",false)||c.optBoolean("mute",false)?0:(float)c.optDouble("volume",1));
         boolean changed=selected!=i;selected=i;updateCaption();if(changed&&selectedAudio<0)updateSelectionTools();
     }
     private void updateCaption(){
@@ -663,13 +664,86 @@ public final class VideoEditorActivity extends Activity {
     private void volume(){
         if(project==null||saving||importing)return;JSONObject target=selectedAudio>=0?audio().optJSONObject(selectedAudio):clip();if(target==null)return;
         boolean sound=selectedAudio>=0;int base=revision;LinearLayout box=MobileUi.column(this);TextView value=MobileUi.text(this,"",16,MobileUi.TEXT);box.addView(value);
-        SeekBar slider=new SeekBar(this);slider.setTag("studio_volume_slider");slider.setMax(100);slider.setProgress(!sound&&(project.optBoolean("mute_original",audio().length()>0)||target.optBoolean("mute",false))?0:(int)Math.round(target.optDouble("volume",1)*100));box.addView(slider);
-        Runnable update=()->{value.setText("Volume · "+slider.getProgress()+" %");if(sound)audioPlayer.setVolume(slider.getProgress()/100f);else player.setVolume(slider.getProgress()/100f);};
+        SeekBar slider=new SeekBar(this);slider.setTag("studio_volume_slider");slider.setMax(200);slider.setProgress(!sound&&(project.optBoolean("mute_original",false)||target.optBoolean("mute",false))?0:(int)Math.round(target.optDouble("volume",1)*100));box.addView(slider);
+        Runnable update=()->{double gain=slider.getProgress()/100.0;value.setText("Volume · "+slider.getProgress()+" % · "+(gain<=0?"−∞ dB":String.format(java.util.Locale.FRANCE,"%+.1f dB",20*Math.log10(gain))));if(sound)audioPlayer.setVolume(slider.getProgress()/100f);else player.setVolume(slider.getProgress()/100f);};
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar b,int n,boolean user){update.run();}public void onStartTrackingTouch(SeekBar b){}public void onStopTrackingTouch(SeekBar b){}});
         TextView listen=chip("▶ Écouter / pause");box.addView(listen);listen.setOnClickListener(v->{if(player.isPlaying())pausePreview();else{playPreview();update.run();}});
         update.run();StudioSheet.show(this,sound?"Volume de la piste audio":"Volume du plan",box,()->{pausePreview();if(revision!=base||saving){configureCurrentClip();configureAudio();toast("Projet modifié : rouvre le réglage");return;}try{remember();if(sound)target.put("volume",slider.getProgress()/100.0);else StudioEdits.clipVolume(project,target,slider.getProgress()/100.0);save();}catch(Exception e){toast(e.getMessage());}},()->{pausePreview();configureCurrentClip();configureAudio();});
     }
     private void configureAudio(){if(audioPlayer==null||audio().length()==0)return;JSONObject c=audio().optJSONObject(Math.min(audio().length()-1,Math.max(0,audioPlayer.getCurrentMediaItemIndex())));if(c!=null)audioPlayer.setVolume((float)c.optDouble("volume",1));}
+    /** Cropping the selected clip does not alter its source, duration or other tracks. */
+    private void cropEditor(){
+        if(!editable()||clip()==null)return;
+        pausePreview();
+        final int base=revision;
+        final JSONObject selectedClip=clip();
+        final JSONObject currentCrop;
+        try{currentCrop=StudioCrop.read(selectedClip);}
+        catch(Exception e){toast(e.getMessage());return;}
+        LinearLayout box=MobileUi.column(this);
+        StudioCropView editor=new StudioCropView(this);
+        box.addView(editor,new LinearLayout.LayoutParams(-1,dp(255)));
+        try{
+            java.io.File input=new WorkspaceStore(this).file(selectedClip.getString("path"));
+            android.graphics.Bitmap frame=null;
+            if(StudioImages.isImage(input))frame=android.graphics.BitmapFactory.decodeFile(input.getAbsolutePath());
+            else{
+                android.media.MediaMetadataRetriever retriever=new android.media.MediaMetadataRetriever();
+                try{retriever.setDataSource(input.getAbsolutePath());
+                    frame=retriever.getFrameAtTime(selectedClip.optLong("start_ms")*1000);
+                }finally{retriever.release();}
+            }
+            if(frame!=null){
+                if(frame.getWidth()>960||frame.getHeight()>960){
+                    float shrink=Math.min(960f/frame.getWidth(),960f/frame.getHeight());
+                    frame=android.graphics.Bitmap.createScaledBitmap(frame,Math.max(1,Math.round(frame.getWidth()*shrink)),Math.max(1,Math.round(frame.getHeight()*shrink)),true);
+                }
+                editor.source(frame);
+            }
+            editor.setCrop(currentCrop.getDouble("x"),currentCrop.getDouble("y"),
+                currentCrop.getDouble("width"),currentCrop.getDouble("height"));
+        }catch(Exception e){toast("Miniature inaccessible : "+e.getMessage());}
+        LinearLayout ratios=new LinearLayout(this);
+        box.addView(ratios);
+        for(String r:new String[]{"Libre","9:16","16:9","1:1","4:5"}){
+            TextView btn=chip(r);btn.setTextSize(11);
+            ratios.addView(btn,new LinearLayout.LayoutParams(0,dp(44),1));
+            btn.setOnClickListener(v->{
+                float aspect=0;
+                if(!r.equals("Libre")){String[] parts=r.split(":");aspect=Float.parseFloat(parts[0])/Float.parseFloat(parts[1]);}
+                editor.setRatio(aspect);
+            });
+        }
+        TextView readout=MobileUi.text(this,"Rotation · "+currentCrop.optDouble("degrees",0)+"°",14,MobileUi.TEXT);
+        box.addView(readout);
+        SeekBar rotation=new SeekBar(this);rotation.setMax(360);
+        rotation.setProgress(180+(int)Math.round(currentCrop.optDouble("degrees",0)));
+        box.addView(rotation);
+        rotation.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onProgressChanged(SeekBar b,int n,boolean user){readout.setText("Rotation · "+(n-180)+"°");}
+            public void onStartTrackingTouch(SeekBar b){}
+            public void onStopTrackingTouch(SeekBar b){}
+        });
+        android.widget.CheckBox horizontal=new android.widget.CheckBox(this);
+        horizontal.setText("Inverser horizontalement");horizontal.setChecked(currentCrop.optBoolean("flip_horizontal"));
+        box.addView(horizontal);
+        android.widget.CheckBox vertical=new android.widget.CheckBox(this);
+        vertical.setText("Inverser verticalement");vertical.setChecked(currentCrop.optBoolean("flip_vertical"));
+        box.addView(vertical);
+        TextView reset=chip("Réinitialiser le cadre");box.addView(reset);
+        reset.setOnClickListener(v->{editor.setRatio(0);editor.setCrop(0,0,1,1);rotation.setProgress(180);horizontal.setChecked(false);vertical.setChecked(false);});
+        StudioSheet.show(this,"Recadrer le plan "+(selected+1)+" · poignées aux 4 coins",box,()->{
+            if(base!=revision||saving){toast("Projet modifié : rouvrir Recadrer");return;}
+            try{
+                JSONObject crop=new JSONObject().put("x",editor.left()).put("y",editor.top())
+                    .put("width",editor.widthNorm()).put("height",editor.heightNorm())
+                    .put("degrees",rotation.getProgress()-180)
+                    .put("flip_horizontal",horizontal.isChecked()).put("flip_vertical",vertical.isChecked());
+                StudioCrop.validate(crop);
+                remember();selectedClip.put("crop",crop);save();
+            }catch(Exception e){toast("Recadrage non sauvegardé : "+e.getMessage());}
+        },()->{});
+    }
     private void rotation(){if(!editable())return;new AgentDialog.Builder(this).setTitle("Rotation du plan").setItems(new String[]{"0°","90°","180°","−90°"},(d,n)->put(clip(),"rotation",new int[]{0,90,180,-90}[n])).show();}
     private void mute(){if(project==null)return;new AgentDialog.Builder(this).setTitle("Son").setItems(new String[]{"Conserver le son des vidéos","Couper le son des vidéos","Couper ce plan","Rétablir ce plan"},(d,n)->{if(n==0){try{remember();project.put("mute_original",false);for(int i=0;i<clips().length();i++)clips().getJSONObject(i).put("mute",false);save();}catch(Exception e){toast(e.getMessage());}}else if(n==1)put(project,"mute_original",true);else if(clip()!=null)put(clip(),"mute",n==2);}).show();}
     private void move(){new AgentDialog.Builder(this).setTitle("Déplacer le plan").setItems(new String[]{"Vers la gauche","Vers la droite"},(d,n)->{int to=selected+(n==0?-1:1);if(to<0||to>=clips().length())return;try{remember();Object a=clips().get(selected),b=clips().get(to);clips().put(selected,b);clips().put(to,a);selected=to;editSeek=start(to);save();}catch(Exception ignored){}}).show();}

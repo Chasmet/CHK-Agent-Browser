@@ -1,3 +1,14 @@
+## CHK Studio et espace Tor — développement en cours (branche de validation)
+
+- Une nouvelle entrée « Tor » ouvre **l'application Tor Browser officielle**, isolée du WebView CHK. Aucune connexion Tor, protection DNS ou visite .onion n'est annoncée comme vérifiée par CHK; ces vérifications doivent être réalisées dans Tor Browser. Le bouton « Déconnexion » explique la limite : CHK ne peut pas fermer une session appartenant à une application externe.
+- Correction du projet mixte : le moteur conserve l'audio original par défaut quand une piste musicale existe. Changer le volume d'un clip ne désactive plus les autres clips ni les pistes externes.
+- Volume local de 0 à 200 %, lecture du gain en décibels (20·log10(gain), −∞ dB pour le silence), aperçu et export Media3.
+- Outil « Recadrer » dans Studio : quatre coins, déplacement, choix de ratios, rotation, inversion, sauvegarde par clip. Le moteur Media3 applique la transformation non destructive à la composition d'aperçu et d'export. La comparaison pixel à pixel avec un MP4 exporté reste à confirmer.
+- Accès MCP via l'action `desktop` existante et `args.tool="studio"` : audio_tracks, audio_set_volume, crop_open, crop_set/move/resize/rotate/flip, crop_apply. Les écritures exigent projet, révision et identifiant de requête; aucune action MCP ne prétend qu'un MP4 a été vérifié simplement parce que le projet est enregistré.
+- Régressions automatisées ajoutées pour l'absence de mute collatéral et les contraintes géométriques de recadrage.
+
+**Limites et fonctions non encore livrées** : navigateur Tor intégré, statut Tor vérifié par CHK, vraie déconnexion Tor depuis CHK, mixage audio indépendant avec automation de volume/ducking/limiteur, capture crop réellement issue du rendu, vérification indépendante des MP4. La branche de validation ne doit pas être présentée comme mise à jour finale complète.
+
 ## Correction des accusés MCP et reprises sans doublons — 29 octobre 2026
 
 - Après l'expiration d'un retour `evaluateJavascript`, `VerifiedClick` vérifie indépendamment la nouvelle URL ou la condition DOM pendant une fenêtre bornée, sans envoyer de second clic. Une action reste incertaine sans preuve.

@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <queries><package android:name="org.torproject.torbrowser" /></queries>
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -45,6 +46,7 @@
         <activity android:name=".CutStudioLibraryActivity" android:exported="false" />
         <activity android:name=".CutStudioSettingsActivity" android:exported="false" />
         <activity android:name=".CutStudioActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".TorEntryActivity" android:exported="false" />
         <activity android:name=".StudioProjectsActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".VideoEditorActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".FileViewerActivity" android:exported="false" android:configChanges="orientation|screenSize" android:windowSoftInputMode="adjustResize" />
