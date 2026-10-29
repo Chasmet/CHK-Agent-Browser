@@ -21,8 +21,7 @@ final class StudioCropPreview {
             return;
         }
         try{
-            if(!id.matches("video:[0-9]{1,3}"))throw new IllegalArgumentException("clip_id attendu: video:0");
-            int index=Integer.parseInt(id.substring(6));
+            int index=StudioCropControl.clipIndex(project,id);
             JSONObject source=project.getJSONArray("clips").getJSONObject(index);
             JSONObject brief=new JSONObject(project.toString());
             JSONObject item=new JSONObject(source.toString());

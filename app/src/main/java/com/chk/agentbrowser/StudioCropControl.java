@@ -49,11 +49,21 @@ final class StudioCropControl {
             return m;
         };
     }
+    static int clipIndex(JSONObject p,String id)throws Exception{
+        if(!id.matches("video:([0-9]{1,3}|[a-f0-9-]{36})"))
+            throw new IllegalArgumentException("clip_id attendu : video:<media_id>");
+        String selector=id.substring(6);JSONArray arr=p.getJSONArray("clips");
+        if(selector.matches("[0-9]{1,3}")){
+            int index=Integer.parseInt(selector);
+            if(index>=arr.length())throw new IllegalArgumentException("Plan absent");
+            return index;
+        }
+        for(int i=0;i<arr.length();i++)
+            if(selector.equals(arr.getJSONObject(i).optString("media_id")))return i;
+        throw new IllegalArgumentException("Plan introuvable");
+    }
     private static JSONObject clip(JSONObject p,String id)throws Exception{
-        if(!id.matches("video:[0-9]{1,3}"))throw new IllegalArgumentException("clip_id requis (video:0)");
-        int n=Integer.parseInt(id.substring(6));JSONArray arr=p.getJSONArray("clips");
-        if(n>=arr.length())throw new IllegalArgumentException("Plan absent");
-        return arr.getJSONObject(n);
+        return p.getJSONArray("clips").getJSONObject(clipIndex(p,id));
     }
     static void command(Context app,String action,JSONObject args,VideoEditorEngine.Done cb){
         VideoEditorEngine.DISK.execute(()->{

@@ -102,11 +102,20 @@ final class StudioAudioControl {
         if(status.equals("running")||status.equals("preparing"))throw new IllegalStateException("Export actif");
     }
     private static JSONObject target(JSONObject p,String id)throws Exception{
-        if(!id.matches("(audio|video):[0-9]{1,3}"))throw new IllegalArgumentException("target_id : audio:0 ou video:0");
-        String[] parts=id.split(":");int index=Integer.parseInt(parts[1]);
+        if(!id.matches("(audio|video):([0-9]{1,3}|[a-f0-9-]{36})"))
+            throw new IllegalArgumentException("target_id attendu : audio:<media_id> ou video:<media_id>");
+        String[] parts=id.split(":",2);String selector=parts[1];
         JSONArray tracks=p.optJSONArray(parts[0].equals("audio")?"audio":"clips");
-        if(tracks==null||index>=tracks.length())throw new IllegalArgumentException("Piste inexistante");
-        return tracks.getJSONObject(index);
+        if(tracks==null)throw new IllegalArgumentException("Piste inexistante");
+        if(selector.matches("[0-9]{1,3}")){
+            int index=Integer.parseInt(selector);
+            if(index>=tracks.length())throw new IllegalArgumentException("Index de piste inexistant");
+            return tracks.getJSONObject(index);
+        }
+        for(int i=0;i<tracks.length();i++)
+            if(selector.equals(tracks.getJSONObject(i).optString("media_id")))
+                return tracks.getJSONObject(i);
+        throw new IllegalArgumentException("Identité de piste introuvable");
     }
     private static JSONObject tracks(JSONObject p)throws Exception{
         JSONArray result=new JSONArray();
@@ -117,7 +126,7 @@ final class StudioAudioControl {
             for(int i=0;i<arr.length();i++){
                 JSONObject c=arr.getJSONObject(i);
                 long offset=c.optLong("offset_ms",elapsed),duration=c.optLong("duration_ms");
-                result.put(new JSONObject().put("target_id",kind+":"+i).put("kind",kind)
+                result.put(new JSONObject().put("target_id",kind+":"+c.optString("media_id",String.valueOf(i))).put("legacy_selector",kind+":"+i).put("kind",kind)
                     .put("path",c.optString("path")).put("start_ms",c.optLong("start_ms"))
                     .put("offset_ms",offset).put("duration_ms",duration)
                     .put("volume_percent",100*c.optDouble("volume",1))
