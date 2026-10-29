@@ -44,9 +44,6 @@ final class StudioMcp {
         if(op.equals("crop_open")||op.equals("crop_apply"))return cropResult(app,p,target,index);
         if(!op.equals("audio_set_volume")&&!op.matches("crop_(set|move|resize|rotate|flip)"))
             throw new Exception("Opération Studio inconnue ou non prise en charge : "+op);
-        if(!args.has("project_id")||pid.isEmpty()||!args.has("expected_revision")||
-           args.getInt("expected_revision")!=p.optInt("revision",0))
-            throw new Exception("Révision de projet incompatible : relire audio_tracks ou crop_open");
         String id=args.getString("request_id");
         if(!id.matches("[A-Za-z0-9_-]{1,80}"))throw new Exception("request_id stable requis");
         File journal=AgentFiles.journal(app,"studio",id);
@@ -58,6 +55,11 @@ final class StudioMcp {
             JSONObject receipt=new JSONObject(saved.getJSONObject("result").toString());
             return receipt.put("replayed",true);
         }
+        // Replays are resolved before checking the current revision: the first
+        // successful edit legitimately incremented that revision.
+        if(!args.has("project_id")||pid.isEmpty()||!args.has("expected_revision")||
+           args.getInt("expected_revision")!=p.optInt("revision",0))
+            throw new Exception("Révision de projet incompatible : relire audio_tracks ou crop_open");
         String state=VideoEditorEngine.get().status().optString("state");
         if(state.equals("preparing")||state.equals("running"))throw new Exception("Export en cours : édition suspendue");
         if(op.equals("audio_set_volume")){
