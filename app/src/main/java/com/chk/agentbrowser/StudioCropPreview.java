@@ -44,7 +44,7 @@ final class StudioCropPreview {
                                 MediaMetadataRetriever.OPTION_CLOSEST,480,480);
                             if(frame==null)throw new IllegalStateException("Aucune image décodable dans le MP4 Media3 de prévisualisation");
                             WorkspaceStore store=new WorkspaceStore(app);
-                            store.mkdir("studio-previews");
+                            if(!store.file("studio-previews").isDirectory())store.mkdir("studio-previews");
                             String path="studio-previews/crop-"+UUID.randomUUID()+".jpg";
                             File jpg=store.file(path);
                             try(FileOutputStream out=new FileOutputStream(jpg)){
