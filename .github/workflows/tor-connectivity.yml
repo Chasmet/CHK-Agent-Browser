@@ -2,7 +2,7 @@ name: Tor isolated engine verification
 on:
   push:
     branches: [feature/local3-studio-tor-20261029]
-    paths: ['validation/probe_tor_bundle.py', '.github/workflows/tor-connectivity.yml', 'app/**Tor**', 'app/build.gradle', 'settings.gradle']
+    paths: ['validation/probe_tor_bundle.py', '.github/workflows/tor-connectivity.yml', 'app/**Tor**', 'app/build.gradle', 'settings.gradle', 'tor-wrapper/**', 'validation/tor_android_checks.sh']
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,7 +21,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -33,12 +33,24 @@ jobs:
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug lintDebug assembleDebugAndroidTest :tor-wrapper:lintDebug
+          ./gradlew --no-daemon assembleDebug lintDebug :app:assembleDebugAndroidTest :tor-wrapper:lintDebug
+      - name: KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Real Tor circuit and onion on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: aosp_atd
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: bash validation/tor_android_checks.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: tor-build-${{ github.sha }}
           path: |
+            app/build/tor-proof/
             app/build/reports/
             tor-wrapper/build/reports/
             app/build/outputs/apk/debug/*.apk

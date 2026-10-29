@@ -51,7 +51,7 @@ final class TorRuntime {
             ProxyController.getInstance().setProxyOverride(proxy(1),main::post,()->{});
         }catch(Exception e){policy.fail(policy.generation(),e.getMessage());}
     }
-    private static ProxyConfig proxy(int port){return new ProxyConfig.Builder().addProxyRule("http://127.0.0.1:"+port).removeImplicitRules().build();}
+    private static ProxyConfig proxy(int port){return new ProxyConfig.Builder().addProxyRule("socks://127.0.0.1:"+port).removeImplicitRules().build();}
     JSONObject status()throws Exception{
         long now=SystemClock.elapsedRealtime();if(policy.state().equals("connected")&&!policy.usable(now))block("TOR_PROOF_EXPIRED");
         return new JSONObject().put("state","completed").put("session_id",sessionId).put("generation",policy.generation())
@@ -107,7 +107,7 @@ final class TorRuntime {
                         JSONObject proof=TorHttp.diagnostic(httpPort);
                         main.post(()->{
                             if(ticket!=policy.generation())return;
-                            try{ProxyController.getInstance().setProxyOverride(proxy(httpPort),main::post,()->{
+                            try{ProxyController.getInstance().setProxyOverride(proxy(socksPort),main::post,()->{
                                 if(ticket!=policy.generation())return;proxyReady=true;diagnostic=proof;
                                 if(!policy.confirm(ticket,true,true,SystemClock.elapsedRealtime())){finishConnect(false);return;}
                                 bootstrap=100;finishConnect(true);startWatch();

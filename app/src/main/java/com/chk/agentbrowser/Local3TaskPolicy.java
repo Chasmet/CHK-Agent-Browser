@@ -8,7 +8,7 @@ final class Local3TaskPolicy {
     static JSONObject args(String a,JSONObject p){JSONObject nested=a.equals("android_action")?p.optJSONObject("args"):null;return nested==null?p:nested;}
     static long timeout(String a,JSONObject args){
         String name=action(a,args);JSONObject p=args(a,args);
-        if(name.equals("desktop")&&p.optString("tool").equals("tor")&&java.util.Arrays.asList("connect","tor_connect").contains(p.optString("operation")))return 330000L;
+        if(name.equals("desktop")&&p.optString("tool").equals("tor")&&java.util.Arrays.asList("connect","tor_connect").contains(p.optString("operation")))return 390000L;
         if(name.equals("desktop")&&p.optString("tool").equals("tor"))return 120000L;
         if(name.equals("desktop")&&p.optString("tool").equals("studio")&&java.util.Arrays.asList("audio_mix","audio_analyze","audio_verify","crop_preview").contains(StudioMcp.operation(p)))return 900000L;
         if(TransferLimits.longOperation(name)||name.equals("media_transcribe")||name.equals("video_editor_subtitles_generate")||name.equals("desktop")&&p.optString("tool").equals("hearing")&&p.optString("operation").equals("transcribe"))return 900000L;

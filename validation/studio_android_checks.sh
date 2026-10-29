@@ -7,4 +7,4 @@ collect_studio_proof() {
 }
 bash validation/install_studio_test_model.sh
 trap collect_studio_proof EXIT
-./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.StudioAudioCropTest,com.chk.agentbrowser.StudioMultitrackIntegrationTest,com.chk.agentbrowser.StudioTouchIntegrationTest,com.chk.agentbrowser.Local3IndependenceTest
+./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.StudioAudioCropTest,com.chk.agentbrowser.StudioMultitrackIntegrationTest,com.chk.agentbrowser.StudioTouchIntegrationTest,com.chk.agentbrowser.Local3IndependenceTest

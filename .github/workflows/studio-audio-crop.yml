@@ -28,7 +28,7 @@ jobs:
       - name: Static checks and build
         run: |
           bash validation/check.sh
-          ./gradlew --no-daemon assembleDebug lintDebug assembleDebugAndroidTest
+          ./gradlew --no-daemon assembleDebug lintDebug :app:assembleDebugAndroidTest
       - name: KVM
         run: sudo chmod 666 /dev/kvm
       - uses: actions/cache@v4

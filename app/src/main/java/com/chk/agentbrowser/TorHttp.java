@@ -4,38 +4,70 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import org.json.JSONObject;
+import java.util.*;
+import java.util.zip.GZIPInputStream;
+import javax.net.ssl.*;
+import org.json.*;
 
-/** Every socket goes to the explicitly supplied loopback Tor HTTP tunnel; there is no direct fallback. */
+/** HTTP/1.1 inside a Tor CONNECT tunnel. Destination hosts are never resolved on the device. */
 final class TorHttp {
     static final String DIAGNOSTIC="https://check.torproject.org/api/ip";
-    static final class Reply {int code;String url,type,body,sha256;org.json.JSONArray redirects;}
+    static final class Reply {int code;String url,type,body,sha256;JSONArray redirects;}
+    private static final class Headers {int code;final Map<String,String> fields=new HashMap<>();}
     private TorHttp(){}
     static Reply get(String input,int port,int maxBytes)throws Exception{
-        if(port<1||port>65535)throw new IOException("TOR_PROXY_UNAVAILABLE");
-        String url=TorUrlPolicy.checked(input);org.json.JSONArray history=new org.json.JSONArray();long deadline=System.nanoTime()+60000000000L;
+        if(port<1||port>65535||maxBytes<1||maxBytes>1048576)throw new IOException("TOR_PROXY_OR_RESPONSE_LIMIT_INVALID");
+        String url=TorUrlPolicy.checked(input);JSONArray history=new JSONArray();long deadline=System.nanoTime()+60000000000L;
         for(int redirects=0;redirects<=5;redirects++){
-            Proxy proxy=new Proxy(Proxy.Type.HTTP,new InetSocketAddress("127.0.0.1",port));
-            HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection(proxy);
-            c.setConnectTimeout(20000);c.setReadTimeout(20000);c.setInstanceFollowRedirects(false);c.setUseCaches(false);
-            c.setRequestProperty("Accept-Encoding","identity");c.setRequestProperty("User-Agent","CHK-Tor-Reader/1");
-            try{
-                int code=c.getResponseCode();
-                if(code==301||code==302||code==303||code==307||code==308){
-                    String next=c.getHeaderField("Location");if(next==null)throw new IOException("TOR_REDIRECT_WITHOUT_LOCATION");
-                    String destination=TorUrlPolicy.checked(new URI(url).resolve(next).toString());history.put(new JSONObject().put("from",url).put("to",destination).put("http_status",code));url=destination;continue;
-                }
-                InputStream stream=code>=400?c.getErrorStream():c.getInputStream();if(stream==null)throw new IOException("TOR_RESPONSE_EMPTY");
-                ByteArrayOutputStream bytes=new ByteArrayOutputStream();try(InputStream in=stream){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){if(System.nanoTime()>deadline)throw new IOException("TOR_RESPONSE_TIMEOUT");if(bytes.size()+n>maxBytes)throw new IOException("TOR_RESPONSE_TOO_LARGE");bytes.write(b,0,n);}}
-                Reply r=new Reply();r.redirects=history;r.code=code;r.url=url;r.type=c.getContentType();r.body=new String(bytes.toByteArray(),StandardCharsets.UTF_8);
-                byte[] hash=MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray());StringBuilder hex=new StringBuilder();for(byte b:hash)hex.append(String.format(java.util.Locale.ROOT,"%02x",b&255));r.sha256=hex.toString();return r;
-            }finally{c.disconnect();}
+            if(System.nanoTime()>deadline)throw new IOException("TOR_RESPONSE_TIMEOUT");
+            URI target=new URI(url);String host=target.getHost();boolean tls=target.getScheme().equals("https");int destinationPort=target.getPort()<0?(tls?443:80):target.getPort();
+            try(Socket tunnel=new Socket()){
+                tunnel.connect(new InetSocketAddress("127.0.0.1",port),20000);tunnel.setSoTimeout(20000);
+                String authority=host+":"+destinationPort;
+                // Tor's HTTP tunnel accepts CONNECT only, including for HTTP onion services on port 80.
+                tunnel.getOutputStream().write(("CONNECT "+authority+" HTTP/1.0\r\nHost: "+authority+"\r\n\r\n").getBytes(StandardCharsets.US_ASCII));tunnel.getOutputStream().flush();
+                Headers connected=headers(tunnel.getInputStream());if(connected.code!=200)throw new IOException("TOR_CONNECT_REJECTED: "+connected.code);
+                Socket transport=tunnel;
+                try{
+                    if(tls){
+                        SSLSocket secure=(SSLSocket)((SSLSocketFactory)SSLSocketFactory.getDefault()).createSocket(tunnel,host,destinationPort,true);
+                        SSLParameters parameters=secure.getSSLParameters();parameters.setEndpointIdentificationAlgorithm("HTTPS");secure.setSSLParameters(parameters);secure.setSoTimeout(20000);secure.startHandshake();transport=secure;
+                    }
+                    String path=target.getRawPath();if(path==null||path.isEmpty())path="/";if(target.getRawQuery()!=null)path+="?"+target.getRawQuery();
+                    String hostHeader=host+(destinationPort==(tls?443:80)?"":":"+destinationPort);
+                    OutputStream out=transport.getOutputStream();out.write(("GET "+path+" HTTP/1.1\r\nHost: "+hostHeader+"\r\nUser-Agent: CHK-Tor-Reader/1\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));out.flush();
+                    InputStream in=transport.getInputStream();Headers response=headers(in);for(int interim=0;response.code>=100&&response.code<200&&interim<4;interim++)response=headers(in);
+                    int code=response.code;
+                    if(code==301||code==302||code==303||code==307||code==308){String next=response.fields.get("location");if(next==null)throw new IOException("TOR_REDIRECT_WITHOUT_LOCATION");String destination=TorUrlPolicy.checked(new URI(url).resolve(next).toString());history.put(new JSONObject().put("from",url).put("to",destination).put("http_status",code));url=destination;continue;}
+                    byte[] body=body(in,response.fields,maxBytes,deadline);String encoding=response.fields.get("content-encoding");
+                    if("gzip".equalsIgnoreCase(encoding)){try(InputStream compressed=new GZIPInputStream(new ByteArrayInputStream(body))){body=bounded(compressed,-1,maxBytes,deadline);}}
+                    else if(encoding!=null&&!encoding.equalsIgnoreCase("identity"))throw new IOException("TOR_CONTENT_ENCODING_UNSUPPORTED");
+                    Reply r=new Reply();r.redirects=history;r.code=code;r.url=url;r.type=response.fields.get("content-type");r.body=new String(body,StandardCharsets.UTF_8);
+                    byte[] hash=MessageDigest.getInstance("SHA-256").digest(body);StringBuilder hex=new StringBuilder();for(byte b:hash)hex.append(String.format(Locale.ROOT,"%02x",b&255));r.sha256=hex.toString();return r;
+                }finally{if(transport!=tunnel)transport.close();}
+            }
         }
         throw new IOException("TOR_REDIRECT_LIMIT");
     }
+    private static Headers headers(InputStream in)throws Exception{
+        String status=line(in,8192);if(!status.matches("HTTP/1\\.[01] [0-9]{3}( .*)?"))throw new IOException("TOR_HTTP_STATUS_INVALID");Headers result=new Headers();result.code=Integer.parseInt(status.substring(9,12));int size=status.length();
+        for(int count=0;count<100;count++){String value=line(in,8192);size+=value.length();if(size>65536)throw new IOException("TOR_HTTP_HEADERS_TOO_LARGE");if(value.isEmpty())return result;int colon=value.indexOf(':');if(colon<=0)throw new IOException("TOR_HTTP_HEADER_INVALID");String name=value.substring(0,colon).toLowerCase(Locale.ROOT),content=value.substring(colon+1).trim();if(result.fields.containsKey(name)&&(name.equals("content-length")||name.equals("transfer-encoding")))throw new IOException("TOR_HTTP_AMBIGUOUS_FRAMING");result.fields.put(name,content);}
+        throw new IOException("TOR_HTTP_HEADER_LIMIT");
+    }
+    private static String line(InputStream in,int max)throws IOException{ByteArrayOutputStream bytes=new ByteArrayOutputStream();for(int count=0;count<max;count++){int n=in.read();if(n<0)throw new EOFException("TOR_HTTP_TRUNCATED_LINE");if(n=='\n'){byte[] value=bytes.toByteArray();int length=value.length;if(length>0&&value[length-1]=='\r')length--;return new String(value,0,length,StandardCharsets.US_ASCII);}bytes.write(n);}throw new IOException("TOR_HTTP_LINE_TOO_LONG");}
+    private static byte[] body(InputStream in,Map<String,String> fields,int max,long deadline)throws Exception{
+        String transfer=fields.get("transfer-encoding");if(transfer!=null){if(!transfer.equalsIgnoreCase("chunked"))throw new IOException("TOR_TRANSFER_ENCODING_UNSUPPORTED");ByteArrayOutputStream out=new ByteArrayOutputStream();
+            for(int chunks=0;chunks<100000;chunks++){long count=Long.parseLong(line(in,1024).split(";",2)[0].trim(),16);if(count<0||count>max-out.size())throw new IOException("TOR_RESPONSE_TOO_LARGE");if(count==0){for(int i=0;i<100;i++)if(line(in,8192).isEmpty())return out.toByteArray();throw new IOException("TOR_HTTP_TRAILER_LIMIT");}out.write(bounded(in,count,max-out.size(),deadline));if(!line(in,2).isEmpty())throw new IOException("TOR_HTTP_CHUNK_INVALID");}
+            throw new IOException("TOR_HTTP_CHUNK_LIMIT");
+        }
+        String length=fields.get("content-length");return bounded(in,length==null?-1:Long.parseLong(length),max,deadline);
+    }
+    private static byte[] bounded(InputStream in,long length,int max,long deadline)throws Exception{
+        if(length>max||length< -1)throw new IOException("TOR_RESPONSE_TOO_LARGE");ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buffer=new byte[8192];
+        while(length<0||out.size()<length){if(System.nanoTime()>deadline)throw new IOException("TOR_RESPONSE_TIMEOUT");int want=length<0?buffer.length:(int)Math.min(buffer.length,length-out.size());int count=in.read(buffer,0,want);if(count<0){if(length>=0&&out.size()!=length)throw new EOFException("TOR_HTTP_TRUNCATED_BODY");break;}if(out.size()+count>max)throw new IOException("TOR_RESPONSE_TOO_LARGE");out.write(buffer,0,count);}return out.toByteArray();
+    }
     static JSONObject diagnostic(int port)throws Exception{
-        Reply r=get(DIAGNOSTIC,port,16384);
-        if(r.code!=200||!DIAGNOSTIC.equals(r.url))throw new IOException("TOR_DIAGNOSTIC_HTTP_OR_REDIRECT: "+r.code);
+        Reply r=get(DIAGNOSTIC,port,16384);if(r.code!=200||!DIAGNOSTIC.equals(r.url))throw new IOException("TOR_DIAGNOSTIC_HTTP_OR_REDIRECT: "+r.code);
         JSONObject json=new JSONObject(r.body);if(!json.optBoolean("IsTor",false))throw new IOException("TOR_DIAGNOSTIC_NOT_TOR");
         return new JSONObject().put("is_tor",true).put("endpoint",DIAGNOSTIC).put("response_sha256",r.sha256).put("checked_at",System.currentTimeMillis());
     }
