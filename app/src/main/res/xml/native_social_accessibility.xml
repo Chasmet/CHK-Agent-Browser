@@ -6,6 +6,7 @@
     android:notificationTimeout="100"
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
+    android:canTakeScreenshot="true"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
     android:isAccessibilityTool="false"
     android:description="@string/native_social_accessibility_description" />
