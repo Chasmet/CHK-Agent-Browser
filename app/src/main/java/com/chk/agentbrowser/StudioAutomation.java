@@ -92,6 +92,13 @@ final class StudioAutomation {
         String track=op.optString("track","clips");if(!track.equals("clips")&&!track.equals("audio")&&!track.equals("layers"))throw new IOException("Piste inconnue");
         JSONArray items=p.optJSONArray(track);if(items==null){items=new JSONArray();p.put(track,items);}
         int index=op.optInt("index",items.length());
+        if(!type.equals("add")&&op.has("clip_id")){
+            String id=op.getString("clip_id");index=-1;for(int i=0;i<items.length();i++)if(id.equals(items.getJSONObject(i).optString("studio_id"))){index=i;break;}
+            if(index<0)throw new IOException("CLIP_NOT_FOUND: "+id);
+        }
+        if(type.equals("add")&&op.getJSONObject("clip").has("studio_id")){
+            String id=op.getJSONObject("clip").getString("studio_id");for(String lane:new String[]{"clips","audio"}){JSONArray existing=p.optJSONArray(lane);if(existing!=null)for(int i=0;i<existing.length();i++)if(id.equals(existing.getJSONObject(i).optString("studio_id")))throw new IOException("CLIP_ID_EXISTS: "+id);}
+        }
         if(type.equals("add")){if(index<0||index>items.length())throw new IOException("Index invalide");JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==index)out.put(new JSONObject(op.getJSONObject("clip").toString()));if(i<items.length())out.put(items.get(i));}p.put(track,out);}
         else{
             if(index<0||index>=items.length())throw new IOException("Plan absent");

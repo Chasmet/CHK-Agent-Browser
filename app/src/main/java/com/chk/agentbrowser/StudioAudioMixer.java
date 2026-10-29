@@ -23,7 +23,7 @@ final class StudioAudioMixer {
             check(active);JSONObject c=sources.getJSONObject(i);File f=store.file(c.getString("path"));
             fingerprints.put(new JSONObject().put("path",c.getString("path")).put("sha256",WorkspaceTransfer.hash(f)));
         }
-        String key=AgentVision.digest(StudioMcp.canonical(audioSignature(p))+fingerprints.toString());
+        String key=AgentVision.digest("pcm-renderer-r3|"+StudioMcp.canonical(audioSignature(p))+fingerprints.toString());
         File folder=new File(app.getCacheDir(),"studio-audio-v2");if(!folder.isDirectory()&&!folder.mkdirs())throw new IOException("MIX_STORAGE_UNAVAILABLE");
         File wav=new File(folder,key+".wav"),receipt=new File(folder,key+".json");
         if(wav.isFile()&&receipt.isFile()){
@@ -54,10 +54,10 @@ final class StudioAudioMixer {
                     Accumulator accumulator=new Accumulator(master,frames,c.getLong("timeline_ms")*RATE/1000);
                     Sampler sampler=new Sampler(c,track,duration,regions,duck,accumulator);
                     long start=c.optLong("start_ms"),length=c.optLong("duration_ms",10000);
-                    for(long at=0;at<length;at+=180000){check(active);int seconds=(int)Math.ceil(Math.min(180000,length-at)/1000d);AudioDecoder.read(file,start+at,seconds,sampler::pcm,active);}
+                    for(long at=0;at<length;at+=180000){check(active);int seconds=(int)Math.ceil(Math.min(180000,length-at)/1000d);sampler.observed(AudioDecoder.read(file,start+at,seconds,sampler::pcm,active));}
                     sampler.finish();accumulator.flush();
                     contributions.put(new JSONObject().put("clip_id",c.optString("studio_id")).put("track_id",c.getString("track_id"))
-                        .put("source",c.getString("path")).put("mixed_frames",sampler.count).put("contribution_rms",sampler.count==0?0:Math.sqrt(sampler.energy/(sampler.count*2)))
+                        .put("source",c.getString("path")).put("mixed_frames",sampler.count).put("padded_silence_frames",sampler.padded).put("decoded_source_end_ms",sampler.decodedEndUs/1000d).put("source_eos_reached",sampler.eos).put("contribution_rms",sampler.count==0?0:Math.sqrt(sampler.energy/(sampler.count*2)))
                         .put("volume_percent",c.optDouble("volume",1)*100).put("track_volume_percent",track.optDouble("volume",1)*100));
                     progress.update((i+1)*80/Math.max(1,sources.length()));
                 }
@@ -75,7 +75,7 @@ final class StudioAudioMixer {
                     }
                 }
                 mixedInput.close();
-                JSONObject proof=new JSONObject().put("state","completed").put("engine","chk_pcm_float_v2").put("duration_ms",duration).put("sample_rate",RATE).put("channels",2)
+                JSONObject proof=new JSONObject().put("state","completed").put("engine","chk_pcm_float_v2").put("renderer_revision",3).put("duration_ms",duration).put("sample_rate",RATE).put("channels",2)
                     .put("project_id",p.optString("project_id")).put("revision",p.optInt("revision")).put("source_fingerprints",fingerprints)
                     .put("contributions",contributions).put("peak_before_dbfs",StudioAudio.db(peakBefore)).put("peak_after_dbfs",StudioAudio.db(peakAfter))
                     .put("rms_dbfs",StudioAudio.db(Math.sqrt(energy/(frames*2)))).put("limiter_ceiling_dbfs",-1).put("limiter_affected_frames",limited)
@@ -134,13 +134,17 @@ final class StudioAudioMixer {
     }
     private static final class Sampler {
         final JSONObject c,track,duck;final JSONArray regions;final long total;final Accumulator out;
-        final long start,length,outputFrames;final double speed;final double[] duckCurve;long lastGainMs=-1;double cachedGain;double prevTime=Double.NaN,prevL,prevR;long next,count;double energy;
+        final long start,length,outputFrames;final double speed;final double[] duckCurve;long lastGainMs=-1;double cachedGain;double prevTime=Double.NaN,prevL,prevR;long next,count,padded,decodedEndUs;int lastRate;boolean eos;double energy;
         Sampler(JSONObject c,JSONObject track,long total,JSONArray regions,JSONObject duck,Accumulator out)throws Exception{this.c=c;this.track=track;this.total=total;this.regions=regions;this.duck=duck;this.out=out;duckCurve=curve(regions,duck,total);start=c.optLong("start_ms");length=c.optLong("duration_ms",10000);speed=c.optDouble("speed",1);outputFrames=Math.round(length*RATE/(1000d*speed));}
+        void observed(AudioDecoder.Info info){eos|=info.endOfStreamReached;decodedEndUs=Math.max(decodedEndUs,info.lastUs);}
         void pcm(ByteBuffer data,int rate,int channels,long time)throws Exception{
-            long frame=0;while(data.remaining()>=channels*2){double l=0,r=0;for(int ch=0;ch<channels;ch++){double v=data.getShort()/32768d;if(channels==1){l=v;r=v;}else if(ch%2==0)l+=v/((channels+1)/2);else r+=v/(channels/2);}
+            lastRate=rate;long frame=0;while(data.remaining()>=channels*2){double l=0,r=0;for(int ch=0;ch<channels;ch++){double v=data.getShort()/32768d;if(channels==1){l=v;r=v;}else if(ch%2==0)l+=v/((channels+1)/2);else r+=v/(channels/2);}
                 double t=(time/1000d+frame++*1000d/rate-start);if(t<0||t>length)continue;
                 if(Double.isNaN(prevTime)){prevTime=t;prevL=l;prevR=r;}
-                while(next<outputFrames){double target=next*1000d*speed/RATE;if(target>t+1e-7)break;double blend=t==prevTime?1:Math.max(0,Math.min(1,(target-prevTime)/(t-prevTime)));emit(prevL+(l-prevL)*blend,prevR+(r-prevR)*blend);}
+                while(next<outputFrames){double target=next*1000d*speed/RATE;if(target>t+1e-7)break;
+                    if(target<prevTime-1e-7||(t-prevTime>2500d/rate&&target>prevTime+1000d/rate&&target<t-1000d/rate)){emit(0,0);padded++;continue;}
+                    double blend=t==prevTime?1:Math.max(0,Math.min(1,(target-prevTime)/(t-prevTime)));emit(prevL+(l-prevL)*blend,prevR+(r-prevR)*blend);
+                }
                 prevTime=t;prevL=l;prevR=r;
             }
         }
@@ -151,7 +155,11 @@ final class StudioAudioMixer {
             double gain=cachedGain;if(duckCurve!=null){int index=(int)Math.min(duckCurve.length-2,timeline/10);double fraction=(timeline%10)/10d;gain*=duckCurve[index]+(duckCurve[index+1]-duckCurve[index])*fraction;}
             l*=gain;r*=gain;out.add(next,l,r);energy+=l*l+r*r;next++;count++;
         }
-        void finish()throws Exception{if(Double.isNaN(prevTime)||outputFrames-next>RATE/10)throw new IOException("SOURCE_AUDIO_TRUNCATED: source="+c.optString("path")+", requested_frames="+outputFrames+", rendered_frames="+next+", last_source_ms="+prevTime+", start_ms="+start+", length_ms="+length);while(next<outputFrames)emit(prevL,prevR);}
+        void finish()throws Exception{
+            long interpolationFrames=Math.max(1,(long)Math.ceil(RATE/(Math.max(1,lastRate)*speed)));
+            if(Double.isNaN(prevTime)||(!eos&&outputFrames-next>interpolationFrames+1))throw new IOException("SOURCE_AUDIO_TRUNCATED: source="+c.optString("path")+", requested_frames="+outputFrames+", rendered_frames="+next+", last_source_ms="+prevTime+", start_ms="+start+", length_ms="+length);
+            while(next<outputFrames){double sourceTime=next*1000d*speed/RATE;if(sourceTime<prevTime+1000d/Math.max(1,lastRate)+1e-7)emit(prevL,prevR);else{emit(0,0);padded++;}}
+        }
     }
     private static final class Accumulator {
         final RandomAccessFile file;final long limit,offset;final float[] block=new float[2048];final byte[] bytes=new byte[8192];long blockAt=-1;int size;

@@ -106,7 +106,7 @@ public final class StudioTouchIntegrationTest {
         JSONObject project=project();project.getJSONArray("clips").getJSONObject(0).put("text","Original");StudioEdits.duplicate(project,0);
         assertEquals("Original",project.getJSONArray("clips").getJSONObject(1).getString("text"));project.getJSONArray("clips").getJSONObject(1).put("text","Copie");assertEquals("Original",project.getJSONArray("clips").getJSONObject(0).getString("text"));
         StudioEdits.clipVolume(project,project.getJSONArray("clips").getJSONObject(1),.5);assertFalse(project.getJSONArray("clips").getJSONObject(0).optBoolean("mute"));assertFalse(project.getJSONArray("clips").getJSONObject(1).getBoolean("mute"));assertFalse(project.getJSONArray("clips").getJSONObject(2).optBoolean("mute"));
-        project.put("clips",new JSONArray().put(new JSONObject(p.toString()).put("duration_ms",1000)));StudioEdits.fitAudio(project);assertEquals(1000,project.getJSONArray("audio").getJSONObject(0).getInt("duration_ms"));
+        long originalMusicDuration=project.getJSONArray("audio").getJSONObject(0).getLong("duration_ms");project.put("clips",new JSONArray().put(new JSONObject(p.toString()).put("duration_ms",1000)));StudioEdits.fitAudio(project);assertEquals(originalMusicDuration,project.getJSONArray("audio").getJSONObject(0).getLong("duration_ms"));assertTrue(StudioAudio.enabled(project));
     }
     @Test public void batchFromWorkspaceDoesNotCopyMediaAndKeepsOrder()throws Exception {
         launch();call("addWorkspaceBatch",new Class<?>[]{String.class,List.class},"video",Arrays.asList(photo,photo));

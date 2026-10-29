@@ -11,7 +11,7 @@ import java.nio.ByteOrder;
 /** Bounded PCM16 windows from local WAV or Android-supported compressed audio/video. */
 final class AudioDecoder {
     interface Sink{void pcm(ByteBuffer data,int rate,int channels,long timeUs)throws Exception;}
-    static final class Info {int rate,channels;long frames,firstUs=-1,lastUs,durationUs=-1;}
+    static final class Info {int rate,channels;long frames,firstUs=-1,lastUs,durationUs=-1;boolean endOfStreamReached;}
     private AudioDecoder(){}
     static Info read(File source,long startMs,int seconds,Sink sink,AgentClient.ResultCallback active)throws Exception{
         if(startMs<0||startMs>31536000000L||seconds<1||seconds>180)throw new IOException("Fenêtre audio invalide (1 à 180 secondes).");
@@ -24,7 +24,9 @@ final class AudioDecoder {
             if(track<0)throw new IOException("Aucune piste audio décodable.");
             info.durationUs=format.containsKey(MediaFormat.KEY_DURATION)?format.getLong(MediaFormat.KEY_DURATION):-1;
             if(info.durationUs>=0&&start>=info.durationUs)throw new IOException("Début situé après la fin de l'audio.");
-            extractor.selectTrack(track);extractor.seekTo(start,MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+            extractor.selectTrack(track);
+            // A seek to zero can skip negative AAC priming packets and lose the first decoded frame.
+            if(start>0)extractor.seekTo(Math.max(0,start-200000),MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
             int rate=format.getInteger(MediaFormat.KEY_SAMPLE_RATE),channels=format.getInteger(MediaFormat.KEY_CHANNEL_COUNT),encoding=2;
             codec=MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));codec.configure(format,null,null,0);codec.start();
             boolean inputDone=false,done=false;long deadline=SystemClock.elapsedRealtime()+145000L;MediaCodec.BufferInfo buffer=new MediaCodec.BufferInfo();
@@ -33,7 +35,7 @@ final class AudioDecoder {
                 if(SystemClock.elapsedRealtime()>deadline)throw new IOException("Décodage audio trop long : réduire le passage.");
                 if(!inputDone){int slot=codec.dequeueInputBuffer(10000);if(slot>=0){ByteBuffer input=codec.getInputBuffer(slot);if(input==null)throw new IOException("Buffer audio absent.");input.clear();int count=extractor.readSampleData(input,0);
                     if(count<0){codec.queueInputBuffer(slot,0,0,0,MediaCodec.BUFFER_FLAG_END_OF_STREAM);inputDone=true;}
-                    else{codec.queueInputBuffer(slot,0,count,Math.max(0,extractor.getSampleTime()),0);extractor.advance();}}}
+                    else{codec.queueInputBuffer(slot,0,count,extractor.getSampleTime(),0);extractor.advance();}}}
                 int output=codec.dequeueOutputBuffer(buffer,10000);
                 if(output==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){MediaFormat f=codec.getOutputFormat();rate=f.getInteger(MediaFormat.KEY_SAMPLE_RATE);channels=f.getInteger(MediaFormat.KEY_CHANNEL_COUNT);encoding=f.containsKey(MediaFormat.KEY_PCM_ENCODING)?f.getInteger(MediaFormat.KEY_PCM_ENCODING):2;}
                 else if(output>=0){try{
@@ -44,7 +46,7 @@ final class AudioDecoder {
                         emit(pcm,rate,channels,buffer.presentationTimeUs,start,end,sink,info);
                         if(buffer.presentationTimeUs+(long)buffer.size*1000000/(Math.max(1,rate)*Math.max(1,channels)*(encoding==4?4:2))>=end)done=true;
                     }
-                    if((buffer.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0)done=true;
+                    if((buffer.flags&MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0){info.endOfStreamReached=true;done=true;}
                 }finally{codec.releaseOutputBuffer(output,false);}}
             }
             return checked(info);
@@ -85,7 +87,7 @@ final class AudioDecoder {
                     converted.putShort((short)value);
                 }converted.flip();pcm=converted;}
                 emit(pcm,rate,channels,frame*1000000L/rate,start,end,sink,info);frame+=count/frameBytes;}
-            return true;
+            info.endOfStreamReached=last>=total;return true;
         }
     }
 }

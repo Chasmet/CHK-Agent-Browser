@@ -43,6 +43,12 @@ public final class StudioMultitrackIntegrationTest {
         try{StudioMcp.dispatch(app,new JSONObject(a.toString()).put("request_id",UUID.randomUUID().toString()));fail();}catch(IOException expected){assertTrue(expected.getMessage().contains("REVISION_CONFLICT"));}
         assertEquals(1,actual.getJSONArray("clips").getJSONObject(0).optDouble("volume",1),.001);assertFalse(actual.optBoolean("mute_original"));
     }
+    @Test public void timelineUsesStableClipIdsAcrossReordering()throws Exception{
+        JSONObject p=p("stable-timeline-"+UUID.randomUUID()+".mp4").put("audio",new JSONArray()).put("clips",new JSONArray().put(new JSONObject().put("path",video).put("duration_ms",1000)).put(new JSONObject().put("path",video).put("start_ms",1000).put("duration_ms",1000)));
+        p=create(p);String first=p.getJSONArray("clips").getJSONObject(0).getString("studio_id"),second=p.getJSONArray("clips").getJSONObject(1).getString("studio_id");
+        JSONObject result=engine("video_editor_timeline",new JSONObject().put("expected_revision",p.getInt("revision")).put("operations",new JSONArray().put(new JSONObject().put("op","move").put("track","clips").put("clip_id",first).put("to",1)).put(new JSONObject().put("op","update").put("track","clips").put("clip_id",first).put("values",new JSONObject().put("volume",.25))))).getJSONObject("project");
+        assertEquals(first,result.getJSONArray("clips").getJSONObject(1).getString("studio_id"));assertEquals(second,result.getJSONArray("clips").getJSONObject(0).getString("studio_id"));assertEquals(.25,result.getJSONArray("clips").getJSONObject(1).getDouble("volume"),.0001);assertEquals(1,result.getJSONArray("clips").getJSONObject(0).optDouble("volume",1),.0001);
+    }
     @Test public void realMixedPcmAndMp4RetainBothFrequencies()throws Exception{
         JSONObject p=create(p("studio-mixed-proof.mp4"));StudioAudio.enable(p);p.getJSONArray("audio").getJSONObject(0).put("audio_fade_in_ms",100).put("audio_fade_out_ms",100);
         p.put("revision",p.getInt("revision")+1);StudioProjectLibrary.save(app,p);
@@ -109,8 +115,13 @@ public final class StudioMultitrackIntegrationTest {
             assertEquals("vosk_words_and_pcm_threshold",rendered.proof.getString("speech_engine"));assertEquals(4,rendered.proof.getJSONArray("contributions").length());
             proof("studio-human-mixed.wav",rendered.wav);saveProof("studio-human-proof.json",rendered.proof);proof("studio-human-source.mp4",store.file("studio-human-source.mp4"));
             engine("video_editor_export",new JSONObject().put("replace",true));awaitExport();proof("studio-human-mixed.mp4",store.file("studio-human-mixed.mp4"));
-            assertFalse(StudioAudioAnalysis.measure(app,"studio-human-mixed.mp4",0,8000,null).getBoolean("sample_clipping_detected"));
+            JSONObject humanAnalysis=StudioAudioAnalysis.measure(app,"studio-human-mixed.mp4",0,8000,null);assertFalse(humanAnalysis.getBoolean("sample_clipping_detected"));assertTrue(humanAnalysis.getBoolean("lufs_measured"));saveProof("studio-human-native-analysis.json",humanAnalysis);
         }finally{store.file(speech).delete();}
+    }
+    @Test public void loudnessReportsKnownSineAndDigitalSilence()throws Exception{
+        StudioLoudness mono=new StudioLoudness(48000,1),stereo=new StudioLoudness(48000,2),silence=new StudioLoudness(48000,1);
+        for(int i=0;i<48000*3;i++){double v=.1*Math.sin(2*Math.PI*1000*i/48000);mono.frame(mono.channel(0,v));stereo.frame(stereo.channel(0,v)+stereo.channel(1,v));silence.frame(silence.channel(0,0));}
+        assertEquals(-23.0,((Number)mono.integrated()).doubleValue(),.2);assertEquals(3.0103,((Number)stereo.integrated()).doubleValue()-((Number)mono.integrated()).doubleValue(),.01);assertEquals("-Infinity",silence.integrated());
     }
     void awaitExport()throws Exception{long end=System.currentTimeMillis()+180000;while(System.currentTimeMillis()<end){String state=VideoEditorEngine.get().status().optString("state");if(!state.equals("running")&&!state.equals("preparing")){assertEquals(VideoEditorEngine.get().status().toString(),"completed",state);return;}Thread.sleep(200);}fail("Export timeout");}
     double tone(File f,int frequency)throws Exception{

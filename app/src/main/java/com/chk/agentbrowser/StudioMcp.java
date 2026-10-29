@@ -30,7 +30,7 @@ final class StudioMcp {
             .put("operations",new JSONArray(OPERATIONS)).put("time_units","integer milliseconds; audio summing at 48000 samples/s")
             .put("write_guard","project_id, expected_revision, request_id required; atomic project receipts; stable clip_id and track_id")
             .put("gain","0..200 percent, db=20*log10(linear); -Infinity or percent=0 means silence")
-            .put("limitations",new JSONArray(Arrays.asList("LUFS and true-peak not measured on Android; independent FFmpeg verification required","speed resampling changes pitch in audio model v2","animated spatial crop is unsupported","Tor network state is not observable from external Tor Browser")));
+            .put("limitations",new JSONArray(Arrays.asList("True-peak not measured on Android; mono/stereo LUFS is cross-checked with FFmpeg","speed resampling changes pitch in audio model v2","animated spatial crop is unsupported","Tor network state is not observable from external Tor Browser")));
         JSONObject p=project(app,args);
         if(op.equals("audio_tracks"))return tracks(app,p);
         if(op.equals("audio_mix_status"))return new JSONObject().put("state","completed").put("queue",StudioAutomation.queueSnapshot(app)).put("project_id",p.getString("project_id")).put("revision",p.getInt("revision"));

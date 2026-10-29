@@ -87,4 +87,9 @@ public final class StudioAudioCropTest {
             }
         });
     }
+    @Test public void shorteningVideoNeverDeletesOrTrimsUnselectedSoundtracks()throws Exception{
+        JSONObject voice=new JSONObject().put("path","voice.mp4").put("duration_ms",1000),music=new JSONObject().put("path","music.wav").put("duration_ms",5000).put("volume",.15),fx=new JSONObject().put("path","effect.wav").put("duration_ms",1500).put("volume",.35);
+        JSONObject p=new JSONObject().put("clips",new JSONArray().put(voice)).put("audio",new JSONArray().put(music).put(fx));StudioEdits.fitAudio(p);
+        assertTrue(StudioAudio.enabled(p));assertEquals(2,p.getJSONArray("audio").length());assertEquals(5000,music.getLong("duration_ms"));assertEquals(1500,fx.getLong("duration_ms"));assertEquals(.15,music.getDouble("volume"),.0001);assertEquals(.35,fx.getDouble("volume"),.0001);assertEquals(5000,fx.getLong("offset_ms"));
+    }
 }

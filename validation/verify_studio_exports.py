@@ -13,7 +13,11 @@ def run(*args):
 def metadata(name):
     return json.loads(run('ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(folder/name)))
 def audio(name):
-    return np.frombuffer(run('ffmpeg','-v','error','-i',str(folder/name),'-vn','-ac','1','-ar','48000','-f','f32le','-'), dtype='<f4')
+    channels=next(s['channels'] for s in metadata(name)['streams'] if s['codec_type']=='audio')
+    assert channels in (1,2), channels
+    pcm=np.frombuffer(run('ffmpeg','-v','error','-i',str(folder/name),'-vn','-ar','48000','-f','f32le','-'), dtype='<f4')
+    # Preserve per-channel amplitude; FFmpeg's default -ac 1 uses constant-power downmix.
+    return pcm.reshape(-1,channels).mean(axis=1)
 def amplitude(x, freq):
     y=x[24000:96000].astype(np.float64)
     t=np.arange(len(y))/48000
@@ -26,6 +30,9 @@ voice=amplitude(mixed,440)
 music=amplitude(mixed,880)
 assert voice>.02, f'Original 440 Hz source lost: {voice}'
 assert music>.02, f'Music 880 Hz source lost: {music}'
+assert .08<music<.10, f'Music at 15 percent has unexpected amplitude: {music}'
+reference_tone=amplitude(audio(Path('app/src/androidTest/assets/editor-fixture.mp4').resolve()),440)
+assert .97<voice/reference_tone<1.03, f'Original gain is not 100 percent: {voice/reference_tone}'
 assert np.max(np.abs(mixed))<.9999, 'Full scale output sample'
 meta=metadata('studio-mixed-proof.mp4')
 assert abs(float(meta['format']['duration'])-3)<.15
@@ -78,6 +85,8 @@ summary=ebur.stderr.rsplit('Summary:',1)[-1]
 lufs=re.search(r'I:\s*([-0-9.]+) LUFS',summary)
 true_peak=re.search(r'Peak:\s*([-0-9.]+) dBFS',summary)
 assert lufs and true_peak, summary
+native=json.loads((folder/'studio-human-native-analysis.json').read_text())
+assert native['lufs_measured'] and abs(native['integrated_lufs']-float(lufs.group(1)))<.3, (native['integrated_lufs'],lufs.group(1))
 report={'status':'passed','original_tone_amplitude':voice,'music_tone_amplitude':music,'sample_peak':float(np.max(abs(mixed))), 'crop_width':v['width'],'crop_height':v['height'],'crop_preview_export_mean_absolute_error':error,'speech_tested':True,'human_voice_gain_median':float(np.median(voice_gains)),'music_amplitude_during_words':float(np.median(speech_amplitudes)),'music_amplitude_during_silence':float(np.median(silence_amplitudes)),'human_audio_alignment_samples':lag,'human_integrated_lufs':float(lufs.group(1)),'human_true_peak_dbfs':float(true_peak.group(1)),'tor_tested':False,'phone_local3_end_to_end_tested':False,'files':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in folder.glob('*') if p.is_file()}}
 (folder/'independent-verification.json').write_text(json.dumps(report,indent=2))
 print(json.dumps(report,indent=2))

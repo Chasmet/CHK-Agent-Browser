@@ -17,17 +17,20 @@ Les nouvelles opérations attendent donc l'installation d'un APK qui les contien
 {"app_id":"ID_ANDROID_LU_PAR_APPS_LIST","action":"desktop","request_id":"transport-mix-01","args":{"tool":"studio","operation":"capabilities"}}
 ```
 
+La timeline existante accepte aussi `clip_id` pour déplacer, modifier ou supprimer un clip ; les index restent acceptés pour les anciens clients.
+
 Les noms `studio_audio_tracks`, etc. sont également acceptés dans `args.operation` (préfixe `studio_` facultatif).
 Le nom d'une nouvelle opération n'est pas une action directe du serveur 1.0.4.
 
 ## Modèle et compatibilité
 
-- Les anciens projets gardent leur disposition audio séquentielle tant que le mode multipiste n'est pas activé.
+- Les anciens projets gardent leur disposition audio séquentielle tant que le mode multipiste n'est pas activé. Raccourcir la vidéo en dessous de la durée des anciens audios active le modèle v2 pour conserver toutes les instructions audio, au lieu de les supprimer.
 - L'activation crée `audio_model_version:2`, `audio_tracks` et les positions `offset_ms` des anciens clips, sans changer leurs sources ni leur ordre.
 - L'interface propose « Piste parallèle » et « Mixeur ». Chaque nouvel import parallèle crée une piste distincte.
 - `studio_id` est l'identifiant stable d'un clip ; `id` est celui d'une piste. La piste `original` représente le son des vidéos de base.
 - Les pistes possèdent volume, Mute, Solo, fondus, keyframes et configuration de ducking. Les clips possèdent leur propre gain et leurs fondus/keyframes.
 - Les pistes superposées sont sommées en flottants dans un fichier temporaire sur disque. Un limiteur stéréo lié à attaque instantanée et relâchement de 100 ms précède la conversion PCM16 du master WAV stéréo 48 kHz.
+- La fin réelle d’une piste peut précéder celle de la vidéo : seule une fin de flux décodée est complétée par du silence. Les paquets AAC de priming sont conservés pour le décodage et les timestamps négatifs sont respectés ; le nombre de frames de silence ajouté est retourné dans la preuve.
 - Le master est utilisé par la même composition Media3 pour l'aperçu rendu et le MP4. Les sources audio restent intactes. Le MP4 contient un mixage stéréo des sources, pas des stems séparés.
 - Limites de ressources actuelles : montage de 20 min, 100 plans vidéo, 40 clips audio et 40 pistes, 500 keyframes par cible. Les reçus atomiques sont conservés dans le projet (128 écritures MCP par projet maximum, puis refus explicite plutôt qu'un effacement du journal).
 - Le cache audio dépend des réglages audio et des SHA-256 des sources ; recadrer une image ne relance pas la reconnaissance vocale.
@@ -61,7 +64,7 @@ Remplacer les identifiants et la révision par ceux du projet courant.
 | Opération | Paramètres spécifiques / résultat |
 |---|---|
 | `audio_tracks` | Renvoie pistes, clips stables, durées, positions, gains, Mute/Solo et formats réellement inspectés. |
-| `audio_analyze` | `clip_id`, `start_ms`, `duration_ms` ; décodage PCM, RMS, crête échantillon, silences. `detect_speech:true` ajoute les intervalles Vosk sur la piste correspondante. |
+| `audio_analyze` | `clip_id`, `start_ms`, `duration_ms` ; décodage PCM, RMS, crête échantillon, silences et loudness intégrée LUFS mono/stéréo sur les fenêtres d’au moins 400 ms. `detect_speech:true` ajoute les intervalles Vosk sur la piste correspondante. |
 | `audio_track_create` | `track_id`, `name` ; crée seulement la piste demandée et active explicitement le modèle v2. |
 | `audio_clip_set` | `clip_id`, `track_id`, `offset_ms`, `speed` ; affectation et placement d'un clip audio. |
 | `audio_set_volume` | `scope:track` et `track_id`, ou `scope:clip` et `clip_id` ; `percent` OU `db`, `mute`, `solo` (piste), `audio_fade_in_ms`, `audio_fade_out_ms`. |
@@ -144,4 +147,4 @@ Le workflow supplémentaire ne publie qu'un **artifact de test debug**, package 
 
 La publication de production reste bloquée par les vérifications réelles manquantes : installation sur appareil, workflow entier via Local 3, diagnostic Tor et .onion, déconnexion, contrôle d'une mise à jour sans perte de données.
 Le rééchantillonnage du mode audio v2 modifie la hauteur lors des changements de vitesse. Le downmix des sources de plus de deux canaux n'est pas un moteur surround de mastering.
-Le limiteur contrôle les crêtes échantillon ; le true peak inter-échantillons et LUFS doivent être contrôlés indépendamment. Le script FFmpeg mesure les exports de test.
+Le limiteur contrôle les crêtes échantillon ; le true peak inter-échantillons doit être contrôlé indépendamment. La mesure LUFS native utilise la pondération K et les portes BS.1770, pour le mono et la stéréo ; le script FFmpeg la compare au décodage indépendant des exports de test.
