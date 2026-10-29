@@ -68,6 +68,7 @@ public final class VideoEditorEngine {
     public void command(Context context,String action,JSONObject args,Done cb){
         Context application=context.getApplicationContext();
         if(StudioAutomation.handles(action)){StudioAutomation.command(application,action,args,cb);return;}
+        if(StudioAdvancedCommands.handles(action)){StudioAdvancedCommands.command(application,action,args,cb);return;}
         if("video_editor_status".equals(action)){
             MAIN.post(()->cb.completed(true,status().toString()));return;
         }
@@ -424,6 +425,14 @@ public final class VideoEditorEngine {
                 double v=c.optDouble(key,Double.NaN);double min=key.startsWith("zoom")?1:-1,max=key.startsWith("zoom")?4:1;
                 if(Double.isNaN(v)||Double.isInfinite(v)||v<min||v>max)throw new IllegalArgumentException("Animation invalide : "+key);
             }
+            JSONObject crop=c.optJSONObject("crop");
+            if(crop!=null){
+                double x=crop.optDouble("x",Double.NaN),y=crop.optDouble("y",Double.NaN);
+                double w=crop.optDouble("width",Double.NaN),h=crop.optDouble("height",Double.NaN);
+                if(!Double.isFinite(x)||!Double.isFinite(y)||!Double.isFinite(w)||!Double.isFinite(h)
+                    ||x<0||y<0||w<0.02||h<0.02||x+w>1.0000001||y+h>1.0000001)
+                    throw new IllegalArgumentException("Cadre de recadrage invalide : coordonnées normalisées 0..1");
+            }
             videoDuration+=Math.round(duration/speed);
         }
         if(sounds!=null){
@@ -566,13 +575,25 @@ public final class VideoEditorEngine {
         final int layerHeight=layerAspect>=1?layerQuality:Math.max(2,Math.round(layerQuality/Math.max(.2f,layerAspect)/2)*2);
         java.util.Map<String,Long> sourceDurations=new java.util.HashMap<>();
         boolean external=audios!=null&&audios.length()>0;
-        boolean original=!project.optBoolean("mute_original",external);
+        boolean original=!project.optBoolean("mute_original",false);
         for(int i=0;i<clips.length();i++){
             JSONObject c=clips.getJSONObject(i);long len=c.optLong("duration_ms",10000);
             List<androidx.media3.common.Effect> fx=effects(c.optString("filter","aucun"),len,c.optLong("fade_ms",0));
             if(c.has("grade_exposure")||c.has("grade_warmth")||c.has("grade_saturation")||
                c.has("grade_exposure_end")||c.has("grade_warmth_end")||c.has("grade_saturation_end"))
                 fx.add(gradedColor(c,len));
+            JSONObject crop=c.optJSONObject("crop");
+            if(crop!=null){
+                float left=(float)(crop.getDouble("x")*2-1);
+                float right=(float)((crop.getDouble("x")+crop.getDouble("width"))*2-1);
+                float top=(float)(1-crop.getDouble("y")*2);
+                float bottom=(float)(1-(crop.getDouble("y")+crop.getDouble("height"))*2);
+                fx.add(new androidx.media3.effect.Crop(left,right,bottom,top));
+            }
+            if(c.optBoolean("flip_horizontal",false)||c.optBoolean("flip_vertical",false))
+                fx.add(new androidx.media3.effect.ScaleAndRotateTransformation.Builder()
+                    .setScale(c.optBoolean("flip_horizontal",false)?-1f:1f,
+                        c.optBoolean("flip_vertical",false)?-1f:1f).build());
             if(c.has("zoom")||c.has("zoom_end")||c.has("pan_x")||c.has("pan_x_end")||c.has("pan_y")||c.has("pan_y_end")){
                 final java.util.concurrent.atomic.AtomicLong first=new java.util.concurrent.atomic.AtomicLong(Long.MIN_VALUE);
                 final float z0=(float)c.optDouble("zoom",1),z1=(float)c.optDouble("zoom_end",z0);
@@ -633,7 +654,7 @@ public final class VideoEditorEngine {
         if(!compositionEffects.isEmpty())builder.setEffects(new Effects(Collections.emptyList(),compositionEffects));
         return builder.build();
     }
-    private static void validateVolume(JSONObject clip){double v=clip.optDouble("volume",1);if(Double.isNaN(v)||Double.isInfinite(v)||v<0||v>1)throw new IllegalArgumentException("Volume entre 0 et 1 requis");}
+    private static void validateVolume(JSONObject clip){double v=clip.optDouble("volume",1);if(Double.isNaN(v)||Double.isInfinite(v)||v<0||v>2)throw new IllegalArgumentException("Volume entre 0 et 2 requis (0 à 200 %)");}
     static List<androidx.media3.common.audio.AudioProcessor> volumeProcessors(JSONObject clip){
         float volume=(float)clip.optDouble("volume",1);if(volume==1)return Collections.emptyList();
         androidx.media3.common.audio.ChannelMixingAudioProcessor processor=new androidx.media3.common.audio.ChannelMixingAudioProcessor();

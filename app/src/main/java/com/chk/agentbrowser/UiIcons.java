@@ -26,6 +26,7 @@ final class UiIcons {
                 case "document":case "text":c.drawRoundRect(4,2,20,22,2,2,p);for(int y=7;y<=17;y+=5)c.drawLine(8,y,16,y,p);break;
                 case "download":c.drawLine(12,2,12,16,p);c.drawLine(7,11,12,16,p);c.drawLine(12,16,17,11,p);c.drawLine(3,18,3,22,p);c.drawLine(3,22,21,22,p);c.drawLine(21,22,21,18,p);break;
                 case "history":case "speed":c.drawCircle(12,12,9,p);c.drawLine(12,6,12,12,p);c.drawLine(12,12,17,14,p);break;
+                case "tor":p.setStyle(Paint.Style.FILL);c.drawOval(6,4,18,22,p);p.setColor(0xff202124);c.drawOval(9,7,15,20,p);p.setColor(color);c.drawLine(12,2,12,6,p);c.drawArc(6,1,12,7,200,135,false,p);break;
                 case "globe":c.drawCircle(12,12,9,p);c.drawOval(8,3,16,21,p);c.drawLine(3,12,21,12,p);break;
                 case "search":c.drawCircle(10,10,7,p);c.drawLine(15,15,22,22,p);break;
                 case "plus":c.drawLine(12,4,12,20,p);c.drawLine(4,12,20,12,p);break;

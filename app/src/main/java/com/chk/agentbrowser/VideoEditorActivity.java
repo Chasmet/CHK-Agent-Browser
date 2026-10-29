@@ -271,17 +271,17 @@ public final class VideoEditorActivity extends Activity {
         }else if(toolPage.equals("Texte")){
             tool("T","Texte du plan",()->caption());tool("♫","Sous-titres auto",()->generateSubtitles());tool("✎","Modifier sous-titres",()->editSubtitles());tool("×","Retirer",()->{if(clip()!=null)put(clip(),"text","");});
         }else if(toolPage.equals("Effets")){
-            tool("▶","Aperçu rendu",()->renderedPreview());tool("✦","Filtres",()->filter());tool("◉","Ajuster",()->gradeManual());tool("↗","Animation",()->photoAnimation());tool("↻","Rotation",()->rotation());
+            tool("▶","Aperçu rendu",()->renderedPreview());tool("✦","Filtres",()->filter());tool("⊡","Recadrer",()->cropEditor());tool("◉","Ajuster",()->gradeManual());tool("↗","Animation",()->photoAnimation());tool("↻","Rotation",()->rotation());
         }else if(toolPage.equals("Analyse")){
             tool("◎","Audit local",()->offlineAudit());tool("◉","Étalonnage",()->gradeMenu());tool("▣","File exports",()->exportQueue());
         }else{
-            tool("✂","Diviser",()->split());tool("◷","Durée",()->trim(false,selected));tool("▷","Vitesse",()->speed());
+            tool("✂","Diviser",()->split());tool("⊡","Recadrer",()->cropEditor());tool("◷","Durée",()->trim(false,selected));tool("▷","Vitesse",()->speed());
             tool("◉","Volume",()->{selectedAudio=-1;volume();});tool("▣","Dupliquer",()->duplicate());tool("×","Supprimer",()->delete(false,selected));
             tool("⇄","Déplacer",()->move());tool("◁","−1 image",()->stepFrame(-1));tool("▷","+1 image",()->stepFrame(1));
         }
     }
     private void tool(String glyph,String label,Runnable action){
-        String icon=label.equals("Diviser")||label.equals("Découper")?"scissors":label.equals("Vitesse")||label.equals("Durée")?"speed":label.equals("Volume")||label.equals("Son original")?"audio":label.equals("Dupliquer")||label.equals("Calques")?"layers":label.equals("Supprimer")||label.equals("Retirer")?"trash":label.equals("Ajuster")||label.equals("Étalonnage")?"sliders":label.contains("Texte")||label.equals("Transcrire")?"text":label.equals("Ajouter")||label.equals("Superposer")?"plus":label.equals("Aperçu rendu")?"play":label.equals("Animation")?"animation":label.equals("Rotation")?"rotation":label.equals("Déplacer")?"move":label.contains("image")?"play":label.contains("exports")?"download":label.contains("Audit")?"search":"effects";
+        String icon=label.equals("Recadrer")?"crop":label.equals("Diviser")||label.equals("Découper")?"scissors":label.equals("Vitesse")||label.equals("Durée")?"speed":label.equals("Volume")||label.equals("Son original")?"audio":label.equals("Dupliquer")||label.equals("Calques")?"layers":label.equals("Supprimer")||label.equals("Retirer")?"trash":label.equals("Ajuster")||label.equals("Étalonnage")?"sliders":label.contains("Texte")||label.equals("Transcrire")?"text":label.equals("Ajouter")||label.equals("Superposer")?"plus":label.equals("Aperçu rendu")?"play":label.equals("Animation")?"animation":label.equals("Rotation")?"rotation":label.equals("Déplacer")?"move":label.contains("image")?"play":label.contains("exports")?"download":label.contains("Audit")?"search":"effects";
         TextView v=UiIcons.button(this,label,icon,0xffedf5ff);v.setTag("studio_tool_"+label);v.setSingleLine(true);v.setEllipsize(android.text.TextUtils.TruncateAt.END);v.setPadding(dp(4),dp(5),dp(4),dp(5));tools.addView(v,new LinearLayout.LayoutParams(dp(82),-1));v.setOnClickListener(w->{if(project!=null&&!saving&&!importing){if(renderedMode&&!label.equals("Aperçu rendu")){preparedEditorAction=action;preview();}else action.run();}});
     }
     private void toast(String text){if(alive)Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
@@ -663,13 +663,61 @@ public final class VideoEditorActivity extends Activity {
     private void volume(){
         if(project==null||saving||importing)return;JSONObject target=selectedAudio>=0?audio().optJSONObject(selectedAudio):clip();if(target==null)return;
         boolean sound=selectedAudio>=0;int base=revision;LinearLayout box=MobileUi.column(this);TextView value=MobileUi.text(this,"",16,MobileUi.TEXT);box.addView(value);
-        SeekBar slider=new SeekBar(this);slider.setTag("studio_volume_slider");slider.setMax(100);slider.setProgress(!sound&&(project.optBoolean("mute_original",audio().length()>0)||target.optBoolean("mute",false))?0:(int)Math.round(target.optDouble("volume",1)*100));box.addView(slider);
-        Runnable update=()->{value.setText("Volume · "+slider.getProgress()+" %");if(sound)audioPlayer.setVolume(slider.getProgress()/100f);else player.setVolume(slider.getProgress()/100f);};
+        SeekBar slider=new SeekBar(this);slider.setTag("studio_volume_slider");slider.setMax(200);slider.setProgress(!sound&&(project.optBoolean("mute_original",false)||target.optBoolean("mute",false))?0:(int)Math.round(target.optDouble("volume",1)*100));box.addView(slider);
+        Runnable update=()->{value.setText(String.format(Locale.FRANCE,"Volume : %d %% · %.2f dB",slider.getProgress(),slider.getProgress()==0?-96.0:20*Math.log10(slider.getProgress()/100.0)));if(sound)audioPlayer.setVolume(slider.getProgress()/100f);else player.setVolume(slider.getProgress()/100f);};
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar b,int n,boolean user){update.run();}public void onStartTrackingTouch(SeekBar b){}public void onStopTrackingTouch(SeekBar b){}});
         TextView listen=chip("▶ Écouter / pause");box.addView(listen);listen.setOnClickListener(v->{if(player.isPlaying())pausePreview();else{playPreview();update.run();}});
         update.run();StudioSheet.show(this,sound?"Volume de la piste audio":"Volume du plan",box,()->{pausePreview();if(revision!=base||saving){configureCurrentClip();configureAudio();toast("Projet modifié : rouvre le réglage");return;}try{remember();if(sound)target.put("volume",slider.getProgress()/100.0);else StudioEdits.clipVolume(project,target,slider.getProgress()/100.0);save();}catch(Exception e){toast(e.getMessage());}},()->{pausePreview();configureCurrentClip();configureAudio();});
     }
     private void configureAudio(){if(audioPlayer==null||audio().length()==0)return;JSONObject c=audio().optJSONObject(Math.min(audio().length()-1,Math.max(0,audioPlayer.getCurrentMediaItemIndex())));if(c!=null)audioPlayer.setVolume((float)c.optDouble("volume",1));}
+    /** Persistent numerical crop panel; the same Media3 effect is used for preview/export. */
+    private void cropEditor(){
+        if(!editable())return;
+        final JSONObject target=clip();
+        final int baseRevision=revision;
+        final JSONObject previous=target.optJSONObject("crop");
+        final JSONObject rect=previous==null?new JSONObject():previous;
+        LinearLayout form=MobileUi.column(this);
+        form.setPadding(dp(18),dp(8),dp(18),dp(8));
+        form.addView(MobileUi.text(this,"Recadrage non destructif en % de l'image source. Le cadre ne modifie pas la durée.",13,MobileUi.MUTED));
+        String[] labels={"X (%)","Y (%)","Largeur (%)","Hauteur (%)"};
+        String[] keys={"x","y","width","height"};
+        EditText[] fields=new EditText[4];
+        for(int i=0;i<4;i++){
+            form.addView(MobileUi.text(this,labels[i],13,MobileUi.TEXT));
+            fields[i]=new EditText(this);
+            fields[i].setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            fields[i].setText(String.format(Locale.US,"%.2f",rect.optDouble(keys[i],i<2?0:1)*100));
+            form.addView(fields[i]);
+        }
+        android.widget.CheckBox flipH=new android.widget.CheckBox(this),flipV=new android.widget.CheckBox(this);
+        flipH.setText("Inverser horizontalement");flipV.setText("Inverser verticalement");
+        flipH.setTextColor(MobileUi.TEXT);flipV.setTextColor(MobileUi.TEXT);
+        flipH.setChecked(target.optBoolean("flip_horizontal",false));
+        flipV.setChecked(target.optBoolean("flip_vertical",false));
+        form.addView(flipH);form.addView(flipV);
+        new AgentDialog.Builder(this).setTitle("Recadrer le plan "+(selected+1))
+            .setView(form)
+            .setNeutralButton("Réinitialiser",(d,n)->{
+                if(revision!=baseRevision||saving){toast("Projet modifié, rouvre Recadrer");return;}
+                try{remember();target.remove("crop");target.remove("flip_horizontal");target.remove("flip_vertical");save();}
+                catch(Exception e){toast(e.getMessage());}
+            })
+            .setNegativeButton("Annuler",null)
+            .setPositiveButton("Valider",(d,n)->{
+                if(revision!=baseRevision||saving){toast("Projet modifié, rouvre Recadrer");return;}
+                try{
+                    JSONObject out=new JSONObject();
+                    double[] v=new double[4];
+                    for(int i=0;i<4;i++)v[i]=Double.parseDouble(fields[i].getText().toString().replace(',','.'))/100.0;
+                    if(v[0]<0||v[1]<0||v[2]<.02||v[3]<.02||v[0]+v[2]>1.000001||v[1]+v[3]>1.000001)
+                        throw new IllegalArgumentException("Cadre hors de l'image");
+                    for(int i=0;i<4;i++)out.put(keys[i],v[i]);
+                    remember();target.put("crop",out).put("flip_horizontal",flipH.isChecked())
+                        .put("flip_vertical",flipV.isChecked());save();
+                }catch(Exception e){toast("Recadrage : "+e.getMessage());}
+            }).show();
+    }
     private void rotation(){if(!editable())return;new AgentDialog.Builder(this).setTitle("Rotation du plan").setItems(new String[]{"0°","90°","180°","−90°"},(d,n)->put(clip(),"rotation",new int[]{0,90,180,-90}[n])).show();}
     private void mute(){if(project==null)return;new AgentDialog.Builder(this).setTitle("Son").setItems(new String[]{"Conserver le son des vidéos","Couper le son des vidéos","Couper ce plan","Rétablir ce plan"},(d,n)->{if(n==0){try{remember();project.put("mute_original",false);for(int i=0;i<clips().length();i++)clips().getJSONObject(i).put("mute",false);save();}catch(Exception e){toast(e.getMessage());}}else if(n==1)put(project,"mute_original",true);else if(clip()!=null)put(clip(),"mute",n==2);}).show();}
     private void move(){new AgentDialog.Builder(this).setTitle("Déplacer le plan").setItems(new String[]{"Vers la gauche","Vers la droite"},(d,n)->{int to=selected+(n==0?-1:1);if(to<0||to>=clips().length())return;try{remember();Object a=clips().get(selected),b=clips().get(to);clips().put(selected,b);clips().put(to,a);selected=to;editSeek=start(to);save();}catch(Exception ignored){}}).show();}
