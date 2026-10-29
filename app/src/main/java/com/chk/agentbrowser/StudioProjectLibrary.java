@@ -96,12 +96,20 @@ final class StudioProjectLibrary {
         if(p.has("project_id")&&!id.equals(p.optString("project_id")))
             throw new IllegalStateException("Projet différent du montage ouvert");
         StudioAudio.ids(p);
+        retainReceipts(current,p);
         p.put("project_id",id);
         p.put("created_at",current.optLong("created_at",System.currentTimeMillis()));
         p.put("updated_at",System.currentTimeMillis());
         recordHistory(app,current);
         write(entry(app,id,false),p);
         write(new File(app.getFilesDir(),ACTIVE),p);
+    }
+    /** Undo and legacy whole-project saves must not forget an already executed request. */
+    private static void retainReceipts(JSONObject current,JSONObject next)throws Exception{
+        JSONObject old=current.optJSONObject("studio_receipts");if(old==null)return;
+        JSONObject merged=next.optJSONObject("studio_receipts");if(merged==null)merged=new JSONObject();
+        for(java.util.Iterator<String> keys=old.keys();keys.hasNext();){String key=keys.next();merged.put(key,new JSONObject(old.getJSONObject(key).toString()));}
+        next.put("studio_receipts",merged);
     }
     private static File historyFile(Context app,String id)throws Exception{return new File(dir(app,false),id+".history.json");}
     private static void recordHistory(Context app,JSONObject before)throws Exception{
@@ -117,6 +125,7 @@ final class StudioProjectLibrary {
         JSONArray source=h.optJSONArray(from),target=h.optJSONArray(to);if(source==null||source.length()==0)throw new java.io.IOException("Historique vide");
         if(target==null)target=new JSONArray();JSONObject previous=source.getJSONObject(source.length()-1);
         VideoEditorEngine.get().validate(app,previous);source.remove(source.length()-1);target.put(current);
+        retainReceipts(current,previous);
         previous.put("revision",current.optInt("revision")+1).put("updated_at",System.currentTimeMillis());
         h.put(from,source).put(to,target);StudioAutomation.write(file,h);
         write(entry(app,previous.getString("project_id"),false),previous);write(new File(app.getFilesDir(),ACTIVE),previous);return previous;
@@ -124,6 +133,8 @@ final class StudioProjectLibrary {
     static JSONObject create(Context app,JSONObject value)throws Exception{
         JSONObject before=active(app);
         JSONObject p=new JSONObject(value.toString());
+        // A new project has a new request namespace; its source project keeps its receipts.
+        p.remove("studio_receipts");
         String id=UUID.randomUUID().toString();
         StudioAudio.ids(p);
         p.put("project_id",id).put("created_at",System.currentTimeMillis())

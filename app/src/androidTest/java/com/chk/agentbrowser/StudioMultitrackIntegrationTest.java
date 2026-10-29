@@ -43,6 +43,17 @@ public final class StudioMultitrackIntegrationTest {
         try{StudioMcp.dispatch(app,new JSONObject(a.toString()).put("request_id",UUID.randomUUID().toString()));fail();}catch(IOException expected){assertTrue(expected.getMessage().contains("REVISION_CONFLICT"));}
         assertEquals(1,actual.getJSONArray("clips").getJSONObject(0).optDouble("volume",1),.001);assertFalse(actual.optBoolean("mute_original"));
     }
+    @Test public void receiptsSurviveUndoAndWholeProjectSaveButNotProjectDuplication()throws Exception{
+        JSONObject p=create(p("receipt-history-"+UUID.randomUUID()+".mp4"));String original=p.getString("project_id"),id=p.getJSONArray("audio").getJSONObject(0).getString("studio_id");
+        JSONObject a=args(p,"audio_set_volume").put("clip_id",id).put("percent",25);StudioMcp.dispatch(app,a);
+        JSONObject undone=StudioProjectLibrary.history(app,false);assertEquals(15,undone.getJSONArray("audio").getJSONObject(0).getDouble("volume")*100,.001);
+        assertTrue(StudioMcp.dispatch(app,a).getBoolean("replayed"));assertEquals(undone.getInt("revision"),VideoEditorEngine.get().load(app).getInt("revision"));
+        JSONObject legacy=new JSONObject(undone.toString());legacy.remove("studio_receipts");legacy.put("revision",undone.getInt("revision")+1);StudioProjectLibrary.save(app,legacy);assertTrue(StudioMcp.dispatch(app,a).getBoolean("replayed"));
+        JSONObject copy=StudioProjectLibrary.duplicate(app,original);assertNotEquals(original,copy.getString("project_id"));assertFalse(copy.has("studio_receipts"));
+        JSONObject changed=new JSONObject(a.toString()).put("project_id",copy.getString("project_id")).put("expected_revision",copy.getInt("revision")).put("percent",35);
+        assertEquals(35,StudioMcp.dispatch(app,changed).getDouble("volume_percent"),.001);
+        StudioProjectLibrary.open(app,original);assertTrue(StudioMcp.dispatch(app,a).getBoolean("replayed"));
+    }
     @Test public void timelineUsesStableClipIdsAcrossReordering()throws Exception{
         JSONObject p=p("stable-timeline-"+UUID.randomUUID()+".mp4").put("audio",new JSONArray()).put("clips",new JSONArray().put(new JSONObject().put("path",video).put("duration_ms",1000)).put(new JSONObject().put("path",video).put("start_ms",1000).put("duration_ms",1000)));
         p=create(p);String first=p.getJSONArray("clips").getJSONObject(0).getString("studio_id"),second=p.getJSONArray("clips").getJSONObject(1).getString("studio_id");

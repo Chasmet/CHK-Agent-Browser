@@ -50,7 +50,7 @@ Les keyframes utilisent une interpolation linéaire du gain ; avant/après la co
 
 Les lectures exigent `project_id` (sauf `capabilities`). Les écritures exigent en plus `expected_revision` et un `request_id` stable de 1 à 80 caractères (lettres, chiffres, tirets, soulignés).
 Les paramètres identiques rejouent le reçu enregistré avant de tester la nouvelle révision. Réutiliser le même ID pour des paramètres différents est refusé.
-Les reçus et la modification appartiennent à la même sauvegarde atomique. Après sauvegarde, le handler relit la révision et le reçu.
+Les reçus et la modification appartiennent à la même sauvegarde atomique. Les annulations/rétablissements et sauvegardes complètes conservent le journal ; dupliquer le projet crée un nouvel espace d’identifiants de requête et conserve le journal du projet original. Après sauvegarde, le handler relit la révision et le reçu.
 `completed` pour une modification signifie **projet sauvegardé** ; le champ `verified:project_persistence_only` ne valide pas un export.
 
 Erreurs exploitables : `PROJECT_MISMATCH`, `REVISION_CONFLICT`, `REQUEST_ID_REUSED_WITH_DIFFERENT_PARAMETERS`, `TRACK_NOT_FOUND`, `CLIP_NOT_FOUND`, `EXPORT_ACTIVE`, `RECEIPT_LEDGER_FULL`, `MIX_STORAGE_LOW`, `SOURCE_AUDIO_TRUNCATED`.
