@@ -42,6 +42,7 @@ final class StudioProjectLibrary {
         File archive=entry(app,id,false);
         if(archive.exists()){JSONObject saved=read(archive);if(saved.optInt("revision")>p.optInt("revision")){p=saved;write(current,p);}}
         else write(archive,p);
+        audioIds|=StudioAudio.ids(p);
         if(initialized||audioIds)write(archive,p);
         if(initialized||migrated||audioIds||!current.isFile())write(current,p);
         return p;

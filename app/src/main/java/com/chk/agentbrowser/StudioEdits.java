@@ -34,7 +34,7 @@ final class StudioEdits {
     static void clipVolume(JSONObject project,JSONObject target,double volume)throws Exception {
         if(!Double.isFinite(volume)||volume<0||volume>2)throw new IllegalArgumentException("Volume 0 à 200 % requis");
         // Never mute any other clip, soundtrack or layer as a side-effect.
-        target.put("volume",volume).put("mute",false);project.put("mute_original",false);
+        target.put("volume",volume).put("mute",false);
     }
     static void duplicate(JSONObject project,int index)throws Exception {
         JSONArray clips=project.getJSONArray("clips"),out=new JSONArray();

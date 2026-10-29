@@ -53,4 +53,20 @@ public final class StudioAudioCropTest {
         assertEquals(.1,crop.getDouble("x"),.00001);
         assertEquals(.5,crop.getDouble("width"),.00001);
     }
+    @Test public void ordinaryBrowserRejectsOnionBeforeNetworking()throws Exception{
+        assertTrue(BrowserPolicy.webUrl("https://example.org/path"));
+        for(String url:new String[]{"http://example.onion/","http://EXAMPLE.ONION./","https://sub.example.onion:443/a"}){
+            assertTrue(BrowserPolicy.onionUrl(url));assertFalse(BrowserPolicy.webUrl(url));assertEquals(403,TorNetworkGuard.blockedOnion(url).getStatusCode());
+        }
+        assertNull(TorNetworkGuard.blockedOnion("https://example.org/?host=example.onion"));
+        JSONObject tor=TorMcp.status(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().getTargetContext());
+        assertFalse(tor.getBoolean("tor_verified"));assertTrue(tor.isNull("tor_connected"));assertFalse(tor.getBoolean("can_disconnect_external_tor"));
+    }
+    @Test public void allCropRatiosAreSpatialAndKeepDuration()throws Exception{
+        JSONObject source=new JSONObject().put("duration_ms",9000);
+        for(String ratio:new String[]{"9:16","16:9","1:1","4:5"}){
+            JSONObject c=StudioCrop.changed(StudioCrop.read(source),"set",new JSONObject().put("ratio",ratio).put("rectangle",new JSONObject().put("x",0).put("y",0).put("width",1).put("height",1)),1080,1920);
+            String[] parts=ratio.split(":");double wanted=Double.parseDouble(parts[0])/Double.parseDouble(parts[1]);assertEquals(wanted,c.getDouble("width")*1080/(c.getDouble("height")*1920),.00001);assertEquals(9000,source.getLong("duration_ms"));
+        }
+    }
 }

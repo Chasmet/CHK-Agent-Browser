@@ -30,8 +30,9 @@ public final class TorEntryActivity extends Activity {
         layout.addView(status);
         add(layout,"Ouvrir Tor Browser officiel",this::openOfficial);
         add(layout,"Vérifier l'état",this::updateState);
+        add(layout,"Diagnostic réseau dans Tor Browser",()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://check.torproject.org/")).setPackage(PACKAGE));status.setText("Diagnostic envoyé à Tor Browser · résultat non observable depuis CHK");}catch(Exception e){status.setText("Erreur : Tor Browser indisponible");}});
         add(layout,"Déconnexion",()->status.setText(
-            "Déconnexion : ferme les onglets et la session dans Tor Browser. CHK ne peut pas arrêter ou confirmer une connexion d'une autre application."));
+            "Déconnexion non effectuée par CHK : ferme les onglets et la session dans Tor Browser. CHK ne peut pas arrêter ou confirmer une connexion d'une autre application."));
         add(layout,"Installer Tor Browser officiel",()->{
             Intent link=new Intent(Intent.ACTION_VIEW,Uri.parse("https://www.torproject.org/download/#android"));
             startActivity(link);

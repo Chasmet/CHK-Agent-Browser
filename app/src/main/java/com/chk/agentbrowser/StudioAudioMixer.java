@@ -119,10 +119,19 @@ final class StudioAudioMixer {
             long a=r.getLong("start_ms"),b=r.getLong("end_ms");double x=ms<a?Math.max(0,1-(a-ms)/attack):ms<=b?1:Math.max(0,1-(ms-b)/release);amount=Math.max(amount,x);
         }return 1-(1-reduction)*amount;
     }
+    static double[] curve(JSONArray regions,JSONObject d,long total)throws Exception{
+        if(d==null||!d.optBoolean("enabled")||regions==null)return null;
+        double[] out=new double[(int)(total/10)+2];Arrays.fill(out,1);double attack=d.optDouble("attack_ms",100),release=d.optDouble("release_ms",500),reduction=Math.pow(10,d.optDouble("reduction_db",-18)/20);
+        for(int i=0;i<regions.length();i++){
+            JSONObject r=regions.getJSONObject(i);if(r.optDouble("rms_dbfs",-120)<d.optDouble("threshold_dbfs",-40))continue;long a=r.getLong("start_ms"),b=r.getLong("end_ms");
+            int first=Math.max(0,(int)((a-attack)/10)),last=Math.min(out.length-1,(int)Math.ceil((b+release)/10));
+            for(int j=first;j<=last;j++){long ms=j*10L;double amount=ms<a?Math.max(0,1-(a-ms)/attack):ms<=b?1:Math.max(0,1-(ms-b)/release);out[j]=Math.min(out[j],1-(1-reduction)*amount);}
+        }return out;
+    }
     private static final class Sampler {
         final JSONObject c,track,duck;final JSONArray regions;final long total;final Accumulator out;
-        final long start,length,outputFrames;final double speed;double prevTime=Double.NaN,prevL,prevR;long next,count;double energy;
-        Sampler(JSONObject c,JSONObject track,long total,JSONArray regions,JSONObject duck,Accumulator out){this.c=c;this.track=track;this.total=total;this.regions=regions;this.duck=duck;this.out=out;start=c.optLong("start_ms");length=c.optLong("duration_ms",10000);speed=c.optDouble("speed",1);outputFrames=Math.round(length*RATE/(1000d*speed));}
+        final long start,length,outputFrames;final double speed;final double[] duckCurve;long lastGainMs=-1;double cachedGain;double prevTime=Double.NaN,prevL,prevR;long next,count;double energy;
+        Sampler(JSONObject c,JSONObject track,long total,JSONArray regions,JSONObject duck,Accumulator out)throws Exception{this.c=c;this.track=track;this.total=total;this.regions=regions;this.duck=duck;this.out=out;duckCurve=curve(regions,duck,total);start=c.optLong("start_ms");length=c.optLong("duration_ms",10000);speed=c.optDouble("speed",1);outputFrames=Math.round(length*RATE/(1000d*speed));}
         void pcm(ByteBuffer data,int rate,int channels,long time)throws Exception{
             long frame=0;while(data.remaining()>=channels*2){double l=0,r=0;for(int ch=0;ch<channels;ch++){double v=data.getShort()/32768d;if(channels==1){l=v;r=v;}else if(ch%2==0)l+=v/((channels+1)/2);else r+=v/(channels/2);}
                 double t=(time/1000d+frame++*1000d/rate-start);if(t<0||t>length)continue;
@@ -134,7 +143,8 @@ final class StudioAudioMixer {
         void emit(double l,double r)throws Exception{
             long local=next*1000/RATE,timeline=c.getLong("timeline_ms")+local;
             if(timeline>=total){next=outputFrames;return;}
-            double gain=StudioAudio.gain(c,local,Math.round(length/speed))*StudioAudio.gain(track,timeline,total)*duckGain(regions,duck,timeline);
+            if(lastGainMs!=local){cachedGain=StudioAudio.gain(c,local,Math.round(length/speed))*StudioAudio.gain(track,timeline,total);lastGainMs=local;}
+            double gain=cachedGain;if(duckCurve!=null){int index=(int)Math.min(duckCurve.length-2,timeline/10);double fraction=(timeline%10)/10d;gain*=duckCurve[index]+(duckCurve[index+1]-duckCurve[index])*fraction;}
             l*=gain;r*=gain;out.add(next,l,r);energy+=l*l+r*r;next++;count++;
         }
         void finish()throws Exception{if(Double.isNaN(prevTime)||outputFrames-next>RATE/10)throw new IOException("SOURCE_AUDIO_TRUNCATED");while(next<outputFrames)emit(prevL,prevR);}

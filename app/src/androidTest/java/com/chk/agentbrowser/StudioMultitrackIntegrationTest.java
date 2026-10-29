@@ -86,6 +86,6 @@ public final class StudioMultitrackIntegrationTest {
     double tone(File f,int frequency)throws Exception{
         final double[] real={0},imag={0};final long[] count={0};AudioDecoder.read(f,300,1,(data,rate,channels,time)->{long n=0;while(data.remaining()>=channels*2){double sample=0;for(int c=0;c<channels;c++)sample+=data.getShort()/32768d/channels;double t=time/1000000d+n++/(double)rate;real[0]+=sample*Math.cos(2*Math.PI*frequency*t);imag[0]+=sample*Math.sin(2*Math.PI*frequency*t);count[0]++;}},null);return 2*Math.hypot(real[0],imag[0])/count[0];
     }
-    void proof(String name,File source)throws Exception{File dir=new File("/data/local/tmp/chk-studio-proof");if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("proof directory");try(InputStream in=new FileInputStream(source);OutputStream out=new FileOutputStream(new File(dir,name))){byte[] b=new byte[65536];int n;while((n=in.read(b))>0)out.write(b,0,n);}}
+    void proof(String name,File source)throws Exception{File dir=new File(app.getFilesDir(),"studio-proof");if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("proof directory");try(InputStream in=new FileInputStream(source);OutputStream out=new FileOutputStream(new File(dir,name))){byte[] b=new byte[65536];int n;while((n=in.read(b))>0)out.write(b,0,n);}}
     void saveProof(String name,JSONObject json)throws Exception{File tmp=new File(app.getCacheDir(),name);try(OutputStream out=new FileOutputStream(tmp)){out.write(json.toString(2).getBytes("UTF-8"));}proof(name,tmp);tmp.delete();}
 }

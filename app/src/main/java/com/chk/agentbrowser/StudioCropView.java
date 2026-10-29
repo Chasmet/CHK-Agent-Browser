@@ -16,7 +16,15 @@ final class StudioCropView extends View {
     private float x=0,y=0,w=1,h=1,lastX,lastY;
     private int grabbed=-1;
     private float ratio=0,sourceAspect=1;
-    StudioCropView(Context context){super(context);setTag("studio_crop_handles");setMinimumHeight(320);}
+    private final android.view.ScaleGestureDetector zoom;
+    private boolean pinching;
+    StudioCropView(Context context){super(context);setTag("studio_crop_handles");setMinimumHeight(320);
+        zoom=new android.view.ScaleGestureDetector(context,new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener(){
+            public boolean onScale(android.view.ScaleGestureDetector d){pinching=true;float factor=d.getScaleFactor();if(!Float.isFinite(factor)||factor<=0)return false;
+                float cx=x+w/2,cy=y+h/2;float nw=w/factor,nh=h/factor;float limit=Math.min(1/Math.max(.025f,nw),1/Math.max(.025f,nh));if(limit<1){nw*=limit;nh*=limit;}
+                if(nw<.025f||nh<.025f)return false;w=nw;h=nh;x=Math.max(0,Math.min(1-w,cx-w/2));y=Math.max(0,Math.min(1-h,cy-h/2));invalidate();return true;}
+        });
+    }
     void source(Bitmap bitmap){
         source=bitmap;
         if(bitmap!=null)sourceAspect=bitmap.getWidth()/(float)Math.max(1,bitmap.getHeight());
@@ -45,7 +53,9 @@ final class StudioCropView extends View {
         for(float xx:new float[]{l,r})for(float yy:new float[]{t,b})canvas.drawCircle(xx,yy,10,p);
         p.setTextSize(24);canvas.drawText(String.format(java.util.Locale.FRANCE,"x %.3f y %.3f · %.3f × %.3f",x,y,w,h),10,Math.max(30,t-14),p);
     }
+    @Override protected void onDetachedFromWindow(){if(source!=null){source.recycle();source=null;}super.onDetachedFromWindow();}
     @Override public boolean onTouchEvent(MotionEvent e){
+        zoom.onTouchEvent(e);if(e.getPointerCount()>1){pinching=true;getParent().requestDisallowInterceptTouchEvent(true);return true;}if(pinching){if(e.getActionMasked()==MotionEvent.ACTION_UP||e.getActionMasked()==MotionEvent.ACTION_CANCEL){pinching=false;grabbed=-1;getParent().requestDisallowInterceptTouchEvent(false);}return true;}
         float px=e.getX(),py=e.getY();
         float l=frame.left+x*frame.width(),t=frame.top+y*frame.height(),r=l+w*frame.width(),b=t+h*frame.height();
         switch(e.getActionMasked()){
@@ -56,7 +66,7 @@ final class StudioCropView extends View {
                     if(dist<best&&dist<3600){best=dist;grabbed=i;}}
                 if(grabbed<0&&px>=l&&px<=r&&py>=t&&py<=b)grabbed=4;
                 if(grabbed<0)return false;
-                lastX=px;lastY=py;return true;
+                lastX=px;lastY=py;getParent().requestDisallowInterceptTouchEvent(true);return true;
             }
             case MotionEvent.ACTION_MOVE:{
                 if(grabbed<0)return false;
@@ -77,7 +87,7 @@ final class StudioCropView extends View {
                 }
                 lastX=px;lastY=py;invalidate();return true;
             }
-            case MotionEvent.ACTION_UP:case MotionEvent.ACTION_CANCEL:grabbed=-1;return true;
+            case MotionEvent.ACTION_UP:case MotionEvent.ACTION_CANCEL:grabbed=-1;getParent().requestDisallowInterceptTouchEvent(false);return true;
             default:return true;
         }
     }

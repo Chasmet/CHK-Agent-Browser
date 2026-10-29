@@ -29,6 +29,11 @@ final class StudioAudio {
         }
         p.put("audio_tracks",tracks).put("audio_model_version",2);
     }
+    static void attach(JSONObject p,JSONObject clip)throws Exception{
+        enable(p);String id=UUID.randomUUID().toString();String path=clip.optString("path");
+        p.getJSONArray("audio_tracks").put(track(id,path.substring(path.lastIndexOf('/')+1)));
+        clip.put("track_id",id).put("offset_ms",0).put("duration_ms",Math.min(clip.optLong("duration_ms",10000),StudioEdits.total(p)));
+    }
     static JSONObject track(String id,String name)throws Exception{return new JSONObject().put("id",id).put("name",name).put("volume",1).put("mute",false).put("solo",false);}
     static JSONObject track(JSONObject p,String id)throws Exception{
         JSONArray tracks=p.optJSONArray("audio_tracks");

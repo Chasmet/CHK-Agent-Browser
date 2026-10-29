@@ -10,7 +10,7 @@ final class TorMcp {
     static JSONObject status(Context app)throws Exception {
         boolean installed=app.getPackageManager().getLaunchIntentForPackage(TorEntryActivity.PACKAGE)!=null;
         return new JSONObject().put("state","completed").put("checked","official_tor_browser_installed")
-            .put("installed",installed).put("tor_connected",JSONObject.NULL)
+            .put("installed",installed).put("package_identity",TorEntryActivity.PACKAGE).put("official_signature_verified",false).put("connection_state",installed?"unverified":"disconnected").put("can_verify_tor_connection",false).put("can_disconnect_external_tor",false).put("tor_connected",JSONObject.NULL)
             .put("tor_verified",false).put("isolation","separate_android_application")
             .put("diagnostic","Open official Tor Browser and verify check.torproject.org inside it.");
     }
