@@ -205,12 +205,24 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebViewClient(new WebViewClient(){
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                // Block every .onion subresource before Chromium's ordinary
+                // networking stack can attempt a direct DNS lookup.
+                String hostname=request.getUrl().getHost();
+                if(hostname!=null&&hostname.toLowerCase(java.util.Locale.ROOT).endsWith(".onion"))
+                    return new android.webkit.WebResourceResponse("text/plain","UTF-8",
+                        new java.io.ByteArrayInputStream(new byte[0]));
                 android.webkit.WebResourceResponse local=BrowserStreamUploader.intercept(view,request);
                 return local==null?super.shouldInterceptRequest(view,request):local;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
                 String scheme=request.getUrl().getScheme();
-                if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme))return false;
+                if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme)){
+                    if(!BrowserPolicy.webUrl(request.getUrl().toString())){
+                        if(request.isForMainFrame())toast("Adresse .onion bloquée dans Web : ouvre Tor.");
+                        return true;
+                    }
+                    return false;
+                }
                 if(request.isForMainFrame()&&request.hasGesture()&&BrowserSiteSettings.external(MainActivity.this,request.getUrl().toString()))return true;
                 toast("Lien externe indisponible");return true;
             }
