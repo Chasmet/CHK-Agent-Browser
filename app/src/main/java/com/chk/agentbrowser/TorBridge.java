@@ -38,7 +38,7 @@ final class TorBridge {
             if(Build.VERSION.SDK_INT<29){cb.done(false,error("TOR_INTEGRATED_REQUIRES_ANDROID_10"));return;}
             if(args.optString("operation").equals("disconnect")){disconnect(app,args,cb);return;}
             String id=UUID.randomUUID().toString();PENDING.put(id,cb);
-            long delay=args.optString("operation").equals("connect")?360000:args.optString("operation").equals("navigate")?95000:45000;
+            long delay=args.optString("operation").equals("connect")?360000:args.optString("operation").equals("navigate")?180000:args.optString("operation").equals("read")?210000:45000;
             Runnable timeout=()->complete(id,false,error("TOR_OPERATION_TIMED_OUT: relire l'état avant de répéter"));TIMEOUTS.put(id,timeout);MAIN.postDelayed(timeout,delay);
             Runnable send=()->{try{if(!PENDING.containsKey(id))return;Message m=Message.obtain(null,1);Bundle b=new Bundle();b.putString("id",id);b.putString("json",args.toString());m.setData(b);m.replyTo=REPLIES;remote.send(m);}catch(Exception e){complete(id,false,error("TOR_IPC_SEND_FAILED"));}};
             if(remote!=null){send.run();return;}READY.add(send);

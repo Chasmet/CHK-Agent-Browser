@@ -21,6 +21,7 @@ final class TorRuntime {
     final TorSessionPolicy policy=new TorSessionPolicy();
     final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor();
+    private final ExecutorService verifier=Executors.newSingleThreadExecutor();
     private final Context app;
     private final String sessionId=UUID.randomUUID().toString();
     private final JSONObject receipts=new JSONObject();
@@ -61,7 +62,7 @@ final class TorRuntime {
             .put("engine_process_id",android.os.Process.myPid()).put("process_name",android.app.Application.getProcessName())
             .put("http_tunnel_port",httpPort).put("socks_port",socksPort).put("proxy_scope","dedicated_tor_process_only")
             .put("web_storage_suffix","chk_tor").put("javascript_enabled",false).put("vpn_used",false)
-            .put("ui_open",screen!=null&&screen.resumed).put("url",lastUrl).put("title",lastTitle)
+            .put("ui_open",screen!=null&&screen.resumed).put("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),"")).put("title",web==null?lastTitle:shortTitle(web.getTitle())).put("last_successful_url",lastUrl)
             .put("page_error",lastPageError).put("navigation",navigation==null?JSONObject.NULL:new JSONObject(navigation.toString()))
             .put("diagnostic",diagnostic==null?JSONObject.NULL:new JSONObject(diagnostic.toString()));
     }
@@ -129,7 +130,7 @@ final class TorRuntime {
     private void startWatch(){if(watching)return;watching=true;main.postDelayed(watch,5000);}
     private final Runnable watch=new Runnable(){public void run(){
         if(!policy.state().equals("connected")){watching=false;return;}long ticket=policy.generation();
-        io.execute(()->{try{requireCircuit();if(policy.proofAge(SystemClock.elapsedRealtime())>=60000){JSONObject proof=TorHttp.diagnostic(httpPort);main.post(()->{if(policy.refresh(ticket,true,true,SystemClock.elapsedRealtime()))diagnostic=proof;});}}
+        verifier.execute(()->{try{requireCircuit();if(policy.proofAge(SystemClock.elapsedRealtime())>=60000){JSONObject proof=TorHttp.diagnostic(httpPort);main.post(()->{if(policy.refresh(ticket,true,true,SystemClock.elapsedRealtime()))diagnostic=proof;});}}
             catch(Exception e){main.post(()->{if(ticket==policy.generation())block(e.getMessage());});}
             finally{main.postDelayed(this,5000);}});
     }};
@@ -156,7 +157,7 @@ final class TorRuntime {
         String fingerprint=canonical(args);JSONObject old=receipts.optJSONObject(request);
         if(old!=null){if(!fingerprint.equals(old.optString("fingerprint")))throw new Exception("TOR_REQUEST_ID_REUSED_WITH_DIFFERENT_PARAMETERS");JSONObject value=new JSONObject(old.getJSONObject("result").toString()).put("replayed",true).put("current_url",lastUrl);cb.done(value.optString("state").equals("completed"),value);return;}
         if(navigationReply!=null)throw new Exception("TOR_NAVIGATION_ACTIVE");if(receipts.length()>=128)throw new Exception("TOR_SESSION_RECEIPT_LIMIT: déconnecter puis créer une nouvelle session");
-        String op=args.getString("operation"),url=args.optString("url",lastUrl);
+        String op=args.getString("operation"),url=args.optString("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),""));
         if(op.equals("back")||op.equals("forward")){WebBackForwardList history=web.copyBackForwardList();int index=history.getCurrentIndex()+(op.equals("back")?-1:1);if(index<0||index>=history.getSize())throw new Exception("TOR_HISTORY_BOUNDARY");url=history.getItemAtIndex(index).getUrl();}
         final String target=TorUrlPolicy.checked(url);long ticket=policy.generation();navigationStart=SystemClock.elapsedRealtime();pageLoadStarted=false;
         navigation=new JSONObject().put("state","running").put("request_id",request).put("requested_url",target).put("session_id",sessionId);navigationReply=cb;lastPageError="";
@@ -166,12 +167,12 @@ final class TorRuntime {
             if(!policy.refresh(ticket,true,true,SystemClock.elapsedRealtime())){finishNavigation(false,"TOR_SESSION_CHANGED");return;}diagnostic=proof;
             web.getSettings().setBlockNetworkLoads(false);if(op.equals("back"))web.goBack();else if(op.equals("forward"))web.goForward();else if(op.equals("reload"))web.reload();else web.loadUrl(target);
         });}catch(Exception e){main.post(()->{block(e.getMessage());finishNavigation(false,e.getMessage());});}});
-        main.postDelayed(()->{if(navigationReply!=null&&navigation!=null&&request.equals(navigation.optString("request_id"))){if(web!=null)web.stopLoading();finishNavigation(false,"TOR_PAGE_LOAD_TIMEOUT");}},80000);
+        main.postDelayed(()->{if(navigationReply!=null&&navigation!=null&&request.equals(navigation.optString("request_id"))){if(web!=null)web.stopLoading();finishNavigation(false,"TOR_PAGE_LOAD_TIMEOUT");}},150000);
     }
     void pageStarted(String url){if(navigationReply==null)return;try{if(pageLoadStarted||TorUrlPolicy.checked(url).equals(navigation.optString("requested_url")))pageLoadStarted=true;}catch(Exception e){pageFailed(e.getMessage());}}
     void pageFinished(String url,String title){
         if(navigationReply==null||!pageLoadStarted||"about:blank".equals(url))return;
-        try{if(!policy.usable(SystemClock.elapsedRealtime())||!TorUrlPolicy.checked(url).equals(web.getUrl()))throw new Exception("TOR_PAGE_READBACK_UNCONFIRMED");lastUrl=url;lastTitle=title==null?"":title;finishNavigation(true,"");}catch(Exception e){finishNavigation(false,e.getMessage());}
+        try{if(!policy.usable(SystemClock.elapsedRealtime())||!TorUrlPolicy.checked(url).equals(web.getUrl()))throw new Exception("TOR_PAGE_READBACK_UNCONFIRMED");lastUrl=url;lastTitle=shortTitle(title);finishNavigation(true,"");}catch(Exception e){finishNavigation(false,e.getMessage());}
     }
     void pageFailed(String reason){lastPageError=reason;finishNavigation(false,reason);}
     private void finishNavigation(boolean ok,String reason){
@@ -186,8 +187,9 @@ final class TorRuntime {
         try{out=file.startWrite();out.write(new JSONObject().put("session_id",sessionId).put("receipts",receipts).toString().getBytes(StandardCharsets.UTF_8));file.finishWrite(out);}catch(Exception e){if(out!=null)file.failWrite(out);throw e;}
     }
     private static String canonical(Object value)throws Exception{if(value instanceof JSONObject){JSONObject o=(JSONObject)value;ArrayList<String> keys=new ArrayList<>();for(Iterator<String> it=o.keys();it.hasNext();)keys.add(it.next());Collections.sort(keys);StringBuilder b=new StringBuilder("{");for(String k:keys)b.append(JSONObject.quote(k)).append(':').append(canonical(o.get(k))).append(',');return b.append('}').toString();}if(value instanceof JSONArray){StringBuilder b=new StringBuilder("[");JSONArray a=(JSONArray)value;for(int i=0;i<a.length();i++)b.append(canonical(a.get(i))).append(',');return b.append(']').toString();}return value instanceof String?JSONObject.quote((String)value):String.valueOf(value);}
+    private static String shortTitle(String title){return title==null?"":title.substring(0,Math.min(512,title.length()));}
     private void read(JSONObject args,Result cb)throws Exception{
-        if(!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_NOT_CONNECTED");String url=TorUrlPolicy.checked(args.optString("url",lastUrl));long ticket=policy.generation();
+        if(!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_NOT_CONNECTED");String url=TorUrlPolicy.checked(args.optString("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),"")));long ticket=policy.generation();
         io.execute(()->{try{requireCircuit();TorHttp.Reply r=TorHttp.get(url,httpPort,524288);if(ticket!=policy.generation()||!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_SESSION_CHANGED_OR_PROOF_EXPIRED");String text=android.text.Html.fromHtml(r.body,android.text.Html.FROM_HTML_MODE_LEGACY).toString();
             JSONObject value=new JSONObject().put("state",r.code>=200&&r.code<400?"completed":"failed").put("url",r.url).put("http_status",r.code).put("response_sha256",r.sha256).put("redirects",r.redirects).put("text",text.substring(0,Math.min(16000,text.length()))).put("read_scope","fresh_http_response_through_tor_not_authenticated_webview_dom").put("session_id",sessionId).put("tor_verified",true);
             main.post(()->cb.done(r.code>=200&&r.code<400,value));

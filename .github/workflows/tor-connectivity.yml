@@ -2,7 +2,7 @@ name: Tor isolated engine verification
 on:
   push:
     branches: [feature/local3-studio-tor-20261029]
-    paths: ['validation/probe_tor_bundle.py', '.github/workflows/tor-connectivity.yml', 'app/**Tor**', 'app/build.gradle', 'settings.gradle', 'tor-wrapper/**', 'validation/tor_android_checks.sh']
+    paths: ['validation/probe_tor_bundle.py', '.github/workflows/tor-connectivity.yml', 'app/**Tor**', 'app/build.gradle', 'settings.gradle', 'tor-wrapper/**', 'validation/tor_android_checks.sh', 'validation/with_tor_dns_capture.sh', 'validation/verify_tor_dns.py']
   workflow_dispatch:
 permissions:
   contents: read
@@ -45,8 +45,11 @@ jobs:
                   for n,line in enumerate(lines):
                       if 'Error:' in line: print('\n'.join(lines[n:n+5]))
           PYERR
-      - name: KVM
-        run: sudo chmod 666 /dev/kvm
+      - name: KVM and DNS trace tool
+        run: |
+          sudo chmod 666 /dev/kvm
+          sudo apt-get update -qq
+          sudo apt-get install -y tcpdump
       - name: Real Tor circuit and onion on Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
