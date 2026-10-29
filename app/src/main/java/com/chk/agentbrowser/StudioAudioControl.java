@@ -29,7 +29,7 @@ final class StudioAudioControl {
                         (ok,reply)->{
                             if(!ok){cb.completed(false,reply);return;}
                             try{
-                                JSONObject queue=new JSONObject(reply),rows=queue.getJSONArray("jobs");
+                                JSONObject queue=new JSONObject(reply);JSONArray rows=queue.getJSONArray("jobs");
                                 JSONObject selected=null;
                                 for(int i=0;i<rows.length();i++)if(args.getString("request_id").equals(rows.getJSONObject(i).optString("request_id")))
                                     selected=rows.getJSONObject(i);
