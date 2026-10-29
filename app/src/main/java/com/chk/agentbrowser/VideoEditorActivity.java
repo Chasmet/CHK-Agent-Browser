@@ -496,7 +496,7 @@ public final class VideoEditorActivity extends Activity {
         JSONObject c=clips().optJSONObject(i);
         if(c==null)return;
         player.setPlaybackSpeed((float)c.optDouble("speed",1));
-        player.setVolume(project.optBoolean("mute_original",audio().length()>0)||c.optBoolean("mute",false)?0:(float)c.optDouble("volume",1));
+        player.setVolume(project.optBoolean("mute_original",false)||c.optBoolean("mute",false)?0:(float)c.optDouble("volume",1));
         boolean changed=selected!=i;selected=i;updateCaption();if(changed&&selectedAudio<0)updateSelectionTools();
     }
     private void updateCaption(){

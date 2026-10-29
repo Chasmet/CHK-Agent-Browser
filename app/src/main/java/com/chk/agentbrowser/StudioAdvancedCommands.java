@@ -70,7 +70,7 @@ final class StudioAdvancedCommands {
             }
             return new JSONObject().put("state","completed").put("project_id",id)
                 .put("revision",current.optInt("revision")).put("tracks",out)
-                .put("audio_layout","Current engine mixes the video sequence with one sequential external audio sequence; overlapping external clips are not supported yet.");
+                .put("audio_layout",current.optString("audio_layout","sequential")).put("audio_offset_unit","milliseconds from start of video");
         }
         if(action.equals("studio_crop_open")){
             JSONObject item=track(current,args,true);

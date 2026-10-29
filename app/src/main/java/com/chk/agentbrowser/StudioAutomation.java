@@ -87,7 +87,7 @@ final class StudioAutomation {
         String type=op.getString("op");
         if(type.equals("settings")){
             JSONObject values=op.getJSONObject("values");for(Iterator<String> it=values.keys();it.hasNext();){String key=it.next();
-                if(!Arrays.asList("name","output","aspect_ratio","aspect_mode","resolution","fps","mute_original").contains(key))throw new IOException("Réglage inconnu : "+key);p.put(key,values.get(key));}return;
+                if(!Arrays.asList("name","output","aspect_ratio","aspect_mode","resolution","fps","mute_original","audio_layout").contains(key))throw new IOException("Réglage inconnu : "+key);p.put(key,values.get(key));}return;
         }
         String track=op.optString("track","clips");if(!track.equals("clips")&&!track.equals("audio")&&!track.equals("layers"))throw new IOException("Piste inconnue");
         JSONArray items=p.optJSONArray(track);if(items==null){items=new JSONArray();p.put(track,items);}
@@ -147,7 +147,7 @@ final class StudioAutomation {
         .put("image_formats",new JSONArray("[\"png\",\"jpg\",\"jpeg\",\"webp\"]")).put("image_duration_ms_min",1000).put("image_duration_ms_max",60000).put("max_clips",100)
         .put("timeline_operations",new JSONArray("[\"add\",\"update\",\"move\",\"delete\",\"settings\"]"))
         .put("subtitle_generation",new JSONObject().put("action","video_editor_subtitles_generate via android_action").put("expected_revision","required").put("languages","fr,en").put("timing","Vosk word timestamps").put("audio_uploaded",false))
-        .put("tracks",new JSONArray("[\"clips\",\"audio\",\"layers\",\"subtitles\"]")).put("audio_layout","sequential").put("video_layout","sequential + 3 timed image/video PiP layers").put("max_layers",3).put("layer_parameters",new JSONObject().put("offset_ms","position dans le montage").put("scale","0.1..1, largeur relative").put("x / y","-1..1, centre=0").put("opacity","0..1").put("audio","muet"))
+        .put("tracks",new JSONArray("[\"clips\",\"audio\",\"layers\",\"subtitles\"]")).put("audio_layout","sequential (legacy) ou parallel (pistes superposées, offset_ms)").put("video_layout","sequential + 3 timed image/video PiP layers").put("max_layers",3).put("layer_parameters",new JSONObject().put("offset_ms","position dans le montage").put("scale","0.1..1, largeur relative").put("x / y","-1..1, centre=0").put("opacity","0..1").put("audio","muet"))
         .put("queue_actions",new JSONArray("[\"add\",\"status\",\"pause\",\"resume\"]"))
         .put("timeline_request",new JSONObject()
             .put("expected_revision","integer obligatoire, obtenu par video_editor_project_read")

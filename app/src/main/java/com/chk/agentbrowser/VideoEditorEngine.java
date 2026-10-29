@@ -388,6 +388,9 @@ public final class VideoEditorEngine {
             throw new IllegalArgumentException("Recadrage inconnu: "+layout);
         WorkspaceStore store=new WorkspaceStore(context);
         JSONArray clips=p.getJSONArray("clips"),sounds=p.optJSONArray("audio");
+        String audioLayout=p.optString("audio_layout","sequential");
+        if(!audioLayout.equals("sequential")&&!audioLayout.equals("parallel"))
+            throw new IllegalArgumentException("audio_layout : sequential ou parallel");
         if(clips.length()>100)throw new IllegalArgumentException("100 plans maximum");
         int fps=p.optInt("fps",30);if(fps!=24&&fps!=30&&fps!=60)throw new IllegalArgumentException("Cadence 24, 30 ou 60 images/s requise");
         long videoDuration=0,audioDuration=0;
@@ -443,9 +446,15 @@ public final class VideoEditorEngine {
                 long start=a.optLong("start_ms",0),duration=a.optLong("duration_ms",10000);
                 if(start<0||duration<500||duration>1200000)throw new IllegalArgumentException("Découpe audio invalide");
                 checkMediaDuration(f,start+duration);
+                if(audioLayout.equals("parallel")){
+                    long offset=a.optLong("offset_ms",0);
+                    if(offset<0||offset+duration>videoDuration+1000)
+                        throw new IllegalArgumentException("Piste audio hors montage : offset_ms + duration_ms");
+                }
                 audioDuration+=duration;
             }
-            if(sounds.length()>0&&audioDuration>videoDuration+1000)throw new IllegalArgumentException("Audio plus long que la vidéo : raccourcis la piste");
+            if(audioLayout.equals("sequential")&&sounds.length()>0&&audioDuration>videoDuration+1000)
+                throw new IllegalArgumentException("Audio séquentiel plus long que la vidéo : raccourcis la piste");
         }
         StudioLayers.validate(context,p,videoDuration);
         StudioSubtitles.validate(p,videoDuration);
@@ -629,9 +638,29 @@ public final class VideoEditorEngine {
             sounds.add(new EditedMediaItem.Builder(media(store.file(a.getString("path")),a.optLong("start_ms",0),a.optLong("duration_ms",10000))).setDurationUs(sourceDurationUs(store,a,sourceDurations)).setRemoveVideo(true).setEffects(new Effects(volumeProcessors(a),Collections.emptyList())).build());
         }
         EditedMediaItemSequence sequence=original?EditedMediaItemSequence.withAudioAndVideoFrom(videos):EditedMediaItemSequence.withVideoFrom(videos);
-        Composition.Builder builder=sounds.isEmpty()?new Composition.Builder(sequence):new Composition.Builder(sequence,EditedMediaItemSequence.withAudioFrom(sounds));
+        java.util.List<EditedMediaItemSequence> audioSequences=new java.util.ArrayList<>();
+        if(!sounds.isEmpty()){
+            if("parallel".equals(project.optString("audio_layout","sequential"))){
+                long totalUs=StudioEdits.total(project)*1000L;
+                for(int i=0;i<sounds.size();i++){
+                    JSONObject source=audios.getJSONObject(i);
+                    long offsetUs=source.optLong("offset_ms",0)*1000L;
+                    long clipUs=source.optLong("duration_ms",10000)*1000L;
+                    EditedMediaItemSequence.Builder part=new EditedMediaItemSequence.Builder(
+                        java.util.Collections.singleton(androidx.media3.common.C.TRACK_TYPE_AUDIO));
+                    if(offsetUs>0)part.addGap(offsetUs);
+                    part.addItem(sounds.get(i));
+                    if(offsetUs+clipUs<totalUs)part.addGap(totalUs-offsetUs-clipUs);
+                    audioSequences.add(part.build());
+                }
+            }else audioSequences.add(EditedMediaItemSequence.withAudioFrom(sounds));
+        }
+        java.util.List<EditedMediaItemSequence> compositionSequences=new java.util.ArrayList<>();
+        compositionSequences.add(sequence);
+        compositionSequences.addAll(audioSequences);
+        Composition.Builder builder=new Composition.Builder(compositionSequences);
         if(layered){
-            List<EditedMediaItemSequence> sequences=StudioLayers.sequences(context,project,StudioEdits.total(project));sequences.add(sequence);if(!sounds.isEmpty())sequences.add(EditedMediaItemSequence.withAudioFrom(sounds));
+            List<EditedMediaItemSequence> sequences=StudioLayers.sequences(context,project,StudioEdits.total(project));sequences.add(sequence);sequences.addAll(audioSequences);
             Composition.Builder layeredBuilder=new Composition.Builder(sequences).setVideoCompositorSettings(StudioLayers.compositor(project,layerWidth,layerHeight));
             if(StudioSubtitles.items(project).length()>0)layeredBuilder.setEffects(new Effects(Collections.emptyList(),Collections.singletonList(StudioSubtitles.effect(project))));
             return layeredBuilder.build();

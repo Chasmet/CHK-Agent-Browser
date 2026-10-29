@@ -98,7 +98,12 @@ final class StudioTimeline extends View {
         }
         JSONArray audio=project.optJSONArray("audio");long audioAt=0;
         if(audio!=null&&audio.length()>0)for(int i=0;i<audio.length();i++){
-            JSONObject c=audio.optJSONObject(i);long len=c.optLong("duration_ms");segment(canvas,x(audioAt),x(audioAt+len),111,145,i==selectedAudio?0xff148d8a:0xff22575f,"♫ "+filename(c.optString("path")));audioAt+=len;
+            JSONObject c=audio.optJSONObject(i);long len=c.optLong("duration_ms");
+            long at="parallel".equals(project.optString("audio_layout","sequential"))?c.optLong("offset_ms",0):audioAt;
+            int band="parallel".equals(project.optString("audio_layout","sequential"))?i%3:0;
+            segment(canvas,x(at),x(at+len),111+band*10,145+band*10,
+                i==selectedAudio?0xff148d8a:0xff22575f,"♫ "+filename(c.optString("path")));
+            if(!"parallel".equals(project.optString("audio_layout","sequential")))audioAt+=len;
         }else segment(canvas,dp(12),getWidth()-dp(12),111,145,0xff28353f,"＋ Ajouter un audio");
         long textAt=0;boolean captions=false;
         for(int i=0;i<clips.length();i++){JSONObject c=clips.optJSONObject(i);long len=StudioEdits.duration(c);

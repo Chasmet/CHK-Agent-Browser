@@ -22,6 +22,28 @@ public final class VideoEditorIntegrationTest {
     @After public void tearDown()throws Exception{store.file(source).delete();}
     private JSONObject invoke(String action,JSONObject args)throws Exception{CountDownLatch done=new CountDownLatch(1);AtomicReference<String> result=new AtomicReference<>();AtomicBoolean success=new AtomicBoolean();VideoEditorEngine.get().command(context,action,args,(ok,value)->{success.set(ok);result.set(value);done.countDown();});assertTrue("Command timed out",done.await(30,TimeUnit.SECONDS));assertTrue(result.get(),success.get());return new JSONObject(result.get());}
     private JSONObject project(String output)throws Exception{return new JSONObject().put("name","Encoder test").put("output",output).put("aspect_ratio","1:1").put("aspect_mode","fit").put("resolution",480).put("clips",new JSONArray().put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",1000).put("filter","noir")).put(new JSONObject().put("path",source).put("start_ms",1000).put("duration_ms",1000).put("speed",2).put("text","CHK"))).put("audio",new JSONArray());}
+    @Test public void parallelAudioSequencesRetainOriginalAndExportARealMp4()throws Exception{
+        String output="multi-audio-"+UUID.randomUUID()+".mp4";
+        JSONObject p=project(output).put("audio_layout","parallel").put("mute_original",false);
+        p.put("audio",new JSONArray()
+            .put(new JSONObject().put("path",source).put("start_ms",0)
+                .put("offset_ms",0).put("duration_ms",650).put("volume",0.15))
+            .put(new JSONObject().put("path",source).put("start_ms",0)
+                .put("offset_ms",700).put("duration_ms",650).put("volume",0.35)));
+        VideoEditorEngine engine=VideoEditorEngine.get();
+        engine.validate(context,p);
+        androidx.media3.transformer.Composition composition=engine.composition(context,p);
+        assertEquals("Video plus two independent audio tracks",3,composition.sequences.size());
+        assertTrue("Original source audio must remain enabled",
+            composition.sequences.get(0).trackTypes.contains(androidx.media3.common.C.TRACK_TYPE_AUDIO));
+        invoke("video_editor_export",new JSONObject().put("project",p));
+        awaitExport();
+        JSONObject checked=engine.verifyProjectOutput(context,p);
+        assertTrue(checked.toString(),checked.getBoolean("valid"));
+        assertTrue("Export must contain an audio stream",checked.getBoolean("has_audio"));
+        assertTrue("Output MP4 must be nonempty",store.file(output).length()>10000);
+        store.file(output).delete();
+    }
     @Test public void testCancelThenRestartCannotStartAnObsoleteExport()throws Exception{
         String output="restart-"+UUID.randomUUID()+".mp4";
         invoke("video_editor_project_save",new JSONObject().put("project",project(output)));

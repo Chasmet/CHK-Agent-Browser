@@ -6,7 +6,8 @@ Date : 29 octobre 2026. **Non publié dans l'application.**
 
 - Navigation Tor : bouton séparé ouvrant **uniquement** le paquet Android officiel `org.torproject.torbrowser`. Le WebView CHK normal n'utilise pas de proxy Tor et ne partage pas les cookies du navigateur officiel. Si Tor Browser n'est pas installé, la fenêtre pointe vers sa fiche Play Store. **CHK ne peut pas confirmer, ni interrompre, la connexion Tor d'une autre application** : son état est marqué non vérifié, jamais connecté par supposition.
 - Correctif de l'audio d'origine : `mute_original` vaut `false` par défaut même en présence d'une piste importée. Régler le volume d'un plan ne touche plus au mute de ses voisins.
-- Niveaux sonores linéaires de 0 à 200 % dans le moteur, curseur Studio et commandes ci-dessous. `dB=20×log10(gain)`, silence exprimé `-Infinity`.
+- Niveaux sonores linéaires de 0 à 200 % dans le moteur, curseur Studio et commandes ci-dessous.
+- Mixage audio parallèle **optionnel** par `audio_layout:"parallel"` et `offset_ms` par clip, avec séquences Media3 distinctes. Les anciens projets sans ce champ restent séquentiels. La lecture directe des fichiers via les contrôles simplifiés de Studio ne reflète pas encore obligatoirement le mix complet ; utiliser `Aperçu rendu` pour la composition réelle. `dB=20×log10(gain)`, silence exprimé `-Infinity`.
 - Recadrage non destructif par clip : rectangle `{x,y,width,height}` normalisé et borné dans [0,1], inversion X/Y, rotation existante. Le même effet Media3 `Crop` est utilisé par le moteur de composition d'aperçu rendu et d'export. Interface numérique provisoire dans la barre d'outils.
 - Contrôle des révisions, `project_id` exact, `request_id` stable et journal des 48 dernières mutations pour éviter une double application.
 
@@ -26,6 +27,6 @@ Les nouveaux appels sont acheminables avec `android_action` et les noms `video_e
 
 ## Non terminé : ne pas publier comme mise à jour globale
 
-La gestion de l'audio **superposé en parallèle**, le ducking automatique, les keyframes réellement mixées, le limiteur de sortie, les quatre poignées tactiles, le recadrage animé et le diagnostic Tor **connecté** ne sont pas encore implémentés ni validés. Les appels `studio_audio_analyze`, `studio_audio_ducking`, `studio_audio_keyframes`, `studio_audio_mix`, `studio_audio_verify` et `studio_crop_preview` refusent explicitement l'exécution plutôt que de retourner un succès fictif.
+La gestion complète de pistes audio indépendantes dans l'interface, le ducking automatique, les keyframes réellement mixées, le limiteur de sortie, les quatre poignées tactiles, le recadrage animé et le diagnostic Tor **connecté** ne sont pas encore implémentés ni validés. Les appels `studio_audio_analyze`, `studio_audio_ducking`, `studio_audio_keyframes`, `studio_audio_mix`, `studio_audio_verify` et `studio_crop_preview` refusent explicitement l'exécution plutôt que de retourner un succès fictif.
 
 Aucun essai sur le réseau Tor ou export MP4 comparatif n'a encore eu lieu pour ces ajouts. Ne pas déclencher de Release publique depuis cette branche sans tests d'émulateur, essais Android réels et vérification du rendu.

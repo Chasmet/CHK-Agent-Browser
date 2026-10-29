@@ -21,6 +21,17 @@ final class StudioEdits {
     static void fitAudio(JSONObject project)throws Exception {
         JSONArray sounds=project.optJSONArray("audio");if(sounds==null)return;
         long available=total(project);JSONArray out=new JSONArray();
+        if("parallel".equals(project.optString("audio_layout","sequential"))){
+            for(int i=0;i<sounds.length();i++){
+                JSONObject copy=new JSONObject(sounds.getJSONObject(i).toString());
+                long offset=copy.optLong("offset_ms",0),len=copy.optLong("duration_ms",0);
+                if(offset<0||offset>=available||len<500)throw new IllegalArgumentException("Position ou durée audio hors montage");
+                copy.put("duration_ms",Math.min(len,available-offset));
+                out.put(copy);
+            }
+            project.put("audio",out);
+            return;
+        }
         for(int i=0;i<sounds.length()&&available>=500;i++){
             JSONObject copy=new JSONObject(sounds.getJSONObject(i).toString());long len=Math.min(available,copy.optLong("duration_ms"));
             if(len>=500){copy.put("duration_ms",len);out.put(copy);available-=len;}
