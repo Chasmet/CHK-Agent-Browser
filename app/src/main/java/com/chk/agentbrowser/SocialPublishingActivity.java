@@ -54,7 +54,7 @@ public final class SocialPublishingActivity extends Activity {
         root.setPadding(dp(14),dp(8),dp(14),dp(18));root.setBackgroundColor(BG);
         ScrollView scroll=new ScrollView(this);scroll.addView(root);setContentView(scroll);
         root.addView(text("RÉSEAUX · CHK",24,FG));
-        root.addView(text("TikTok, YouTube et Instagram dans le navigateur CHK. Les comptes et les fichiers restent dans ton environnement.",13,DIM));
+        root.addView(text("TikTok, YouTube et Instagram dans CHK : navigateur intégré + passerelle MP4 vers les applications officielles, sans exporter les mots de passe.",13,DIM));
         LinearLayout sites=group(root);
         sites.addView(text("OUVRIR UN STUDIO",15,TEAL));
         action(sites,"TikTok Studio · importer et programmer",()->open("https://www.tiktok.com/tiktokstudio/upload?from=creator_center&tab=video"));
@@ -64,6 +64,7 @@ public final class SocialPublishingActivity extends Activity {
         action(sites,"Instagram · créer une publication",()->open("https://www.instagram.com/"));
         LinearLayout help=group(root);
         help.addView(text("Importation : depuis le studio, utilise « Sélectionner une vidéo » puis le sélecteur CHK pour retrouver tes MP4. Le site doit accepter le fichier avant de programmer.",13,DIM));
+        help.addView(text("Partage direct : sélectionne une fiche ci-dessous puis « Envoyer MP4 ». Le fichier et sa légende sont transmis à l’application officielle. Cela ne confirme jamais une programmation.",13,DIM));
         help.addView(text("Une fiche préparée par ChatGPT n'est PAS une programmation confirmée. Vérifie toujours la date et l'heure affichées par la plateforme.",13,TEAL));
         LinearLayout planned=group(root);
         planned.addView(text("PUBLICATIONS PRÉPARÉES ET STATUTS",15,TEAL));
@@ -102,9 +103,34 @@ public final class SocialPublishingActivity extends Activity {
                 row.setBackgroundColor((i%2)==0?0xff29394e:0xff25364b);
                 row.setOnClickListener(v->details(id));
                 jobs.addView(row);
+                if("prepared".equals(entry.optString("status"))
+                    && ("tiktok".equals(platform)||"youtube".equals(platform)||"instagram".equals(platform))) {
+                    TextView direct=action(jobs,"Envoyer MP4 à l'application "+platform.toUpperCase(),
+                        ()->sharePrepared(id));
+                    direct.setTextSize(13);
+                    direct.setBackgroundColor(0xff294c52);
+                }
             }
         } catch(Exception e) {
             count.setText("Lecture des fiches impossible : "+e.getMessage());
+        }
+    }
+    private void sharePrepared(String id) {
+        try {
+            JSONObject job=PublicationJobs.command(this,PublicationJobs.ACTION_STATUS,
+                new JSONObject().put("id",id));
+            if(!"prepared".equals(job.optString("status"))) {
+                Toast.makeText(this,"Cette fiche n'est plus préparée : statut à vérifier.",Toast.LENGTH_LONG).show();
+                return;
+            }
+            new AlertDialog.Builder(this)
+                .setTitle("Transmettre la vidéo à l'application ?")
+                .setMessage("La vidéo CHK et sa légende seront partagées vers l'application Android officielle. La programmation et sa date ne seront PAS validées automatiquement. Pour programmer, confirme la date et l'heure dans le studio du réseau.")
+                .setNegativeButton("Annuler",null)
+                .setPositiveButton("Envoyer MP4",(d,w)->SocialNativeShare.launch(this,job))
+                .show();
+        } catch(Exception e) {
+            Toast.makeText(this,"Fiche inaccessible : "+e.getMessage(),Toast.LENGTH_LONG).show();
         }
     }
     private static String label(String s) {
