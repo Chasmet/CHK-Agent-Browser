@@ -22,10 +22,10 @@ final class StudioRenderPreview {
         cancel();long ticket=generation;busy=true;
         IO.execute(()->{try{
             JSONObject copy=new JSONObject(project.toString());VideoEditorEngine.get().validate(app,copy);copy.put("resolution",480);
-            Composition composition=VideoEditorEngine.get().composition(app,copy);
+            Composition composition=VideoEditorEngine.get().composition(app,copy,new AgentClient.ResultCallback(){public boolean isActive(){return ticket==generation;}public void finish(boolean ok,String text){}});
             main.post(()->{if(ticket!=generation)return;try{
                 output=new File(app.getCacheDir(),"studio-preview-"+UUID.randomUUID()+".mp4");File file=output;
-                transformer=new Transformer.Builder(app).addListener(new Transformer.Listener(){
+                transformer=new Transformer.Builder(app).setPortraitEncodingEnabled(VideoEditorEngine.ratio(copy.optString("aspect_ratio","source"))>0&&VideoEditorEngine.ratio(copy.optString("aspect_ratio","source"))<1).setMuxerFactory(new InAppMp4Muxer.Factory()).addListener(new Transformer.Listener(){
                     public void onCompleted(Composition c,ExportResult proof){if(ticket!=generation){file.delete();return;}transformer=null;busy=false;output=null;
                         if(!file.isFile()||file.length()<500){file.delete();result.failed("Aperçu vide");return;}
                         ready=file;result.ready(file);

@@ -13,6 +13,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <queries><package android:name="org.torproject.torbrowser" /></queries>
     <application android:name=".AgentApplication" android:label="CHK Agent Browser" android:icon="@drawable/ic_browser"
         android:theme="@style/AppTheme" android:usesCleartextTraffic="true"
         android:allowBackup="true" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules">
@@ -45,6 +46,7 @@
         <activity android:name=".CutStudioLibraryActivity" android:exported="false" />
         <activity android:name=".CutStudioSettingsActivity" android:exported="false" />
         <activity android:name=".CutStudioActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".TorSpaceActivity" android:exported="false" />
         <activity android:name=".StudioProjectsActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".VideoEditorActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".FileViewerActivity" android:exported="false" android:configChanges="orientation|screenSize" android:windowSoftInputMode="adjustResize" />

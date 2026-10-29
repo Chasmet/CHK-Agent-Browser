@@ -114,6 +114,7 @@ public class MainActivity extends Activity {
             if(BrowserWebState.alive(current)){beginNavigation(current);current.loadUrl(BrowserWebState.url(current));}
         });
         findViewById(R.id.nav_browser).setOnClickListener(v->showSpace("browser"));
+        findViewById(R.id.nav_tor).setOnClickListener(v->startActivity(new Intent(this,TorSpaceActivity.class)));
         findViewById(R.id.nav_files).setOnClickListener(v->showSpace("files"));
         findViewById(R.id.nav_notes).setOnClickListener(v->showSpace("notes"));
         findViewById(R.id.nav_video).setOnClickListener(v->startActivity(new Intent(this,StudioProjectsActivity.class)));
@@ -178,6 +179,7 @@ public class MainActivity extends Activity {
     private void navigate(String text){
         showSpace("browser");
         String url=normalize(text);
+        if(BrowserPolicy.onion(url)){toast("Adresse .onion : utiliser Tor Browser dans l’espace Tor");return;}
         if(url.isEmpty()){toast("Adresse non autorisée");return;}
         if(current!=null){beginNavigation(current);current.loadUrl(url);}
         ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(),0);
@@ -204,10 +206,12 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebViewClient(new WebViewClient(){
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                if(BrowserPolicy.onion(request.getUrl().toString()))return new android.webkit.WebResourceResponse("text/plain","UTF-8",403,"Tor required",java.util.Collections.emptyMap(),new java.io.ByteArrayInputStream("Adresse .onion bloquée hors de Tor Browser".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                 android.webkit.WebResourceResponse local=BrowserStreamUploader.intercept(view,request);
                 return local==null?super.shouldInterceptRequest(view,request):local;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
+                if(BrowserPolicy.onion(request.getUrl().toString())){toast("Adresse .onion bloquée hors de Tor Browser");return true;}
                 String scheme=request.getUrl().getScheme();
                 if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme))return false;
                 if(request.isForMainFrame()&&request.hasGesture()&&BrowserSiteSettings.external(MainActivity.this,request.getUrl().toString()))return true;

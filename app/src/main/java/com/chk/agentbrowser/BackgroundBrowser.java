@@ -93,6 +93,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebViewClient(new WebViewClient(){
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                if(BrowserPolicy.onion(request.getUrl().toString()))return new android.webkit.WebResourceResponse("text/plain","UTF-8",403,"Tor required",java.util.Collections.emptyMap(),new java.io.ByteArrayInputStream("Adresse .onion bloquée hors de Tor Browser".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                 android.webkit.WebResourceResponse local=BrowserStreamUploader.intercept(view,request);
                 return local==null?super.shouldInterceptRequest(view,request):local;
             }

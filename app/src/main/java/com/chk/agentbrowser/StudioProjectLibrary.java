@@ -31,6 +31,7 @@ final class StudioProjectLibrary {
         JSONObject p=(current.isFile()||new File(current+".bak").isFile())?read(current):blank();
         String id=p.optString("project_id","");
         boolean migrated=!validId(id);boolean initialized=!p.has("revision");
+        boolean addedIds=StudioMix.ids(p);
         p.put("revision",p.optInt("revision",0));
         if(migrated){
             id=UUID.randomUUID().toString();
@@ -41,8 +42,9 @@ final class StudioProjectLibrary {
         File archive=entry(app,id,false);
         if(archive.exists()){JSONObject saved=read(archive);if(saved.optInt("revision")>p.optInt("revision")){p=saved;write(current,p);}}
         else write(archive,p);
-        if(initialized)write(archive,p);
-        if(initialized||migrated||!current.isFile())write(current,p);
+        addedIds|=StudioMix.ids(p);
+        if(initialized||addedIds)write(archive,p);
+        if(initialized||migrated||addedIds||!current.isFile())write(current,p);
         return p;
     }
     static JSONObject blank()throws Exception{
@@ -50,7 +52,7 @@ final class StudioProjectLibrary {
             .put("output","Montage-"+System.currentTimeMillis()+"-"+UUID.randomUUID().toString().substring(0,6)+".mp4")
             .put("aspect_ratio","9:16").put("aspect_mode","fit")
             .put("resolution",720).put("revision",0).put("clips",new JSONArray())
-            .put("audio",new JSONArray());
+            .put("audio",new JSONArray()).put("mute_original",false);
     }
     private static boolean validId(String id){
         return id!=null&&id.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
@@ -89,6 +91,7 @@ final class StudioProjectLibrary {
     }
     /** Persist to its own JSON first, then atomically refresh the old active snapshot. */
     static void save(Context app,JSONObject p)throws Exception{
+        StudioMix.ids(p);
         JSONObject current=active(app);
         String id=current.getString("project_id");
         if(p.has("project_id")&&!id.equals(p.optString("project_id")))
@@ -120,7 +123,7 @@ final class StudioProjectLibrary {
     }
     static JSONObject create(Context app,JSONObject value)throws Exception{
         JSONObject before=active(app);
-        JSONObject p=new JSONObject(value.toString());
+        JSONObject p=new JSONObject(value.toString());StudioMix.ids(p);
         String id=UUID.randomUUID().toString();
         p.put("project_id",id).put("created_at",System.currentTimeMillis())
             .put("updated_at",System.currentTimeMillis())

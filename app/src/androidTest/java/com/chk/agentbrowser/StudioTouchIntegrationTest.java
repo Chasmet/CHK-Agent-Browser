@@ -113,11 +113,11 @@ public final class StudioTouchIntegrationTest {
         await(()->!((Boolean)field("saving"))&&!((Boolean)field("importing"))&&((JSONObject)field("project")).getJSONArray("clips").length()==5);
         JSONObject p=invoke("video_editor_project_read",new JSONObject());assertEquals(5,p.getJSONArray("clips").length());assertEquals(photo,p.getJSONArray("clips").getJSONObject(4).getString("path"));assertTrue(store.file(photo).exists());
     }
-    @Test public void excessAudioBatchIsRejectedWithoutSavingPartialTracks()throws Exception {
+    @Test public void audioBatchAddsIndependentOverlappingTracksWithoutChangingExistingAudio()throws Exception {
         launch();JSONObject before=invoke("video_editor_project_read",new JSONObject());
         call("addWorkspaceBatch",new Class<?>[]{String.class,List.class},"audio",Arrays.asList(video,video,video,video,video));
         await(()->!((Boolean)field("importing"))&&!((Boolean)field("saving")));
-        JSONObject after=invoke("video_editor_project_read",new JSONObject());assertEquals(before.getInt("revision"),after.getInt("revision"));assertEquals(1,after.getJSONArray("audio").length());
+        JSONObject after=invoke("video_editor_project_read",new JSONObject());assertTrue(after.getInt("revision")>before.getInt("revision"));assertEquals(6,after.getJSONArray("audio").length());assertEquals(before.getJSONArray("audio").getJSONObject(0).toString(),after.getJSONArray("audio").getJSONObject(0).toString());java.util.HashSet<String> tracks=new java.util.HashSet<>();for(int i=1;i<6;i++){JSONObject item=after.getJSONArray("audio").getJSONObject(i);assertEquals(0,item.getLong("offset_ms"));assertTrue(tracks.add(item.getString("track_id")));assertTrue(item.getLong("duration_ms")<=StudioEdits.total(after));}
     }
     @Test public void volumeProcessorScalesRealPcmAndMcpPersistsTheSameSetting()throws Exception {
         androidx.media3.common.audio.AudioProcessor processor=VideoEditorEngine.volumeProcessors(new JSONObject().put("volume",.25)).get(0);

@@ -13,10 +13,12 @@ public final class WorkspaceCommands {
     public static final ExecutorService IO=Executors.newSingleThreadExecutor();
     public static final Handler UI=new Handler(Looper.getMainLooper());
     private WorkspaceCommands(){}
-    public static boolean handles(String action){return action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status")||action.startsWith("video_editor_")||action.startsWith("media_")||action.startsWith("document_")||PublicationJobs.metadataAction(action);}
+    public static boolean handles(String action){return StudioCommands.handles(action)||action.startsWith("tor_")||action.startsWith("files_")||action.startsWith("notes_")||action.equals("workspace_status")||action.startsWith("video_editor_")||action.startsWith("media_")||action.startsWith("document_")||PublicationJobs.metadataAction(action);}
     public static void run(Context context,String action,JSONObject args,AgentClient.ResultCallback cb){
         if(!cb.isActive())return;
         Context app=context.getApplicationContext();
+        if(StudioCommands.handles(action)){StudioCommands.run(app,action,args,cb);return;}
+        if(action.startsWith("tor_")){TorSpace.command(app,action,args,cb);return;}
         if(action.equals("media_analyze_audio")||action.equals("media_listen")||action.equals("media_audio_capabilities")){
             try{AgentHearing.execute(app,new JSONObject(args.toString()).put("operation",action.equals("media_listen")?"listen":action.equals("media_analyze_audio")?"analyze":"capabilities"),cb);}
             catch(Exception e){finish(cb,false,e.getMessage());}return;

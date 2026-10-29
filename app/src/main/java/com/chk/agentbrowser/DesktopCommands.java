@@ -12,7 +12,7 @@ final class DesktopCommands {
     static JSONObject parameters(String action,JSONObject args)throws Exception{
         JSONObject p=action.equals("type")?new JSONObject(args.getString("text")):args;
         if(p==null||p.toString().getBytes("UTF-8").length>60000)throw new Exception("Commande IA trop grande (60 Ko maximum).");
-        if(!java.util.Arrays.asList("vision","pointer","files","tasks","terminal","browser","control","hearing").contains(p.optString("tool")))throw new Exception("Outil IA inconnu.");return p;
+        if(!java.util.Arrays.asList("vision","pointer","files","tasks","terminal","browser","control","hearing","studio","tor").contains(p.optString("tool")))throw new Exception("Outil IA inconnu.");return p;
     }
     static boolean nativeTarget(JSONObject command){
         if(!handles(command.optString("action"),command.optJSONObject("args")))return false;
@@ -37,6 +37,8 @@ final class DesktopCommands {
         try{JSONObject p=parameters(action,args);
             if((p.optString("tool").equals("tasks")||p.optString("tool").equals("terminal"))&&p.optString("operation").equals("cancel"))AgentTasks.requestCancel(p.optString("id"));
             switch(p.getString("tool")){
+            case "studio":StudioCommands.run(c,p.getString("operation"),p,cb);return;
+            case "tor":TorSpace.command(c,p.getString("operation"),p,cb);return;
             case "control":AgentControl.execute(c,p,cb);return;
             case "hearing":AgentHearing.execute(c,p,cb);return;
             case "browser":BrowserAutomation.execute(c,web,p,cb);return;

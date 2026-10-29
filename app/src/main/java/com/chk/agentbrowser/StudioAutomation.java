@@ -56,6 +56,10 @@ final class StudioAutomation {
                             .put("sources",fingerprints(app,p)).put("state","queued").put("created_at",System.currentTimeMillis()));
                     }
                     for(int i=0;i<staged.length();i++)jobs.put(staged.get(i));queue.put("paused",false);saveQueue(app);pump(app);result=summary();
+                }else if(action.equals("video_editor_queue_cancel")){
+                    String id=args.getString("id");boolean found=false;JSONArray jobs=queue.getJSONArray("jobs");
+                    for(int i=0;i<jobs.length();i++){JSONObject job=jobs.getJSONObject(i);if(id.equals(job.optString("id"))||id.equals(job.optString("request_id"))){found=true;String state=job.optString("state");if(state.equals("completed"))throw new IOException("Export déjà terminé");boolean running=state.equals("running");job.put("state","cancelled");saveQueue(app);if(running)VideoEditorEngine.get().command(app,"video_editor_cancel",new JSONObject(),(ok,s)->{});}}
+                    if(!found)throw new IOException("Export introuvable");result=summary();
                 }else if(action.equals("video_editor_queue_resume")){
                     for(int i=0;i<queue.getJSONArray("jobs").length();i++){JSONObject job=queue.getJSONArray("jobs").getJSONObject(i);
                         if(job.optString("state").equals("interrupted")){
@@ -129,7 +133,7 @@ final class StudioAutomation {
         }
     }
     private static void poll(Context app,JSONObject job){MAIN.postDelayed(()->IO.execute(()->{
-        try{JSONObject status=VideoEditorEngine.get().status();String state=status.optString("state");
+        try{if(job.optString("state").equals("cancelled")){polling=false;saveQueue(app);pump(app);return;}JSONObject status=VideoEditorEngine.get().status();String state=status.optString("state");
             if(state.equals("running")||state.equals("preparing")){poll(app,job);return;}
             if(state.equals("completed")){
                 JSONObject check=VideoEditorEngine.get().verifyProjectOutput(app,job.getJSONObject("project"));
@@ -147,7 +151,7 @@ final class StudioAutomation {
         .put("image_formats",new JSONArray("[\"png\",\"jpg\",\"jpeg\",\"webp\"]")).put("image_duration_ms_min",1000).put("image_duration_ms_max",60000).put("max_clips",100)
         .put("timeline_operations",new JSONArray("[\"add\",\"update\",\"move\",\"delete\",\"settings\"]"))
         .put("subtitle_generation",new JSONObject().put("action","video_editor_subtitles_generate via android_action").put("expected_revision","required").put("languages","fr,en").put("timing","Vosk word timestamps").put("audio_uploaded",false))
-        .put("tracks",new JSONArray("[\"clips\",\"audio\",\"layers\",\"subtitles\"]")).put("audio_layout","sequential").put("video_layout","sequential + 3 timed image/video PiP layers").put("max_layers",3).put("layer_parameters",new JSONObject().put("offset_ms","position dans le montage").put("scale","0.1..1, largeur relative").put("x / y","-1..1, centre=0").put("opacity","0..1").put("audio","muet"))
+        .put("tracks",new JSONArray("[\"clips\",\"audio\",\"layers\",\"subtitles\"]")).put("audio_layout","legacy sequential; V2 overlapping tracks with offset_ms").put("studio_commands",new JSONArray(java.util.Arrays.asList(StudioCommands.ACTIONS))).put("studio_transport","desktop {tool:studio, operation:<studio command>, project_id, expected_revision, request_id}").put("video_layout","sequential + 3 timed image/video PiP layers").put("max_layers",3).put("layer_parameters",new JSONObject().put("offset_ms","position dans le montage").put("scale","0.1..1, largeur relative").put("x / y","-1..1, centre=0").put("opacity","0..1").put("audio","muet"))
         .put("queue_actions",new JSONArray("[\"add\",\"status\",\"pause\",\"resume\"]"))
         .put("timeline_request",new JSONObject()
             .put("expected_revision","integer obligatoire, obtenu par video_editor_project_read")

@@ -85,7 +85,7 @@ public final class VideoEditorEngine {
                 DISK.execute(()->{try{
                     JSONObject project=args.has("project")?new JSONObject(args.getJSONObject("project").toString()):load(application);validate(application,project);
                     if(project.getJSONArray("clips").length()==0)throw new IllegalArgumentException("Ajoute une vidéo avant d’exporter");
-                    Composition composition=composition(application,project);
+                    Composition composition=composition(application,project,new AgentClient.ResultCallback(){public boolean isActive(){return ticket==exportGeneration;}public void finish(boolean ok,String text){}});
                     MAIN.post(()->{if(ticket!=exportGeneration||!"preparing".equals(state)){cb.completed(false,"Export annulé");return;}startExport(application,project,composition,args.optBoolean("replace",false),ticket,cb);});
                 }catch(Exception ex){synchronized(exportLock){if(ticket==exportGeneration){state="failed";error=ex.getMessage();}}cb.completed(false,ex.getMessage());}});
             });return;
@@ -436,8 +436,10 @@ public final class VideoEditorEngine {
                 checkMediaDuration(f,start+duration);
                 audioDuration+=duration;
             }
-            if(sounds.length()>0&&audioDuration>videoDuration+1000)throw new IllegalArgumentException("Audio plus long que la vidéo : raccourcis la piste");
+            if(!StudioMix.enabled(p)&&sounds.length()>0&&audioDuration>videoDuration+1000)throw new IllegalArgumentException("Audio plus long que la vidéo : raccourcis la piste");
         }
+        if(StudioMix.enabled(p))StudioMix.validate(p);
+        for(int i=0;i<clips.length();i++)StudioCrop.validate(clips.getJSONObject(i));
         StudioLayers.validate(context,p,videoDuration);
         StudioSubtitles.validate(p,videoDuration);
         if(videoDuration>20*60*1000)throw new IllegalArgumentException("Montage limité à 20 minutes");
@@ -554,7 +556,8 @@ public final class VideoEditorEngine {
         }catch(Exception ex){throw new IllegalArgumentException("Ratio largeur:hauteur requis (entre 1:5 et 5:1)");}
     }
     /** Used by export and the live CompositionPlayer so previews include real effects. */
-    public Composition composition(Context context,JSONObject project)throws Exception{
+    public Composition composition(Context context,JSONObject project)throws Exception{return composition(context,project,null);}
+    Composition composition(Context context,JSONObject project,AgentClient.ResultCallback active)throws Exception{
         WorkspaceStore store=new WorkspaceStore(context);
         JSONArray clips=project.getJSONArray("clips"),audios=project.optJSONArray("audio");
         List<EditedMediaItem> videos=new ArrayList<>(),sounds=new ArrayList<>();
@@ -566,10 +569,13 @@ public final class VideoEditorEngine {
         final int layerHeight=layerAspect>=1?layerQuality:Math.max(2,Math.round(layerQuality/Math.max(.2f,layerAspect)/2)*2);
         java.util.Map<String,Long> sourceDurations=new java.util.HashMap<>();
         boolean external=audios!=null&&audios.length()>0;
-        boolean original=!project.optBoolean("mute_original",external);
+        boolean mixed=StudioMix.enabled(project)||external&&project.has("mute_original")&&!project.optBoolean("mute_original");
+        File mix=mixed?StudioPcmMix.render(context,project,active,null):null;
+        boolean original=!mixed&&!project.optBoolean("mute_original",external);
         for(int i=0;i<clips.length();i++){
             JSONObject c=clips.getJSONObject(i);long len=c.optLong("duration_ms",10000);
             List<androidx.media3.common.Effect> fx=effects(c.optString("filter","aucun"),len,c.optLong("fade_ms",0));
+            fx.addAll(StudioCrop.effects(c));
             if(c.has("grade_exposure")||c.has("grade_warmth")||c.has("grade_saturation")||
                c.has("grade_exposure_end")||c.has("grade_warmth_end")||c.has("grade_saturation_end"))
                 fx.add(gradedColor(c,len));
@@ -603,10 +609,11 @@ public final class VideoEditorEngine {
             if(speed!=1)video.setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return speed;}public long getNextSpeedChangeTimeUs(long timeUs){return androidx.media3.common.C.TIME_UNSET;}});
             videos.add(video.build());
         }
-        if(external)for(int i=0;i<audios.length();i++){
+        if(external&&!mixed)for(int i=0;i<audios.length();i++){
             JSONObject a=audios.getJSONObject(i);
             sounds.add(new EditedMediaItem.Builder(media(store.file(a.getString("path")),a.optLong("start_ms",0),a.optLong("duration_ms",10000))).setDurationUs(sourceDurationUs(store,a,sourceDurations)).setRemoveVideo(true).setEffects(new Effects(volumeProcessors(a),Collections.emptyList())).build());
         }
+        if(mixed)sounds.add(new EditedMediaItem.Builder(MediaItem.fromUri(android.net.Uri.fromFile(mix))).setRemoveVideo(true).build());
         EditedMediaItemSequence sequence=original?EditedMediaItemSequence.withAudioAndVideoFrom(videos):EditedMediaItemSequence.withVideoFrom(videos);
         Composition.Builder builder=sounds.isEmpty()?new Composition.Builder(sequence):new Composition.Builder(sequence,EditedMediaItemSequence.withAudioFrom(sounds));
         if(layered){
@@ -633,7 +640,7 @@ public final class VideoEditorEngine {
         if(!compositionEffects.isEmpty())builder.setEffects(new Effects(Collections.emptyList(),compositionEffects));
         return builder.build();
     }
-    private static void validateVolume(JSONObject clip){double v=clip.optDouble("volume",1);if(Double.isNaN(v)||Double.isInfinite(v)||v<0||v>1)throw new IllegalArgumentException("Volume entre 0 et 1 requis");}
+    private static void validateVolume(JSONObject clip){double v=clip.optDouble("volume",1);if(Double.isNaN(v)||Double.isInfinite(v)||v<0||v>2)throw new IllegalArgumentException("Volume entre 0 et 2 requis");}
     static List<androidx.media3.common.audio.AudioProcessor> volumeProcessors(JSONObject clip){
         float volume=(float)clip.optDouble("volume",1);if(volume==1)return Collections.emptyList();
         androidx.media3.common.audio.ChannelMixingAudioProcessor processor=new androidx.media3.common.audio.ChannelMixingAudioProcessor();
