@@ -77,7 +77,18 @@ public final class AgentControlIntegrationTest {
         assertTrue(result.getBoolean("action_sent"));
         assertFalse(result.getBoolean("outcome_confirmed"));
         assertTrue(result.getBoolean("effect_uncertain"));
-        assertEquals("1",js(web,"window.clicks||0"));
+        // Sending an Android touch does not prove a DOM click: it may miss the
+        // target on a headless emulator. The receipt must never claim success.
+        String clicksBeforeReplay=js(web,"window.clicks||0");
+        assertTrue("One dispatched touch must not click more than once",
+            "0".equals(clicksBeforeReplay)||"1".equals(clicksBeforeReplay));
+        Result replay=call(request);
+        assertFalse("Replaying an unconfirmed gesture must stay unconfirmed",replay.ok);
+        JSONObject receipt=new JSONObject(replay.text);
+        assertTrue(receipt.getBoolean("replayed"));
+        assertFalse(receipt.getBoolean("outcome_confirmed"));
+        assertEquals("The replay must not cause another DOM click",
+            clicksBeforeReplay,js(web,"window.clicks||0"));
     }
     @Test public void conditionTrueBeforeControlActionIsNotAnEffectConfirmation()throws Exception{
         JSONObject seen=observe("web","");JSONObject request=action(seen,pointer(seen,"Exécuter")).put("expect",new JSONObject().put("text_contains","Exécuter"));
