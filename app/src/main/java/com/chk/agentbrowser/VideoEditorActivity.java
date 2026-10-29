@@ -725,7 +725,7 @@ public final class VideoEditorActivity extends Activity {
             public void onStartTrackingTouch(SeekBar b){}
             public void onStopTrackingTouch(SeekBar b){}
         });
-        TextView quarter=chip("↺ −90°     /     +90° ↻");box.addView(quarter);quarter.setOnClickListener(v->{try{double angle=Double.parseDouble(readout.getText().toString().replace(',','.'))+90;while(angle>180)angle-=360;readout.setText(String.valueOf(angle));rotation.setProgress((int)Math.round(angle)+180);}catch(Exception e){toast("Angle invalide");}});
+        LinearLayout quarterRow=new LinearLayout(this);box.addView(quarterRow);for(int delta:new int[]{-90,90}){TextView quarter=chip(delta<0?"↺ −90°":"+90° ↻");quarterRow.addView(quarter,new LinearLayout.LayoutParams(0,dp(44),1));quarter.setOnClickListener(v->{try{double angle=Double.parseDouble(readout.getText().toString().replace(',','.'))+delta;while(angle>180)angle-=360;while(angle<-180)angle+=360;readout.setText(String.valueOf(angle));rotation.setProgress((int)Math.round(angle)+180);}catch(Exception e){toast("Angle invalide");}});}
         android.widget.CheckBox horizontal=new android.widget.CheckBox(this);
         horizontal.setText("Inverser horizontalement");horizontal.setChecked(currentCrop.optBoolean("flip_horizontal"));
         box.addView(horizontal);

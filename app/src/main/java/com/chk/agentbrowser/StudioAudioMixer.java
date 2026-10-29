@@ -151,7 +151,7 @@ final class StudioAudioMixer {
             double gain=cachedGain;if(duckCurve!=null){int index=(int)Math.min(duckCurve.length-2,timeline/10);double fraction=(timeline%10)/10d;gain*=duckCurve[index]+(duckCurve[index+1]-duckCurve[index])*fraction;}
             l*=gain;r*=gain;out.add(next,l,r);energy+=l*l+r*r;next++;count++;
         }
-        void finish()throws Exception{if(Double.isNaN(prevTime)||outputFrames-next>RATE/10)throw new IOException("SOURCE_AUDIO_TRUNCATED");while(next<outputFrames)emit(prevL,prevR);}
+        void finish()throws Exception{if(Double.isNaN(prevTime)||outputFrames-next>RATE/10)throw new IOException("SOURCE_AUDIO_TRUNCATED: source="+c.optString("path")+", requested_frames="+outputFrames+", rendered_frames="+next+", last_source_ms="+prevTime+", start_ms="+start+", length_ms="+length);while(next<outputFrames)emit(prevL,prevR);}
     }
     private static final class Accumulator {
         final RandomAccessFile file;final long limit,offset;final float[] block=new float[2048];final byte[] bytes=new byte[8192];long blockAt=-1;int size;

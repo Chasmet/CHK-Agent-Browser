@@ -102,7 +102,7 @@ final class StudioAutomation {
             else throw new IOException("Opération inconnue : "+type);
         }
     }
-    private static JSONObject fingerprints(Context app,JSONObject p)throws Exception{
+    static JSONObject fingerprints(Context app,JSONObject p)throws Exception{
         JSONObject out=new JSONObject();WorkspaceStore store=new WorkspaceStore(app);
         for(String track:new String[]{"clips","audio","layers"}){JSONArray items=p.optJSONArray(track);if(items!=null)for(int i=0;i<items.length();i++){String path=items.getJSONObject(i).getString("path");if(!out.has(path))out.put(path,WorkspaceTransfer.hash(store.file(path)));}}return out;
     }
@@ -132,9 +132,10 @@ final class StudioAutomation {
         try{JSONObject status=VideoEditorEngine.get().status();String state=status.optString("state");
             if(state.equals("running")||state.equals("preparing")){poll(app,job);return;}
             if(state.equals("completed")){
+                JSONObject actual=fingerprints(app,job.getJSONObject("project")),expected=job.getJSONObject("sources");for(Iterator<String> keys=expected.keys();keys.hasNext();){String key=keys.next();if(!expected.getString(key).equals(actual.optString(key)))throw new IOException("SOURCE_CHANGED_DURING_EXPORT: "+key);}
                 JSONObject check=VideoEditorEngine.get().verifyProjectOutput(app,job.getJSONObject("project"));
                 job.put("verification",check).put("state",check.optBoolean("valid")?"completed":"failed");
-            }else job.put("state","failed").put("error",status.optString("error",state));
+            }else job.put("state",state.equals("cancelled")?"cancelled":"failed").put("error",status.optString("error",state));
             job.put("finished_at",System.currentTimeMillis());polling=false;saveQueue(app);pump(app);
         }catch(Exception ex){try{job.put("state","failed").put("error",ex.getMessage());saveQueue(app);}catch(Exception ignored){}polling=false;}
     }),1000);}

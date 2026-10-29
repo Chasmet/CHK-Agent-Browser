@@ -154,7 +154,7 @@ final class StudioMcp {
                     JSONObject result=cropResult(app,p,c).put("render_source","media3_composition_preview_mp4").put("time_ms",time).put("preview_sha256",WorkspaceTransfer.hash(file))
                         .put("jpeg_base64",android.util.Base64.encodeToString(bytes.toByteArray(),android.util.Base64.NO_WRAP));finish(cb,true,result);
                 }catch(Exception e){fail(cb,e);}finally{WorkspaceCommands.UI.post(preview::cancel);}});}
-            });
+            },cb);
         });
     }
     static void mix(Context app,JSONObject args,JSONObject p,AgentClient.ResultCallback cb)throws Exception{

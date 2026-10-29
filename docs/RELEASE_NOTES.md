@@ -1,13 +1,12 @@
-## CHK Studio et espace Tor — développement en cours (branche de validation)
+## CHK Studio / Tor — branche de validation, aucune Release finale
 
-- Une nouvelle entrée « Tor » ouvre **l'application Tor Browser officielle**, isolée du WebView CHK. Aucune connexion Tor, protection DNS ou visite .onion n'est annoncée comme vérifiée par CHK; ces vérifications doivent être réalisées dans Tor Browser. Le bouton « Déconnexion » explique la limite : CHK ne peut pas fermer une session appartenant à une application externe.
-- Correction du projet mixte : le moteur conserve l'audio original par défaut quand une piste musicale existe. Changer le volume d'un clip ne désactive plus les autres clips ni les pistes externes.
-- Volume local de 0 à 200 %, lecture du gain en décibels (20·log10(gain), −∞ dB pour le silence), aperçu et export Media3.
-- Outil « Recadrer » dans Studio : quatre coins, déplacement, choix de ratios, rotation, inversion, sauvegarde par clip. Le moteur Media3 applique la transformation non destructive à la composition d'aperçu et d'export. La comparaison pixel à pixel avec un MP4 exporté reste à confirmer.
-- Accès MCP via l'action `desktop` existante et `args.tool="studio"` : audio_tracks, audio_set_volume, crop_open, crop_set/move/resize/rotate/flip, crop_apply. Les écritures exigent projet, révision et identifiant de requête; aucune action MCP ne prétend qu'un MP4 a été vérifié simplement parce que le projet est enregistré.
-- Régressions automatisées ajoutées pour l'absence de mute collatéral et les contraintes géométriques de recadrage.
+Le moteur audio v2, le mixeur tactile et les commandes MCP correspondantes sont décrits dans [le contrat Studio](STUDIO_AUDIO_CROP_MCP_20261029.md). Les anciens projets séquentiels restent lisibles. Le mode avancé ajoute pistes parallèles, gains séparés, keyframes, fondus, Mute/Solo, ducking Vosk et limitation avant encodage du master.
 
-**Limites et fonctions non encore livrées** : navigateur Tor intégré, statut Tor vérifié par CHK, vraie déconnexion Tor depuis CHK, mixage audio indépendant avec automation de volume/ducking/limiteur, capture crop réellement issue du rendu, vérification indépendante des MP4. La branche de validation ne doit pas être présentée comme mise à jour finale complète.
+L'outil Recadrer sauvegarde une géométrie non destructive et génère un aperçu réel sur demande. Les commandes passent par `desktop / tool=studio` sur le serveur Local 3 1.0.4 inchangé. Les écritures exigent projet, révision et identifiant de requête ; un reçu de sauvegarde ne valide pas un MP4.
+
+Tor utilise une application externe isolée. CHK ne peut ni vérifier sa connexion réseau ni la déconnecter, et n'annonce aucun .onion comme opérationnel. Les URL .onion sont bloquées dans le navigateur ordinaire.
+
+La PR #76 reste en brouillon. Consulter le rapport de validation pour les résultats effectifs. Aucun APK de cette branche n'est annoncé comme une mise à jour de production détectée ou installée sur le téléphone.
 
 ## Correction des accusés MCP et reprises sans doublons — 29 octobre 2026
 

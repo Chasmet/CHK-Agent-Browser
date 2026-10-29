@@ -82,6 +82,13 @@ public final class StudioMultitrackIntegrationTest {
             JSONObject metadata=MediaInspection.info(app,"studio-crop-proof.mp4");assertEquals(480,metadata.getInt("width"));assertTrue(metadata.toString(),metadata.getInt("height")>500&&metadata.getInt("height")<560);
         }finally{store.file(image).delete();}
     }
+    @Test public void sourceAspectUsesZeroWhenClipRotationIsAbsent()throws Exception{
+        JSONObject p=p("aspect-"+UUID.randomUUID()+".mp4");JSONObject info=MediaInspection.info(app,video);
+        double expected=info.getDouble("width")/info.getDouble("height");if(Math.abs(info.optInt("rotation"))%180==90)expected=1/expected;
+        assertEquals(expected,VideoEditorEngine.get().outputAspect(app,p),.0001);
+        JSONObject c=p.getJSONArray("clips").getJSONObject(0);c.put("crop",new JSONObject().put("x",0).put("y",0).put("width",1).put("height",.5).put("degrees",90));
+        assertEquals(.5/expected,VideoEditorEngine.get().outputAspect(app,p),.0001);
+    }
     @Test public void realHumanVoiceSurvivesMusicAndVoskDucking()throws Exception{
         String speech="human-"+UUID.randomUUID()+".wav";
         try(InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("vosk-human-speech.wav");OutputStream out=new FileOutputStream(store.file(speech))){byte[] b=new byte[8192];int n;while((n=in.read(b))>0)out.write(b,0,n);}
@@ -89,6 +96,8 @@ public final class StudioMultitrackIntegrationTest {
             JSONObject source=p("studio-human-source.mp4").put("mute_original",true).put("clips",new JSONArray().put(new JSONObject().put("path",video).put("duration_ms",3000)).put(new JSONObject().put("path",video).put("duration_ms",3000)).put(new JSONObject().put("path",video).put("duration_ms",2000)))
                 .put("audio",new JSONArray().put(new JSONObject().put("path",speech).put("duration_ms",8000)));
             create(source);engine("video_editor_export",new JSONObject().put("replace",true));awaitExport();
+            proof("studio-human-source.mp4",store.file("studio-human-source.mp4"));
+            saveProof("studio-human-source-info.json",new JSONObject().put("metadata",MediaInspection.info(app,"studio-human-source.mp4")).put("decoded",StudioAudioAnalysis.measure(app,"studio-human-source.mp4",0,8000,null)));
             JSONObject p=new JSONObject(source.toString()).put("name","Human speech and ducking").put("speech_language","en").put("output","studio-human-mixed.mp4").put("mute_original",false)
                 .put("clips",new JSONArray().put(new JSONObject().put("path","studio-human-source.mp4").put("duration_ms",8000).put("volume",1)))
                 .put("audio",new JSONArray().put(new JSONObject().put("path",music).put("duration_ms",3000).put("volume",.15)).put(new JSONObject().put("path",music).put("duration_ms",3000).put("volume",.15)).put(new JSONObject().put("path",music).put("duration_ms",2000).put("volume",.15)));

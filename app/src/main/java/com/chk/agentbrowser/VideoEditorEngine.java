@@ -85,6 +85,7 @@ public final class VideoEditorEngine {
                 DISK.execute(()->{try{
                     JSONObject project=args.has("project")?new JSONObject(args.getJSONObject("project").toString()):load(application);validate(application,project);
                     if(project.getJSONArray("clips").length()==0)throw new IllegalArgumentException("Ajoute une vidéo avant d’exporter");
+                    project.put("_export_source_hashes",StudioAutomation.fingerprints(application,project));
                     Composition composition=composition(application,project,new AgentClient.ResultCallback(){public void finish(boolean ok,String text){}public boolean isActive(){return ticket==exportGeneration&&state.equals("preparing");}});
                     MAIN.post(()->{if(ticket!=exportGeneration||!"preparing".equals(state)){cb.completed(false,"Export annulé");return;}startExport(application,project,composition,args.optBoolean("replace",false),ticket,cb);});
                 }catch(Exception ex){synchronized(exportLock){if(ticket==exportGeneration){state="failed";error=ex.getMessage();}}cb.completed(false,ex.getMessage());}});
@@ -286,6 +287,11 @@ public final class VideoEditorEngine {
                     if(rendered==null||original==null){unverifiable++;continue;}
                     checked++;
                     float sourceBrightness=sampleBrightness(original);
+                    if(clip.has("crop")){
+                        JSONObject crop=StudioCrop.read(clip);int x=Math.min(original.getWidth()-1,(int)(crop.getDouble("x")*original.getWidth())),y=Math.min(original.getHeight()-1,(int)(crop.getDouble("y")*original.getHeight()));
+                        int w=Math.max(1,Math.min(original.getWidth()-x,(int)Math.round(crop.getDouble("width")*original.getWidth()))),h=Math.max(1,Math.min(original.getHeight()-y,(int)Math.round(crop.getDouble("height")*original.getHeight())));
+                        android.graphics.Bitmap region=android.graphics.Bitmap.createBitmap(original,x,y,w,h);sourceBrightness=sampleBrightness(region);if(region!=original)region.recycle();
+                    }
                     float renderedBrightness=sampleBrightness(rendered);
                     samples.put(new JSONObject().put("cut",i+1)
                         .put("source_luma",Math.round(sourceBrightness))
@@ -651,14 +657,14 @@ public final class VideoEditorEngine {
     private long sourceDurationUs(WorkspaceStore store,JSONObject clip,java.util.Map<String,Long> cache)throws Exception{
         String path=clip.getString("path");Long value=cache.get(path);if(value==null){MediaMetadataRetriever retriever=new MediaMetadataRetriever();try{retriever.setDataSource(store.file(path).getAbsolutePath());String duration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);value=duration==null?0:Long.parseLong(duration);}finally{retriever.release();}cache.put(path,value);}return Math.max(value,clip.optLong("start_ms")+clip.optLong("duration_ms",10000))*1000;
     }
-    private float outputAspect(Context context,JSONObject project)throws Exception{
+    float outputAspect(Context context,JSONObject project)throws Exception{
         float aspect=ratio(project.optString("aspect_ratio","source"));if(aspect>0)return aspect;
         JSONArray clips=project.getJSONArray("clips");if(clips.length()==0)return 0;JSONObject first=clips.getJSONObject(0),info=MediaInspection.info(context,first.getString("path"));
         double width=info.optInt("width"),height=info.optInt("height");if(width<=0||height<=0)return 0;
         if(Math.abs(info.optInt("rotation"))%180==90){double swap=width;width=height;height=swap;}
         if(first.has("crop")){JSONObject crop=StudioCrop.read(first);width*=crop.getDouble("width");height*=crop.getDouble("height");double angle=Math.toRadians(crop.getDouble("degrees"));double w=width; width=Math.abs(Math.cos(angle))*w+Math.abs(Math.sin(angle))*height;height=Math.abs(Math.sin(angle))*w+Math.abs(Math.cos(angle))*height;}
-        double angle=Math.toRadians(first.optDouble("rotation"));double w=width;width=Math.abs(Math.cos(angle))*w+Math.abs(Math.sin(angle))*height;height=Math.abs(Math.sin(angle))*w+Math.abs(Math.cos(angle))*height;
-        return (float)(width/height);
+        double angle=Math.toRadians(first.optDouble("rotation",0));double w=width;width=Math.abs(Math.cos(angle))*w+Math.abs(Math.sin(angle))*height;height=Math.abs(Math.sin(angle))*w+Math.abs(Math.cos(angle))*height;
+        double ratio=width/height;if(Double.isNaN(ratio)||Double.isInfinite(ratio)||ratio<=0)throw new IllegalArgumentException("Dimensions de sortie invalides");return (float)ratio;
     }
     private void startExport(Context context,JSONObject project,Composition composition,boolean replace,long ticket,Done callback){
         try{
@@ -684,6 +690,7 @@ public final class VideoEditorEngine {
                         try{
                             if(!partial.isFile()||partial.length()<1000)
                                 throw new IllegalStateException("Rendu MP4 absent ou incomplet");
+                            JSONObject before=project.optJSONObject("_export_source_hashes");if(before!=null){JSONObject actual=StudioAutomation.fingerprints(context,project);for(java.util.Iterator<String> keys=before.keys();keys.hasNext();){String key=keys.next();if(!before.getString(key).equals(actual.optString(key)))throw new IllegalStateException("SOURCE_CHANGED_DURING_EXPORT: "+key);}}
                             JSONObject renderedInfo=MediaInspection.infoFile(partial);
                             if(nativePortrait){
                                 int encodedWidth=renderedInfo.optInt("width",-1);
