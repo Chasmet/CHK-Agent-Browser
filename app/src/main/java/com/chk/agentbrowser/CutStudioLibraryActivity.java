@@ -310,22 +310,16 @@ public final class CutStudioLibraryActivity extends Activity {
                     JSONObject meta=CutShareMetadata.forVideo(workspace,path,NETWORKS[choice]);
                     String text=meta.getString("text");
                     String platform=NETWORKS[choice];
-                    String[] options={
-                        "Ouvrir dans CHK Browser (pilotable par ChatGPT)",
-                        "Partager avec l'application Android",
-                        "Copier les métadonnées"
-                    };
                     new AlertDialog.Builder(this)
                         .setTitle(NETWORK_LABELS[choice]+" · "+video.getName())
                         .setMessage(text)
-                        .setItems(options,(d,n)->{
-                            if(n==0)openPlatformInChk(platform,path,meta);
-                            else if(n==1){
-                                copyMetadata(text);
-                                shareVideoWithMetadata(video,text);
-                            }else copyMetadata(text);
+                        .setPositiveButton("Ouvrir dans CHK",(d,n)->openPlatformInChk(platform,path,meta))
+                        .setNeutralButton("Partager Android",(d,n)->{
+                            copyMetadata(text);
+                            shareVideoWithMetadata(video,text);
                         })
-                        .setNegativeButton("Annuler",null).show();
+                        .setNegativeButton("Copier seulement",(d,n)->copyMetadata(text))
+                        .show();
                 }catch(Exception e){toast("Métadonnées : "+e.getMessage());}
             }).show();
     }
