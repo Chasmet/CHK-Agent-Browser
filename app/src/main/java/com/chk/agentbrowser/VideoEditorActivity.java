@@ -262,7 +262,7 @@ public final class VideoEditorActivity extends Activity {
             View v=mainTools.getChildAt(i);v.setBackground(MobileUi.bg(this,("studio_page_"+toolPage).equals(v.getTag())?0xff29433f:0xff111214));
         }
         if(toolPage.equals("Audio")){
-            tool("＋","Ajouter",()->addMenu("audio"));tool("◉","Volume",()->volume());
+            tool("＋","Ajouter",()->addMenu("audio"));tool("◉","Volume",()->volume());tool("⌁","Courbe",()->volumeKeyframes());tool("↗","Fondus",()->audioFades());
             tool("✂","Découper",()->{if(selectedAudio>=0)trim(true,selectedAudio);else mute();});
             tool("♫","Son original",()->mute());tool("T","Transcrire",()->transcribeAudio());tool("▶","Mix rendu",()->renderedPreview());
             if(selectedAudio>=0){tool("M","Mute",()->audioFlag("mute"));tool("S","Solo",()->audioFlag("solo"));tool("↓","Ducking",()->audioDucking());tool("×","Supprimer",()->delete(true,selectedAudio));}
@@ -276,7 +276,7 @@ public final class VideoEditorActivity extends Activity {
             tool("◎","Audit local",()->offlineAudit());tool("◉","Étalonnage",()->gradeMenu());tool("▣","File exports",()->exportQueue());
         }else{
             tool("▣","Recadrer",()->crop());tool("✂","Diviser",()->split());tool("◷","Durée",()->trim(false,selected));tool("▷","Vitesse",()->speed());
-            tool("◉","Volume",()->{selectedAudio=-1;volume();});tool("▣","Dupliquer",()->duplicate());tool("×","Supprimer",()->delete(false,selected));
+            tool("◉","Volume",()->{selectedAudio=-1;volume();});tool("⌁","Courbe",()->volumeKeyframes());tool("▣","Dupliquer",()->duplicate());tool("×","Supprimer",()->delete(false,selected));
             tool("⇄","Déplacer",()->move());tool("◁","−1 image",()->stepFrame(-1));tool("▷","+1 image",()->stepFrame(1));
         }
     }
@@ -670,6 +670,69 @@ public final class VideoEditorActivity extends Activity {
         update.run();StudioSheet.show(this,sound?"Volume de la piste audio":"Volume du plan",box,()->{pausePreview();if(revision!=base||saving){configureCurrentClip();configureAudio();toast("Projet modifié : rouvre le réglage");return;}try{remember();if(sound)target.put("volume",slider.getProgress()/100.0);else StudioEdits.clipVolume(project,target,slider.getProgress()/100.0);save();}catch(Exception e){toast(e.getMessage());}},()->{pausePreview();configureCurrentClip();configureAudio();});
     }
     private void configureAudio(){if(audioPlayer==null||audio().length()==0)return;JSONObject c=audio().optJSONObject(Math.min(audio().length()-1,Math.max(0,audioPlayer.getCurrentMediaItemIndex())));if(c!=null)audioPlayer.setVolume(c.optBoolean("mute",false)?0:(float)Math.min(1,c.optDouble("volume",1)));}
+    private void volumeKeyframes(){
+        if(project==null||saving||importing)return;
+        JSONObject target=selectedAudio>=0?audio().optJSONObject(selectedAudio):clip();
+        if(target==null)return;
+        final int before=revision;
+        LinearLayout panel=MobileUi.column(this);
+        panel.addView(MobileUi.text(this,"Une ligne par point : temps en millisecondes, volume en pourcentage. Exemple : 0,100 puis 1500,40. Supprimer la ligne pour supprimer le point. Les points sont interpolés dans le MP4.",13,MobileUi.TEXT));
+        EditText input=new EditText(this);
+        input.setTag("studio_volume_keyframes_edit");
+        input.setGravity(Gravity.TOP);
+        input.setMinLines(5);input.setMaxLines(10);
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        JSONArray existing=target.optJSONArray("volume_keyframes");
+        StringBuilder lines=new StringBuilder();
+        if(existing!=null)for(int i=0;i<existing.length();i++){
+            JSONObject entry=existing.optJSONObject(i);
+            if(entry!=null)lines.append(entry.optLong("time_ms")).append(",")
+                .append(Math.round(entry.optDouble("gain",1)*100)).append("\n");
+        }
+        input.setText(lines.toString());panel.addView(input);
+        StudioSheet.show(this,"Automatisation du volume",panel,()->{
+            if(revision!=before||saving){toast("Projet modifié : rouvre Courbe");return;}
+            try{
+                JSONArray keys=new JSONArray();long previous=-1;
+                for(String line:input.getText().toString().split("\\r?\\n")){
+                    if(line.trim().isEmpty())continue;
+                    String[] split=line.trim().split(",");
+                    if(split.length!=2)throw new IllegalArgumentException("Format temps_ms,pourcentage attendu");
+                    long time=Long.parseLong(split[0].trim());
+                    double percent=Double.parseDouble(split[1].trim());
+                    if(time<=previous||time<0||time>target.optLong("duration_ms")||
+                        !Double.isFinite(percent)||percent<0||percent>200)
+                        throw new IllegalArgumentException("Points triés, strictement croissants, dans la durée, 0..200 %");
+                    keys.put(new JSONObject().put("time_ms",time).put("gain",percent/100));
+                    previous=time;
+                }
+                if(keys.length()>100)throw new IllegalArgumentException("100 points maximum");
+                remember();target.put("volume_keyframes",keys);save();
+            }catch(Exception ex){toast("Keyframes : "+ex.getMessage());}
+        },()->{});
+    }
+    private void audioFades(){
+        if(selectedAudio<0||project==null||saving)return;
+        JSONObject c=audio().optJSONObject(selectedAudio);if(c==null)return;
+        final int before=revision;
+        int duration=(int)Math.min(1200000,c.optLong("duration_ms",1000));
+        LinearLayout panel=MobileUi.column(this);
+        TextView text=MobileUi.text(this,"Fondus de la piste (ms), appliqués au MP4",13,MobileUi.TEXT);panel.addView(text);
+        SeekBar intro=new SeekBar(this);intro.setMax(duration);intro.setProgress((int)c.optLong("fade_in_ms"));panel.addView(MobileUi.text(this,"Entrée",13,MobileUi.TEXT));panel.addView(intro);
+        SeekBar outro=new SeekBar(this);outro.setMax(duration);outro.setProgress((int)c.optLong("fade_out_ms"));panel.addView(MobileUi.text(this,"Sortie",13,MobileUi.TEXT));panel.addView(outro);
+        TextView values=MobileUi.text(this,"",13,MobileUi.TEXT);panel.addView(values);
+        Runnable update=()->values.setText("Entrée : "+intro.getProgress()+" ms · Sortie : "+outro.getProgress()+" ms");
+        SeekBar.OnSeekBarChangeListener listener=new SeekBar.OnSeekBarChangeListener(){
+            public void onProgressChanged(SeekBar b,int p,boolean user){update.run();}
+            public void onStartTrackingTouch(SeekBar b){}
+            public void onStopTrackingTouch(SeekBar b){}
+        };intro.setOnSeekBarChangeListener(listener);outro.setOnSeekBarChangeListener(listener);update.run();
+        StudioSheet.show(this,"Fondus audio",panel,()->{
+            if(revision!=before||saving){toast("Projet modifié");return;}
+            try{remember();c.put("fade_in_ms",intro.getProgress()).put("fade_out_ms",outro.getProgress());save();}
+            catch(Exception e){toast(e.getMessage());}
+        },()->{});
+    }
     private void audioFlag(String key){
         if(project==null||selectedAudio<0||saving)return;
         try{JSONObject c=audio().getJSONObject(selectedAudio);remember();c.put(key,!c.optBoolean(key,false));save();}
@@ -711,6 +774,11 @@ public final class VideoEditorActivity extends Activity {
             SeekBar rotation=new SeekBar(this);rotation.setMax(360);rotation.setProgress((int)Math.round(crop.optDouble("rotate_deg",0)+180));
             TextView degrees=MobileUi.text(this,"Rotation : "+(rotation.getProgress()-180)+"°",14,MobileUi.TEXT);
             panel.addView(degrees);panel.addView(rotation);
+            LinearLayout quarters=new LinearLayout(this);panel.addView(quarters);
+            for(int angle:new int[]{-90,0,90,180}){
+                TextView turn=chip(angle+"°");quarters.addView(turn,new LinearLayout.LayoutParams(0,dp(42),1));
+                turn.setOnClickListener(v->rotation.setProgress(angle+180));
+            }
             rotation.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar bar,int at,boolean user){degrees.setText("Rotation : "+(at-180)+"°");}public void onStartTrackingTouch(SeekBar b){}public void onStopTrackingTouch(SeekBar b){}});
             LinearLayout flags=new LinearLayout(this);panel.addView(flags);
             CheckBox horizontal=new CheckBox(this),vertical=new CheckBox(this);
