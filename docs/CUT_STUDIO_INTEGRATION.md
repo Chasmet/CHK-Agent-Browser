@@ -15,6 +15,17 @@
 - Métadonnées copiées dans le presse-papiers; partage MP4 via Android disponible.
 - `CutVideo/publications.json` contient une copie lisible de la file de publication pour le contrôle via les outils MCP Fichiers.
 
+## Partage depuis la bibliothèque Cut (mode CHK Browser)
+Sur une vidéo de **Cut > Mes vidéos**, le bouton **Partager + métadonnées** affiche le réseau et sa fiche. Trois parcours sont disponibles :
+
+- **Ouvrir dans CHK** : ouvre l'interface web du réseau dans un onglet de CHK Agent Browser sans quitter l'application. Les champs `video_path`, `platform`, `url`, `title`, `description`, `hashtags` et `state=ready_for_browser_upload` sont enregistrés dans `CutVideo/share_context.json`, uniquement pour poursuivre le transfert via le MCP du navigateur.
+- **Partager Android** : conserve le sélecteur natif et les applications TikTok/Instagram/YouTube. Android transfère alors l'activité vers l'application choisie, qui n'est **pas** pilotable par les outils limités à CHK.
+- **Copier seulement** : conserve la fiche complète dans le presse-papiers sans ouvrir d'autre écran.
+
+Une application Android tierce ne peut pas être intégrée arbitrairement dans CHK : l'activité cible doit autoriser l'intégration inter-applications. Pour agir dans une application native après le partage, il faudrait développer un mode séparé d'automatisation d'accessibilité, explicitement activé par le propriétaire et soumis aux permissions et restrictions Android.
+
+Le mode CHK ouvre le site ; **aucun téléversement ni publication n'est présumé réussi**. L'agent utilise les outils navigateur du MCP pour inspecter le formulaire, importer le MP4 depuis `video_path` et contrôler la preuve finale sur le réseau.
+
 ## Réseaux
 | Plateforme | Adresse de création | Fonction |
 |---|---|---|

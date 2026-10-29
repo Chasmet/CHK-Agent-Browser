@@ -35,6 +35,7 @@ public final class CutStudioHomeActivity extends Activity {
         card(cards,"✂","IMPORTER UNE VIDÉO","Choisir une vidéo du téléphone ou de Fichiers CHK",()->startActivity(new Intent(this,CutStudioActivity.class)));
         card(cards,"▣","MES VIDÉOS","Classements, dossiers, notes et publications",()->startActivity(new Intent(this,CutStudioLibraryActivity.class)));
         card(cards,"◎","ASSISTANT CHATGPT","Métadonnées, programmation et automatisations",()->startActivity(new Intent(this,CutStudioActivity.class).putExtra("cut_tab",2)));
+        card(cards,"◎","RÉSEAUX SOCIAUX","TikTok, YouTube, Instagram et fiches de programmation",()->startActivity(new Intent(this,SocialPublishingActivity.class)));
         card(cards,"⚙","RÉGLAGES","Préférences et version de l'application",()->startActivity(new Intent(this,CutStudioSettingsActivity.class)));
         TextView footer=label("Fichiers conservés sur le téléphone · MCP CHK compatible",12,0xffb7c0bf,false);
         footer.setGravity(Gravity.CENTER);footer.setPadding(dp(12),dp(14),dp(12),dp(24));root.addView(footer);

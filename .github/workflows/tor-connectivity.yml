@@ -1,0 +1,20 @@
+name: Tor isolated engine verification
+on:
+  push:
+    branches: [feature/local3-studio-tor-20261029]
+    paths: ['validation/probe_tor_bundle.py', '.github/workflows/tor-connectivity.yml', 'app/**Tor**', 'app/build.gradle', 'settings.gradle']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 validation/probe_tor_bundle.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tor-bundle-${{ github.sha }}
+          path: tor-bundle-proof/
+          retention-days: 3

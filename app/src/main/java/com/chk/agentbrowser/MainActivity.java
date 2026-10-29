@@ -119,6 +119,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.nav_notes).setOnClickListener(v->showSpace("notes"));
         findViewById(R.id.nav_video).setOnClickListener(v->startActivity(new Intent(this,StudioProjectsActivity.class)));
          findViewById(R.id.nav_cut).setOnClickListener(v->startActivity(new Intent(this,CutStudioHomeActivity.class)));
+        findViewById(R.id.nav_social).setOnClickListener(v->startActivity(new Intent(this,SocialPublishingActivity.class)));
         findViewById(R.id.menu).setOnClickListener(v->browserMenu());
         findViewById(R.id.translate_page).setOnClickListener(v->translateMenu());
         findViewById(R.id.tab_count).setOnClickListener(v->tabOverview());
@@ -548,6 +549,8 @@ public class MainActivity extends Activity {
         String extra="";
         if(WorkspaceCommands.handles(action))extra="Utiliser l’espace Fichiers et Notes : "+action;
         else if(action.equals("publication_submit"))extra="Publier ou programmer UNE fois sur la plateforme prévue, avec contrôle du résultat et journal anti-doublon";
+        else if(action.equals("publication_handoff"))extra="Ouvrir TikTok/YouTube/Instagram officiel avec le MP4 CHK. Ne programme rien automatiquement et ne confirme aucune mise en ligne.";
+
         else if(DesktopCommands.handles(action,args))extra="Utiliser les outils IA CHK : souris, vision, fichiers, tâches ou scripts";
         else if(KeyboardCommands.handles(action,args))extra="Utiliser le clavier agent pour inspecter ou remplir les champs";
         else switch(action){
@@ -622,6 +625,22 @@ public class MainActivity extends Activity {
                 public boolean isActive(){return callback.isActive();}
                 public void finish(boolean ok,String result){if(!isDestroyed()&&workspace!=null&&!activeSpace.equals("browser"))workspace.refresh();callback.finish(ok,result);}
             });return;
+        }
+        if("publication_handoff".equals(action)) {
+            // Native social app handoff; no WebView file input is involved.
+            // The callback only proves Android opened the official app or chooser.
+            try {
+                String id=args.optString("id","");
+                if(!id.matches("[A-Za-z0-9_-]{1,80}"))
+                    throw new IllegalArgumentException("Identifiant de publication invalide.");
+                JSONObject job=PublicationJobs.command(this,PublicationJobs.ACTION_STATUS,
+                    new JSONObject().put("id",id));
+                JSONObject receipt=SocialNativeShare.handoff(this,job);
+                callback.finish(true,receipt.toString());
+            } catch(Exception error) {
+                callback.finish(false,"Ouverture native impossible : "+error.getMessage());
+            }
+            return;
         }
         showSpace("browser");
         if(home!=null)home.revealWeb();
@@ -948,7 +967,7 @@ public class MainActivity extends Activity {
         boolean light=space.equals("files");findViewById(R.id.space_nav).setBackgroundColor(light?0xfff4f6fb:0xff202124);
         getWindow().setStatusBarColor(0xff17181c);getWindow().setNavigationBarColor(light?0xfff4f6fb:0xff202124);
         if(Build.VERSION.SDK_INT>=26){int flags=getWindow().getDecorView().getSystemUiVisibility();getWindow().getDecorView().setSystemUiVisibility(light?flags|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:flags&~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);}
-        String[] spaces={"browser","files","video","cut","notes"},icons={"globe","folder","video","scissors","document"};int[] ids={R.id.nav_browser,R.id.nav_files,R.id.nav_video,R.id.nav_cut,R.id.nav_notes};
+        String[] spaces={"browser","files","video","cut","social","notes"},icons={"globe","folder","video","scissors","globe","document"};int[] ids={R.id.nav_browser,R.id.nav_files,R.id.nav_video,R.id.nav_cut,R.id.nav_social,R.id.nav_notes};
         for(int i=0;i<ids.length;i++){TextView v=findViewById(ids[i]);boolean selected=space.equals(spaces[i]);int color=selected?(light?0xff2468cb:0xffc5bfff):(light?0xff687080:0xffbfc2cd);v.setTextSize(11);v.setTextColor(color);v.setCompoundDrawablesWithIntrinsicBounds(null,UiIcons.icon(this,icons[i],color,23),null,null);v.setBackground(selected?MobileUi.bg(this,light?0xffdceaff:0xff393548):null);v.setSelected(selected);v.setFocusable(true);}
         if(!browser&&workspace!=null&&!space.equals(activeSpace))workspace.show(space);
         activeSpace=space;updatePageError();

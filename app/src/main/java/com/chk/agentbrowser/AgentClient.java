@@ -502,6 +502,7 @@ public final class AgentClient {
                         || KeyboardCommands.handles(nativeAction,nativeArgs)
                         || DesktopCommands.handles(nativeAction,nativeArgs)
                         || nativeAction.equals(PublicationJobs.ACTION_SUBMIT)
+                        || nativeAction.equals("publication_handoff")
                         || nativeAction.equals("download_file") || nativeAction.equals("upload_file") || nativeAction.equals("select_option")
                         || nativeAction.equals("check") || nativeAction.equals("get_page_status")
                         || nativeAction.equals("wait_for_element")
