@@ -41,6 +41,15 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <service android:name=".NativeSocialControlService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice"
+                android:resource="@xml/native_social_accessibility" />
+        </service>
         <activity android:name=".SocialPublishingActivity" android:exported="false" />
         <activity android:name=".CutStudioHomeActivity" android:exported="false" />
         <activity android:name=".CutStudioLibraryActivity" android:exported="false" />
