@@ -48,7 +48,7 @@ public final class StudioProAudioCropTest {
         c.put("w",.9);
         try{StudioCropControl.validate(c);fail("Outside image");}catch(IllegalArgumentException good){}
     }
-    @Test public void decibelsAndGainSupportSilenceAndTwoHundredPercent(){
+    @Test public void decibelsAndGainSupportSilenceAndTwoHundredPercent()throws Exception{
         assertEquals(2,StudioAudioControl.linear(6.020599913),.00001);
         assertEquals("−Infinity".replace("−","-"),String.valueOf(StudioAudioControl.db(0)).replace("−","-"));
         assertEquals(6.02,((Number)StudioAudioControl.db(2)).doubleValue(),.015);
