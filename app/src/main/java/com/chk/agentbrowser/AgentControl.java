@@ -172,7 +172,7 @@ final class AgentControl {
                     final Runnable[] readAfter=new Runnable[1];
                     readAfter[0]=()->{
                         if(finished.get()||!cb.isActive())return;
-                        observeAt(app,snapshot.web.get(),afterParams,wrap(this,(seen,afterText)->{
+                        try{observeAt(app,snapshot.web.get(),afterParams,wrap(this,(seen,afterText)->{
                             if(finished.get()||!cb.isActive())return;
                             try{
                                 JSONObject after=seen?new JSONObject(afterText):new JSONObject().put("observation_error",afterText);
@@ -198,6 +198,13 @@ final class AgentControl {
                                 }
                             }
                         }));
+                        }catch(Exception readError){
+                            if(finished.compareAndSet(false,true)){
+                                WorkspaceCommands.UI.removeCallbacks(interrupted);
+                                complete(journal,saved,cb,lane,id,false,null,
+                                    "Observation différée impossible : action incertaine, ne pas répéter. "+message(readError));
+                            }
+                        }
                     };
                     readAfter[0].run();
                 }catch(Exception e){if(finished.compareAndSet(false,true))complete(journal,saved,cb,lane,id,false,null,message(e));}
