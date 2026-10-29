@@ -22,8 +22,10 @@ final class Local3TaskPolicy {
             ||name.equals("browser_tabs")&&p.optString("operation","list").equals("list"))return "read";
         if(name.equals("desktop")&&p.optString("tool").equals("tor")&&
             Arrays.asList("status","capabilities").contains(p.optString("operation")))return "read";
-        if(name.equals("desktop")&&p.optString("tool").equals("studio")&&
-            Arrays.asList("capabilities","audio_tracks","crop_open","crop_apply").contains(p.optString("operation")))return "read";
+        if(name.equals("desktop")&&p.optString("tool").equals("studio")){
+            if(Arrays.asList("audio_mix","audio_analyze","audio_verify","crop_preview").contains(StudioMcp.operation(p)))return "audio";
+            if(StudioMcp.readOnly(p))return "read";
+        }
         if(name.equals("desktop")&&p.optString("tool").equals("control")){
             String op=p.optString("operation","status");
             if(op.equals("status")||op.equals("capabilities"))return "read";

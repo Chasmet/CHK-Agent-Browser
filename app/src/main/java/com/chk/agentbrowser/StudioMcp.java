@@ -141,7 +141,7 @@ final class StudioMcp {
             .put("reference","display-oriented source, top-left origin; before clip effects").put("crop",StudioCrop.read(c)).put("duration_ms",c.getLong("duration_ms")).put("animated_crop_supported",false);
     }
     static void preview(Context app,JSONObject args,JSONObject p,AgentClient.ResultCallback cb)throws Exception{
-        if(!AgentClient.get(app).isPreviewAllowed())throw new IOException("PREVIEW_SHARING_DISABLED");JSONObject c=clip(p,args),source=source(p,c);if(!source.getString("lane").equals("clips"))throw new IOException("VIDEO_CLIP_REQUIRED");
+        if(!AgentClient.get(app).isPreviewAllowed())throw new IOException("PREVIEW_SHARING_DISABLED");if(Arrays.asList("running","preparing").contains(VideoEditorEngine.get().status().optString("state")))throw new IOException("EXPORT_ACTIVE: aperçu suspendu pendant le rendu final");JSONObject c=clip(p,args),source=source(p,c);if(!source.getString("lane").equals("clips"))throw new IOException("VIDEO_CLIP_REQUIRED");
         long time=source.getLong("timeline_ms")+Math.min(StudioAudio.duration(c)-1,Math.max(0,args.optLong("time_ms",StudioAudio.duration(c)/2)));
         WorkspaceCommands.UI.post(()->{
             StudioRenderPreview preview=new StudioRenderPreview(app);preview.start(p,new StudioRenderPreview.Result(){

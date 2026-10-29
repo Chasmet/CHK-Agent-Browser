@@ -113,7 +113,7 @@ final class MediaTranscriber {
             HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
             c.setConnectTimeout(20000);c.setReadTimeout(40000);
             c.setRequestProperty("Accept","application/zip");
-            long downloaded=0;
+            long downloaded=0;long downloadDeadline=SystemClock.elapsedRealtime()+300000;
             try{
                 if(c.getResponseCode()!=200)throw new IOException("Modèle vocal non téléchargeable: HTTP "+c.getResponseCode());
                 if(c.getContentLength()>MAX_DOWNLOAD)throw new IOException("Modèle vocal trop volumineux.");
@@ -121,6 +121,7 @@ final class MediaTranscriber {
                     byte[] b=new byte[32768];int n;
                     while((n=in.read(b))!=-1){
                         downloaded+=n;
+                        if(SystemClock.elapsedRealtime()>downloadDeadline)throw new IOException("Téléchargement du modèle vocal trop long : réessayer sur un réseau plus rapide.");
                         if(downloaded>MAX_DOWNLOAD)throw new IOException("Dépassement de la limite du téléchargement du modèle.");
                         out.write(b,0,n);
                     }

@@ -48,6 +48,12 @@ jobs:
           fi
       - name: Autoriser KVM pour les tests Android
         run: sudo chmod 666 /dev/kvm
+      - uses: actions/cache@v4
+        with:
+          path: .ci-test-models
+          key: vosk-test-en-us-0.15-v1
+      - name: Prepare public speech test model on CI host
+        run: python3 validation/prepare_studio_test_model.py
       - name: Tester navigateur, Fichiers, Notes et véritable export vidéo sur Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -58,7 +64,8 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.AgentKeyboardIntegrationTest,com.chk.agentbrowser.StudioLayersIntegrationTest,com.chk.agentbrowser.PrivateWebCaptureTest,com.chk.agentbrowser.Local3RecoveryTest,com.chk.agentbrowser.Local2BrowserAutomationTest,com.chk.agentbrowser.Local2SessionIntegrationTest,com.chk.agentbrowser.StudioSubtitlesTest,com.chk.agentbrowser.VideoEditorIntegrationTest#timedSubtitlesAppearAndDisappearAcrossRealExportClipBoundary
-            ./gradlew --no-daemon connectedDebugAndroidTest
+            bash validation/install_studio_test_model.sh
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
             adb pull /data/local/tmp/chk-autonomy-fixtures app/build/autonomy-fixtures
       - uses: actions/setup-python@v5
         with:

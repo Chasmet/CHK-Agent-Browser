@@ -104,7 +104,7 @@ Le ducking requiert Vosk FR ou EN. L'installation initiale du modèle existant s
 | `crop_set` | `clip_id`, `rectangle:{x,y,width,height}`, `units:normalized/pixels`, `ratio:free/9:16/16:9/1:1/4:5`. |
 | `crop_move` | `clip_id`, `dx`, `dy`, `units:normalized/pixels` ; déplacement borné. |
 | `crop_resize` | `clip_id`, `width`, `height`, unités et ratio ; renvoie le rectangle contraint. |
-| `crop_rotate` | `clip_id`, `degrees` absolus de −180 à 180. |
+| `crop_rotate` | `clip_id`, `degrees` absolus de −180 à 180, positifs dans le sens antihoraire. |
 | `crop_flip` | `clip_id`, `horizontal`, `vertical` booléens absolus, pas une bascule répétable. |
 | `crop_preview` | `clip_id`, `time_ms` local au clip ; génère une image issue d'un MP4 de prévisualisation de la composition Media3. Renvoie `jpeg_base64` et le SHA-256 du MP4 temporaire. Respecte le consentement de partage d'aperçus. |
 | `crop_apply` | `clip_id`, objet `crop` complet ; sauvegarde atomique gardée comme les autres écritures. |
@@ -148,3 +148,5 @@ Le workflow supplémentaire ne publie qu'un **artifact de test debug**, package 
 La publication de production reste bloquée par les vérifications réelles manquantes : installation sur appareil, workflow entier via Local 3, diagnostic Tor et .onion, déconnexion, contrôle d'une mise à jour sans perte de données.
 Le rééchantillonnage du mode audio v2 modifie la hauteur lors des changements de vitesse. Le downmix des sources de plus de deux canaux n'est pas un moteur surround de mastering.
 Le limiteur contrôle les crêtes échantillon ; le true peak inter-échantillons doit être contrôlé indépendamment. La mesure LUFS native utilise la pondération K et les portes BS.1770, pour le mono et la stéréo ; le script FFmpeg la compare au décodage indépendant des exports de test.
+
+Validation AAC : le contrôle indépendant recherche le décalage du signal décodé sur ±2048 échantillons à 48 kHz, refuse tout décalage supérieur à 20 ms et exige un gain médian de voix entre 90 et 110 %. Cette mesure ne prouve pas la synchronisation labiale sur un tournage humain.

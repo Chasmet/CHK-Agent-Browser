@@ -92,4 +92,8 @@ public final class StudioAudioCropTest {
         JSONObject p=new JSONObject().put("clips",new JSONArray().put(voice)).put("audio",new JSONArray().put(music).put(fx));StudioEdits.fitAudio(p);
         assertTrue(StudioAudio.enabled(p));assertEquals(2,p.getJSONArray("audio").length());assertEquals(5000,music.getLong("duration_ms"));assertEquals(1500,fx.getLong("duration_ms"));assertEquals(.15,music.getDouble("volume"),.0001);assertEquals(.35,fx.getDouble("volume"),.0001);assertEquals(5000,fx.getLong("offset_ms"));
     }
+    @Test public void exportsDoNotLockBrowserInputsAndCropWritesAreNotReads()throws Exception{
+        JSONObject mix=new JSONObject().put("tool","studio").put("operation","studio_audio_mix");String lane=Local3TaskPolicy.lane("desktop",mix);assertEquals("audio",lane);assertFalse(Local3TaskPolicy.conflicts(lane,"exclusive"));
+        JSONObject crop=new JSONObject().put("tool","studio").put("operation","crop_apply");assertEquals("exclusive",Local3TaskPolicy.lane("desktop",crop));assertFalse(StudioMcp.readOnly(crop));
+    }
 }

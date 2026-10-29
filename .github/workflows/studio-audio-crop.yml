@@ -31,6 +31,12 @@ jobs:
           ./gradlew --no-daemon assembleDebug lintDebug assembleDebugAndroidTest
       - name: KVM
         run: sudo chmod 666 /dev/kvm
+      - uses: actions/cache@v4
+        with:
+          path: .ci-test-models
+          key: vosk-test-en-us-0.15-v1
+      - name: Prepare public speech test model on CI host
+        run: python3 validation/prepare_studio_test_model.py
       - name: Real Android decode and exports
         uses: reactivecircus/android-emulator-runner@v2
         with:
