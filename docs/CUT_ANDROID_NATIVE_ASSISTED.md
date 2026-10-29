@@ -11,7 +11,7 @@ L'intégration inter-applications Android 13+ exige que l'application cible auto
 3. Avec le service connecté, l'utilisateur autorise une session ciblée de 20 minutes.
 4. ACTION_SEND fournit le MP4 et les métadonnées à l'application officielle. Le presse-papiers CHK contient le titre, la description et les hashtags.
 5. Le panneau « CHK · Retour / Arrêter » reste visible si le système accepte les overlays d'accessibilité.
-6. Les actions MCP Local 3 sont transportées par android_action(action="desktop", args={tool:"social_native", operation:"..."}). Opérations : status, observe, screenshot, act (click, replace_text, tap, back), stop. Les actes exigent une observation récente et l'application choisie au premier plan.
+6. Les actions MCP Local 3 sont transportées par android_action(action="desktop", args={tool:"social_native", operation:"..."}). Opérations : status, observe, screenshot, act (click, replace_text, tap, back), stop. Les actes exigent une observation récente et l'application choisie au premier plan ; les gestes tap exigent aussi le chemin d'un contrôle effectivement observé, sans accès aux boutons de validation finale.
 7. Les mots de passe sont masqués. Aucun résultat d'import ni de publication n'est inventé. La dernière confirmation de publication reste contrôlée par l'utilisateur.
 8. Après arrêt ou expiration, aucune inspection de réseau social n'est autorisée.
 
