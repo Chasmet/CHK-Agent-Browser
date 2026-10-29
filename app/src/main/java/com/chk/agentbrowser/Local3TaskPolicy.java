@@ -19,6 +19,8 @@ final class Local3TaskPolicy {
         String name=action(a,args);JSONObject p=args(a,args);
         if(Arrays.asList("local3_status","browser_status","files_capabilities","video_editor_capabilities").contains(name)
             ||name.equals("browser_tabs")&&p.optString("operation","list").equals("list"))return "read";
+        if(name.equals("desktop")&&p.optString("tool").equals("tor")&&
+            Arrays.asList("status","capabilities").contains(p.optString("operation")))return "read";
         if(name.equals("desktop")&&p.optString("tool").equals("studio")&&
             Arrays.asList("capabilities","audio_tracks","crop_open","crop_apply").contains(p.optString("operation")))return "read";
         if(name.equals("desktop")&&p.optString("tool").equals("control")){
