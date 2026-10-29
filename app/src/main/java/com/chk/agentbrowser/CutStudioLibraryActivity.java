@@ -309,15 +309,17 @@ public final class CutStudioLibraryActivity extends Activity {
                 try{
                     JSONObject meta=CutShareMetadata.forVideo(workspace,path,NETWORKS[choice]);
                     String text=meta.getString("text");
+                    String platform=NETWORKS[choice];
                     new AlertDialog.Builder(this)
                         .setTitle(NETWORK_LABELS[choice]+" · "+video.getName())
                         .setMessage(text)
-                        .setNegativeButton("Annuler",null)
-                        .setNeutralButton("Copier le texte",(d,n)->copyMetadata(text))
-                        .setPositiveButton("Copier et partager",(d,n)->{
+                        .setPositiveButton("Ouvrir dans CHK",(d,n)->openPlatformInChk(platform,path,meta))
+                        .setNeutralButton("Partager Android",(d,n)->{
                             copyMetadata(text);
                             shareVideoWithMetadata(video,text);
-                        }).show();
+                        })
+                        .setNegativeButton("Copier seulement",(d,n)->copyMetadata(text))
+                        .show();
                 }catch(Exception e){toast("Métadonnées : "+e.getMessage());}
             }).show();
     }
@@ -327,6 +329,39 @@ public final class CutStudioLibraryActivity extends Activity {
             manager.setPrimaryClip(ClipData.newPlainText("Métadonnées Cut Vidéo",text));
             toast("Titre, description et hashtags copiés");
         }
+    }
+    /**
+     * Opens the service's web upload page inside CHK's own browser tabs.
+     * Native Android applications cannot be embedded here without their explicit opt-in.
+     * Keep the exact video and caption in CHK Files for MCP browser_upload_file.
+     * This is a preparation handoff, never a confirmed upload or publication.
+     */
+    private void openPlatformInChk(String platform,String videoPath,JSONObject meta){
+        String url;
+        switch(platform){
+            case "youtube":url="https://studio.youtube.com/";break;
+            case "tiktok":url="https://www.tiktok.com/upload";break;
+            case "instagram":url="https://www.instagram.com/";break;
+            case "x":url="https://x.com/compose/post";break;
+            default:toast("Réseau non pris en charge");return;
+        }
+        try{
+            JSONObject context=new JSONObject()
+                .put("video_path",videoPath)
+                .put("platform",platform)
+                .put("url",url)
+                .put("title",meta.getString("title"))
+                .put("description",meta.getString("description"))
+                .put("hashtags",meta.getString("hashtags"))
+                .put("state","ready_for_browser_upload")
+                .put("published",false)
+                .put("updated_at_millis",System.currentTimeMillis());
+            workspace.writeText("CutVideo/share_context.json",context.toString(2),true);
+            copyMetadata(meta.getString("text"));
+            startActivity(new Intent(this,MainActivity.class)
+                .putExtra("cutstudio_url",url));
+            toast("Ouvert dans CHK. Publication non encore envoyée.");
+        }catch(Exception e){toast("Ouverture dans CHK : "+e.getMessage());}
     }
     private void shareVideoWithMetadata(File video,String metadata){
         try{
