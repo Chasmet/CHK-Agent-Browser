@@ -15,7 +15,7 @@ public final class TorEntryActivity extends Activity {
     private TextView status;
     private final Handler main=new Handler(Looper.getMainLooper());
     private boolean resumed;
-    private boolean modelSetupStarted, modelDownloading;
+    private boolean modelSetupStarted, modelDownloading, modelSetupVisible;
     @Override public void onCreate(Bundle state){
         super.onCreate(state);LinearLayout layout=new LinearLayout(this);layout.setOrientation(LinearLayout.VERTICAL);layout.setPadding(20,20,20,16);layout.setBackgroundColor(0xff16141e);
         TextView title=new TextView(this);title.setText("Tor · Espace indépendant");title.setTextSize(24);title.setTextColor(0xffeee6ff);layout.addView(title);
@@ -30,9 +30,10 @@ public final class TorEntryActivity extends Activity {
         add(layout,"Retour à CHK Web",this::finish);ScrollView scroll=new ScrollView(this);scroll.addView(layout);setContentView(scroll);
     }
     private void add(LinearLayout layout,String name,Runnable action){Button b=new Button(this);b.setAllCaps(false);b.setText(name);b.setOnClickListener(v->action.run());layout.addView(b,new LinearLayout.LayoutParams(-1,-2));}
-    private void command(String op){try{status.setText(op.equals("disconnect")?"Déconnexion en cours · vérification de l’arrêt…":"Demande Tor en cours…");TorBridge.request(this,new JSONObject().put("operation",op),(ok,value)->{if(!resumed)return;show(value);if(!ok)Toast.makeText(this,value.optString("error","Opération Tor non confirmée"),Toast.LENGTH_LONG).show();});}catch(Exception e){status.setText("Erreur : "+e.getMessage());}}
+    private void command(String op){try{modelSetupVisible=false;status.setText(op.equals("disconnect")?"Déconnexion en cours · vérification de l’arrêt…":"Demande Tor en cours…");TorBridge.request(this,new JSONObject().put("operation",op),(ok,value)->{if(!resumed)return;show(value);if(!ok)Toast.makeText(this,value.optString("error","Opération Tor non confirmée"),Toast.LENGTH_LONG).show();});}catch(Exception e){status.setText("Erreur : "+e.getMessage());}}
     /** A normal tap on CHK's Tor icon connects first and then opens the French browser. */
     private void connectAndOpenDirectly(){
+        modelSetupVisible=false;
         try{
             status.setText("Connexion au réseau Tor…");
             TorBridge.request(this,new JSONObject().put("operation","connect"),(ok,value)->{
@@ -52,11 +53,12 @@ public final class TorEntryActivity extends Activity {
         }catch(Exception e){status.setText("Connexion impossible : "+e.getMessage());}
     }
     private void show(JSONObject state){String value=state.optString("connection_state","error"),label=value.equals("connected")?"Connecté":value.equals("connecting")?"Connexion en cours":value.equals("disconnected")?"Déconnecté":"Erreur";status.setText(label+" · "+state.optInt("bootstrap_percent")+" %\n"+state.optString("error")+(state.optBoolean("tor_verified")?"\nCircuit Tor et diagnostic HTTPS vérifiés.":"\nAucune navigation .onion autorisée sans preuve Tor."));}
-    private final Runnable tick=new Runnable(){public void run(){if(!resumed)return;if(Build.VERSION.SDK_INT>=29)TorBridge.request(TorEntryActivity.this,new JSONObject(),(ok,value)->{if(resumed)show(value);});else status.setText("Le moteur intégré demande Android 10 ou plus. Utiliser Tor Browser externe ; son état réseau n’est pas observable par CHK.");main.postDelayed(this,1500);}};
+    private final Runnable tick=new Runnable(){public void run(){if(!resumed)return;if(modelSetupVisible){main.postDelayed(this,1500);return;}if(Build.VERSION.SDK_INT>=29)TorBridge.request(TorEntryActivity.this,new JSONObject(),(ok,value)->{if(resumed&&!modelSetupVisible)show(value);});else status.setText("Le moteur intégré demande Android 10 ou plus. Utiliser Tor Browser externe ; son état réseau n’est pas observable par CHK.");main.postDelayed(this,1500);}};
     /** Download only the language model in the ordinary process, never in the isolated Tor process. */
     private void downloadTranslationModel(){downloadTranslationModel(true);}
     /** Language packs may download over the phone's normal connection, but page text never leaves :tor. */
     private void downloadTranslationModel(boolean showProgress){
+        if(showProgress)modelSetupVisible=true;
         if(modelSetupStarted&&modelDownloading)return;
         modelSetupStarted=true;
         if(getSharedPreferences("tor_french",MODE_PRIVATE).getBoolean("installed",false)){
