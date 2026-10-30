@@ -22,6 +22,11 @@ final class TorRuntime {
     final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final ExecutorService verifier=Executors.newSingleThreadExecutor();
+    // A slow onion reader must not starve navigation and connection commands.
+    private final ExecutorService readerIo=Executors.newSingleThreadExecutor();
+    private final LinkedHashMap<String,JSONObject> readCache=new LinkedHashMap<String,JSONObject>(5,0.75f,true){
+        @Override protected boolean removeEldestEntry(Map.Entry<String,JSONObject> eldest){return size()>4;}
+    };
     private final Context app;
     private final String sessionId=UUID.randomUUID().toString();
     private final JSONObject receipts=new JSONObject();
@@ -213,13 +218,39 @@ final class TorRuntime {
     private static String canonical(Object value)throws Exception{if(value instanceof JSONObject){JSONObject o=(JSONObject)value;ArrayList<String> keys=new ArrayList<>();for(Iterator<String> it=o.keys();it.hasNext();)keys.add(it.next());Collections.sort(keys);StringBuilder b=new StringBuilder("{");for(String k:keys)b.append(JSONObject.quote(k)).append(':').append(canonical(o.get(k))).append(',');return b.append('}').toString();}if(value instanceof JSONArray){StringBuilder b=new StringBuilder("[");JSONArray a=(JSONArray)value;for(int i=0;i<a.length();i++)b.append(canonical(a.get(i))).append(',');return b.append(']').toString();}return value instanceof String?JSONObject.quote((String)value):String.valueOf(value);}
     private static String shortTitle(String title){return title==null?"":title.substring(0,Math.min(512,title.length()));}
     private void read(JSONObject args,Result cb)throws Exception{
-        if(!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_NOT_CONNECTED");String url=TorUrlPolicy.checked(args.optString("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),"")));long ticket=policy.generation();
-        io.execute(()->{try{requireCircuit();TorHttp.Reply r=TorHttp.get(url,httpPort,524288);if(ticket!=policy.generation()||!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_SESSION_CHANGED_OR_PROOF_EXPIRED");String text=android.text.Html.fromHtml(r.body,android.text.Html.FROM_HTML_MODE_LEGACY).toString();
-            JSONObject value=new JSONObject().put("state",r.code>=200&&r.code<400?"completed":"failed").put("url",r.url).put("http_status",r.code).put("response_sha256",r.sha256).put("redirects",r.redirects).put("text",text.substring(0,Math.min(16000,text.length()))).put("read_scope","fresh_http_response_through_tor_not_authenticated_webview_dom").put("session_id",sessionId).put("tor_verified",true);
-            main.post(()->cb.done(r.code>=200&&r.code<400,value));
-        }catch(Exception e){main.post(()->cb.done(false,TorBridge.error(e.getMessage())));}});
+        if(!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_NOT_CONNECTED");
+        String url=TorUrlPolicy.checked(args.optString("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),"")));
+        final long ticket=policy.generation();
+        JSONObject cached=readCache.get(url);
+        if(cached!=null&&policy.usable(SystemClock.elapsedRealtime())){
+            cb.done(true,new JSONObject(cached.toString()).put("read_scope","cached_tor_response_in_isolated_process"));
+            return;
+        }
+        readerIo.execute(()->{
+            try{
+                requireCircuit();
+                TorHttp.Reply result=TorHttp.get(url,httpPort,524288);
+                if(ticket!=policy.generation()||!policy.usable(SystemClock.elapsedRealtime()))
+                    throw new Exception("TOR_SESSION_CHANGED_OR_PROOF_EXPIRED");
+                String plain=android.text.Html.fromHtml(result.body,android.text.Html.FROM_HTML_MODE_LEGACY).toString();
+                JSONObject value=new JSONObject()
+                    .put("state",result.code>=200&&result.code<400?"completed":"failed")
+                    .put("url",result.url).put("http_status",result.code)
+                    .put("response_sha256",result.sha256).put("redirects",result.redirects)
+                    .put("text",plain.substring(0,Math.min(16000,plain.length())))
+                    .put("read_scope","fresh_http_response_through_tor_not_authenticated_webview_dom")
+                    .put("session_id",sessionId).put("tor_verified",true);
+                main.post(()->{
+                    if(ticket!=policy.generation()||!policy.usable(SystemClock.elapsedRealtime())){
+                        cb.done(false,TorBridge.error("TOR_SESSION_CHANGED"));return;
+                    }
+                    if(result.code>=200&&result.code<400)readCache.put(url,value);
+                    cb.done(result.code>=200&&result.code<400,value);
+                });
+            }catch(Exception e){main.post(()->cb.done(false,TorBridge.error(e.getMessage())));}
+        });
     }
-    void block(String reason){policy.fail(policy.generation(),reason==null?"TOR_FAILED":reason);proxyReady=false;if(web!=null){web.stopLoading();web.getSettings().setBlockNetworkLoads(true);}try{if(WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE))ProxyController.getInstance().setProxyOverride(proxy(1),main::post,()->{});}catch(Exception ignored){}}
+    void block(String reason){readCache.clear();policy.fail(policy.generation(),reason==null?"TOR_FAILED":reason);proxyReady=false;if(web!=null){web.stopLoading();web.getSettings().setBlockNetworkLoads(true);}try{if(WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE))ProxyController.getInstance().setProxyOverride(proxy(1),main::post,()->{});}catch(Exception ignored){}}
     private void reply(Result cb,boolean ok){try{JSONObject value=status();if(!ok)value.put("state","failed");cb.done(ok,value);}catch(Exception e){cb.done(false,TorBridge.error(e.getMessage()));}}
     private static final class ApplicationProcess {static boolean isTor(){return android.app.Application.getProcessName().endsWith(":tor");}}
 }
