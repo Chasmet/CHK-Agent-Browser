@@ -71,7 +71,7 @@ final class TorRuntime {
             String op=args.optString("operation","status");
             if(op.equals("status")){cb.done(true,status());return;}
             if(op.equals("connect")){connect(cb);return;}
-            if(op.equals("open_browser")){openBrowser(cb);return;}
+            if(op.equals("open_browser")){openBrowser(cb,args.optBoolean("home_on_open",false));return;}
             if(op.equals("diagnostic")){refresh(cb);return;}
             if(op.equals("read")){read(args,cb);return;}
             if(op.equals("screenshot")){if(!args.optBoolean("preview_allowed"))throw new Exception("PREVIEW_SHARING_DISABLED");if(!hasLiveWebView())throw new Exception("TOR_WEBVIEW_UNAVAILABLE_OPEN_ONCE");screen.capture(cb);return;}
@@ -145,9 +145,11 @@ final class TorRuntime {
     private boolean hasLiveWebView(){return web!=null&&screen!=null&&!screen.isFinishing()&&!screen.isDestroyed();}
     void attach(TorWebActivity a,WebView view){screen=a;web=view;}
     void detach(TorWebActivity a){if(screen==a){screen=null;web=null;if(navigationReply!=null)finishNavigation(false,"TOR_UI_CLOSED");}}
-    private void openBrowser(Result cb)throws Exception{
+    private void openBrowser(Result cb,boolean frenchHome)throws Exception{
         if(!policy.usable(SystemClock.elapsedRealtime())||!proxyReady)throw new Exception("TOR_NOT_CONNECTED");
-        app.startActivity(new Intent(app,TorWebActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));waitOpen(cb,SystemClock.elapsedRealtime()+10000);
+        Intent launch=new Intent(app,TorWebActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if(frenchHome)launch.putExtra("start_french_home",true);
+        app.startActivity(launch);waitOpen(cb,SystemClock.elapsedRealtime()+10000);
     }
     private void waitOpen(Result cb,long deadline){if(screen!=null&&screen.resumed&&web!=null){reply(cb,true);return;}if(SystemClock.elapsedRealtime()>deadline){cb.done(false,TorBridge.error("TOR_UI_OPEN_UNCONFIRMED"));return;}main.postDelayed(()->waitOpen(cb,deadline),100);}
     JSONObject uiArgs(String op)throws Exception{return new JSONObject().put("operation",op).put("session_id",sessionId).put("request_id",UUID.randomUUID().toString());}
