@@ -22,6 +22,8 @@ final class TorRuntime {
     final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final ExecutorService verifier=Executors.newSingleThreadExecutor();
+    // Page translation may require an additional slow .onion read; never block navigation controls.
+    private final ExecutorService reader=Executors.newSingleThreadExecutor();
     private final Context app;
     private final String sessionId=UUID.randomUUID().toString();
     private final JSONObject receipts=new JSONObject();
@@ -162,7 +164,13 @@ final class TorRuntime {
         String request=args.optString("request_id");if(!request.matches("[A-Za-z0-9_-]{1,80}"))throw new Exception("TOR_REQUEST_ID_REQUIRED");
         String fingerprint=canonical(args);JSONObject old=receipts.optJSONObject(request);
         if(old!=null){if(!fingerprint.equals(old.optString("fingerprint")))throw new Exception("TOR_REQUEST_ID_REUSED_WITH_DIFFERENT_PARAMETERS");JSONObject value=new JSONObject(old.getJSONObject("result").toString()).put("replayed",true).put("current_url",lastUrl);cb.done(value.optString("state").equals("completed"),value);return;}
-        if(navigationReply!=null)throw new Exception("TOR_NAVIGATION_ACTIVE");if(receipts.length()>=128)throw new Exception("TOR_SESSION_RECEIPT_LIMIT: déconnecter puis créer une nouvelle session");
+        if(navigationReply!=null){
+            // A new user choice replaces a still-loading page. Complete the old receipt
+            // explicitly; do not replay its effects or unlock the network.
+            if(web!=null)web.stopLoading();
+            finishNavigation(false,"TOR_NAVIGATION_SUPERSEDED");
+        }
+        if(receipts.length()>=128)throw new Exception("TOR_SESSION_RECEIPT_LIMIT: déconnecter puis créer une nouvelle session");
         String op=args.getString("operation"),url=args.optString("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),""));
         if(op.equals("back")||op.equals("forward")){WebBackForwardList history=web.copyBackForwardList();int index=history.getCurrentIndex()+(op.equals("back")?-1:1);if(index<0||index>=history.getSize())throw new Exception("TOR_HISTORY_BOUNDARY");url=history.getItemAtIndex(index).getUrl();}
         final String target=TorUrlPolicy.checked(url);long ticket=policy.generation();navigationStart=SystemClock.elapsedRealtime();pageLoadStarted=false;
@@ -172,9 +180,9 @@ final class TorRuntime {
         // Fail closed: expired proof is revalidated through Tor before WebView can load.
         io.execute(()->{try{
             requireCircuit();
-            final JSONObject proof=policy.proofAge(SystemClock.elapsedRealtime())<30000?null:TorHttp.diagnostic(httpPort);
+            final JSONObject proof=policy.proofAge(SystemClock.elapsedRealtime())<50000?null:TorHttp.diagnostic(httpPort);
             main.post(()->{
-                if(ticket!=policy.generation()||navigationReply==null)return;
+                if(ticket!=policy.generation()||navigationReply==null||navigation==null||!request.equals(navigation.optString("request_id")))return;
                 if(proof!=null){
                     if(!policy.refresh(ticket,true,true,SystemClock.elapsedRealtime())){finishNavigation(false,"TOR_SESSION_CHANGED");return;}
                     diagnostic=proof;
@@ -188,7 +196,9 @@ final class TorRuntime {
             });
         }catch(Exception e){main.post(()->{
             // A failed diagnostic must not permit clear-network fallback.
-            block(e.getMessage());finishNavigation(false,e.getMessage());
+            if(navigation!=null&&request.equals(navigation.optString("request_id"))){
+                block(e.getMessage());finishNavigation(false,e.getMessage());
+            }
         });}});
         final long navigationTimeout=target.contains(".onion")?90000:45000;
         main.postDelayed(()->{if(navigationReply!=null&&navigation!=null&&request.equals(navigation.optString("request_id"))){if(web!=null)web.stopLoading();finishNavigation(false,"TOR_PAGE_LOAD_TIMEOUT");}},navigationTimeout);
@@ -214,7 +224,7 @@ final class TorRuntime {
     private static String shortTitle(String title){return title==null?"":title.substring(0,Math.min(512,title.length()));}
     private void read(JSONObject args,Result cb)throws Exception{
         if(!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_NOT_CONNECTED");String url=TorUrlPolicy.checked(args.optString("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),"")));long ticket=policy.generation();
-        io.execute(()->{try{requireCircuit();TorHttp.Reply r=TorHttp.get(url,httpPort,524288);if(ticket!=policy.generation()||!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_SESSION_CHANGED_OR_PROOF_EXPIRED");String text=android.text.Html.fromHtml(r.body,android.text.Html.FROM_HTML_MODE_LEGACY).toString();
+        reader.execute(()->{try{requireCircuit();TorHttp.Reply r=TorHttp.get(url,httpPort,524288);if(ticket!=policy.generation()||!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_SESSION_CHANGED_OR_PROOF_EXPIRED");String text=android.text.Html.fromHtml(r.body,android.text.Html.FROM_HTML_MODE_LEGACY).toString();
             JSONObject value=new JSONObject().put("state",r.code>=200&&r.code<400?"completed":"failed").put("url",r.url).put("http_status",r.code).put("response_sha256",r.sha256).put("redirects",r.redirects).put("text",text.substring(0,Math.min(16000,text.length()))).put("read_scope","fresh_http_response_through_tor_not_authenticated_webview_dom").put("session_id",sessionId).put("tor_verified",true);
             main.post(()->cb.done(r.code>=200&&r.code<400,value));
         }catch(Exception e){main.post(()->cb.done(false,TorBridge.error(e.getMessage())));}});
