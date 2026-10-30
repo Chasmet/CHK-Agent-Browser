@@ -5,6 +5,9 @@ import android.graphics.*;
 import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
 import android.view.inputmethod.EditorInfo;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.content.Intent;
+import java.util.HashSet;
 import java.net.URLEncoder;
 import android.net.http.SslError;
 import android.os.*;
@@ -26,8 +29,12 @@ public final class TorWebActivity extends Activity {
     private TextView pageInfo, translatedText;
     private ScrollView startPage, translatedPage;
     private ProgressBar loading;
-    private boolean lightweight;
-    private Button lightweightButton;
+    private boolean lightweight=true;
+    private Button lightweightButton,autoTranslateButton;
+    private boolean translateAutomatically;
+    private boolean translationSetupPending;
+    private int translationRequest=0;
+    private static final int TRANSLATION_SETUP_REQUEST=2094;
     private static final String AHMIA="http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/";
     private static final String DDG="http://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/";
     boolean resumed;
@@ -49,10 +56,19 @@ public final class TorWebActivity extends Activity {
         LinearLayout translationRow=new LinearLayout(this);
         translationRow.setOrientation(LinearLayout.HORIZONTAL);
         translationRow.setPadding(0,dp(6),0,dp(5));
-        Button translate=control("Traduire en français");translate.setOnClickListener(v->translatePage());
+        Button translate=control("Traduire FR");translate.setOnClickListener(v->translatePage());
         translationRow.addView(translate,new LinearLayout.LayoutParams(0,dp(43),1));
+        autoTranslateButton=control("FR auto OFF");
+        autoTranslateButton.setOnClickListener(v->{
+            translateAutomatically=!translateAutomatically;
+            getPreferences(MODE_PRIVATE).edit().putBoolean("automatic_french",translateAutomatically).apply();
+            autoTranslateButton.setText(translateAutomatically?"FR auto ON":"FR auto OFF");
+            if(translateAutomatically)translatePage();
+        });
+        LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(dp(103),dp(43));ap.leftMargin=dp(5);
+        translationRow.addView(autoTranslateButton,ap);
         Button homeButton=control("Accueil");homeButton.setOnClickListener(v->showHome());
-        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(dp(100),dp(43));hp.leftMargin=dp(7);
+        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(dp(72),dp(43));hp.leftMargin=dp(7);
         translationRow.addView(homeButton,hp);root.addView(translationRow);
 
         LinearLayout bar=new LinearLayout(this);bar.setOrientation(LinearLayout.HORIZONTAL);
@@ -76,8 +92,9 @@ public final class TorWebActivity extends Activity {
         small(tools,"→",()->action("forward",null));
         small(tools,"↻",()->action("reload",null));
         small(tools,"Annuler",()->action("cancel_navigation",null));
-        lightweightButton=small(tools,"Mode léger OFF",()->{
+        lightweightButton=small(tools,"Mode léger ON",()->{
             lightweight=!lightweight;
+            getPreferences(MODE_PRIVATE).edit().putBoolean("lightweight",lightweight).apply();
             web.getSettings().setLoadsImagesAutomatically(!lightweight);
             web.getSettings().setBlockNetworkImage(lightweight);
             lightweightButton.setText(lightweight?"Mode léger ON":"Mode léger OFF");
@@ -119,8 +136,8 @@ public final class TorWebActivity extends Activity {
         shortcut(home,"Vérifier Tor","Test officiel de la connexion",FRENCH_HOME);
         TextView tips=label("Confidentialité : vérifiez les adresses .onion. Le JavaScript est désactivé. Évitez les téléchargements inconnus. Le mode léger retire les images mais ne peut pas accélérer les relais Tor.",12,0xffa9b6d3);
         tips.setPadding(0,dp(15),0,dp(8));home.addView(tips);
-        Button prepareFrench=control("Installer le modèle FR hors Tor");
-        prepareFrench.setOnClickListener(v->startActivity(new android.content.Intent(this,TorEntryActivity.class)));
+        Button prepareFrench=control("Activer le traducteur français intégré");
+        prepareFrench.setOnClickListener(v->translatePage());
         home.addView(prepareFrench);
         startPage.addView(home);
         root.addView(startPage,new LinearLayout.LayoutParams(-1,0,1));
@@ -137,7 +154,13 @@ public final class TorWebActivity extends Activity {
 
         web=new WebView(this);
         web.setTag("chk_tor_webview");
+        lightweight=getPreferences(MODE_PRIVATE).getBoolean("lightweight",true);
+        lightweightButton.setText(lightweight?"Mode léger ON":"Mode léger OFF");
+        translateAutomatically=getPreferences(MODE_PRIVATE).getBoolean("automatic_french",false);
+        autoTranslateButton.setText(translateAutomatically?"FR auto ON":"FR auto OFF");
         WebSettings settings=web.getSettings();
+        settings.setLoadsImagesAutomatically(!lightweight);
+        settings.setBlockNetworkImage(lightweight);
         settings.setJavaScriptEnabled(false);settings.setOffscreenPreRaster(false);
         settings.setDomStorageEnabled(false);settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);settings.setGeolocationEnabled(false);
@@ -168,10 +191,20 @@ public final class TorWebActivity extends Activity {
                 if(!allowed(request.getUrl().toString()))return new WebResourceResponse("text/plain","UTF-8",403,"Tor required",Collections.emptyMap(),new ByteArrayInputStream("TOR_REQUEST_BLOCKED".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                 return null;
             }
-            @Override public void onPageStarted(WebView view,String url,Bitmap favicon){runtime.pageStarted(url);}
+            @Override public void onPageStarted(WebView view,String url,Bitmap favicon){
+                translationRequest++;
+                runtime.pageStarted(url);
+                pageInfo.setText("Chargement Tor : "+(url==null?"":url));
+            }
             @Override public void onPageFinished(WebView view,String url){
                 runtime.pageFinished(url,view.getTitle());address.setText(url);
                 pageInfo.setText("Page : "+(view.getTitle()==null?url:view.getTitle()));
+                if(translateAutomatically&&url!=null&&url.startsWith("http")){
+                    final String finalUrl=url;
+                    runtime.main.postDelayed(()->{
+                        if(!isFinishing()&&web!=null&&finalUrl.equals(web.getUrl())&&translateAutomatically)translatePage();
+                    },350);
+                }
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){
                 if(request.isForMainFrame()){runtime.pageFailed("TOR_PAGE_NETWORK_ERROR: "+error.getErrorCode());pageInfo.setText("Échec réseau Tor : "+error.getDescription());}
