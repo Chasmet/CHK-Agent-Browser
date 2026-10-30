@@ -15,6 +15,8 @@ public final class TorEntryActivity extends Activity {
     private TextView status;
     private final Handler main=new Handler(Looper.getMainLooper());
     private boolean resumed;
+    private boolean downloadingModel;
+    private boolean returnAfterDownload;
     @Override public void onCreate(Bundle state){
         super.onCreate(state);LinearLayout layout=new LinearLayout(this);layout.setOrientation(LinearLayout.VERTICAL);layout.setPadding(20,20,20,16);layout.setBackgroundColor(0xff16141e);
         TextView title=new TextView(this);title.setText("Tor · Espace indépendant");title.setTextSize(24);title.setTextColor(0xffeee6ff);layout.addView(title);
@@ -54,16 +56,35 @@ public final class TorEntryActivity extends Activity {
     private final Runnable tick=new Runnable(){public void run(){if(!resumed)return;if(Build.VERSION.SDK_INT>=29)TorBridge.request(TorEntryActivity.this,new JSONObject(),(ok,value)->{if(resumed)show(value);});else status.setText("Le moteur intégré demande Android 10 ou plus. Utiliser Tor Browser externe ; son état réseau n’est pas observable par CHK.");main.postDelayed(this,1500);}};
     /** Download only the language model in the ordinary process, never in the isolated Tor process. */
     private void downloadTranslationModel(){
-        status.setText("Téléchargement du modèle de traduction EN → FR dans CHK, hors Tor…");
+        if(downloadingModel)return;
+        downloadingModel=true;
+        status.setText("Installation du traducteur EN → FR dans CHK…");
+        // Only the public language model is downloaded in this ordinary app process.
+        // Never forward any Tor page URL or content to the model service.
         TranslatorOptions options=new TranslatorOptions.Builder()
             .setSourceLanguage(TranslateLanguage.ENGLISH)
             .setTargetLanguage(TranslateLanguage.FRENCH).build();
         final Translator translator=Translation.getClient(options);
         translator.downloadModelIfNeeded()
-            .addOnSuccessListener(unused->{translator.close();status.setText("Modèle EN → FR prêt : traduction locale sans envoi des pages.");})
-            .addOnFailureListener(error->{translator.close();status.setText("Modèle indisponible : "+error.getMessage());});
+            .addOnSuccessListener(unused->{
+                translator.close();downloadingModel=false;
+                status.setText("Traducteur EN → FR installé. Traduction locale prête.");
+                Toast.makeText(this,"Traducteur français prêt dans Tor",Toast.LENGTH_LONG).show();
+                if(returnAfterDownload&&!isFinishing())finish();
+            })
+            .addOnFailureListener(error->{
+                translator.close();downloadingModel=false;
+                status.setText("Téléchargement du traducteur impossible : "+error.getMessage()+
+                    "\\nVérifie ta connexion Internet puis relance cette installation.");
+            });
     }
     private void openExternal(){Intent launch=getPackageManager().getLaunchIntentForPackage(PACKAGE);if(launch==null){status.setText("Tor Browser externe non installé.");return;}try{startActivity(launch);status.setText("Application externe lancée · signature et circuit non vérifiés par CHK.");}catch(Exception e){status.setText("Erreur de lancement : "+e.getMessage());}}
-    @Override protected void onResume(){super.onResume();resumed=true;visible=true;main.post(tick);if(getIntent().getBooleanExtra("disconnect_tor",false)){getIntent().removeExtra("disconnect_tor");command("disconnect");}else if(Build.VERSION.SDK_INT>=29&&getIntent().getBooleanExtra("direct_tor",false)){getIntent().removeExtra("direct_tor");connectAndOpenDirectly();}}
+    @Override protected void onResume(){super.onResume();resumed=true;visible=true;main.post(tick);if(getIntent().getBooleanExtra("disconnect_tor",false)){getIntent().removeExtra("disconnect_tor");command("disconnect");}else if(getIntent().getBooleanExtra("download_translate",false)){
+        getIntent().removeExtra("download_translate");
+        returnAfterDownload=true;
+        downloadTranslationModel();
+    }else if(Build.VERSION.SDK_INT>=29&&getIntent().getBooleanExtra("direct_tor",false)){
+        getIntent().removeExtra("direct_tor");connectAndOpenDirectly();
+    }}
     @Override protected void onPause(){resumed=false;visible=false;main.removeCallbacks(tick);super.onPause();}
 }
