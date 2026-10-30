@@ -1,3 +1,14 @@
+## Tor intégré — traducteur français et navigation plus fluide (30 octobre 2026)
+
+- Bouton FR toujours visible dans Tor et panneau de lecture traduit à l'intérieur du navigateur. L'original reste accessible immédiatement.
+- Installation unique des modèles EN→FR depuis le processus CHK classique, sans transmission de pages Tor ni nouvelle connexion directe depuis le processus Tor.
+- Vérification des modèles avant lecture du site, extraction native rapide du texte visible sans JavaScript, traduction progressive des passages. Un accès HTTP via Tor sert uniquement de solution de secours.
+- Navigations et chargements distincts : la lecture lente ne bloque plus les commandes. Les quatre dernières lectures Tor sont conservées en mémoire dans le processus isolé, jamais après renouvellement du circuit.
+- Barre d'outils avec boutons et libellés lisibles. Images désactivées par défaut pour les services lents, réactivation en un clic. Statut réseau Tor compact.
+- Limites : traduction en mode lecture, pas dans la mise en page interactive du site ; certaines destinations restent lentes par nature sur Tor. JavaScript reste désactivé, aucune navigation directe de secours, serveur PC 1.0.4 inchangé.
+
+---
+
 ## Tor : nouvelle interface française et navigation plus réactive — 30 octobre 2026
 
 - Accueil natif en français avec raccourcis officiels Ahmia, DuckDuckGo .onion, ProPublica SecureDrop, Projet Tor, guide de sécurité et vérification de connexion. Adresse Ahmia vérifiée auprès d'ahmia.fi (l'ancien lien diffusé était différent).
