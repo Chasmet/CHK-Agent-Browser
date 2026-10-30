@@ -14,6 +14,28 @@ import static org.junit.Assert.*;
  * a distinct private service process. Never downloads models in CI. */
 @RunWith(AndroidJUnit4.class)
 public final class TorOfflineTranslationClientTest {
+    /** ML Kit's InitProvider runs in main only; the worker must explicitly
+     * initialize ML Kit rather than returning TRANSLATION_WORKER_ERROR.
+     * No model download is triggered and either ready/not-ready is valid.
+     */
+    @Test public void workerCanQueryMlKitModelsWithoutInitializationException()throws Exception {
+        Context app=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        CountDownLatch latch=new CountDownLatch(1);
+        AtomicReference<String> result=new AtomicReference<>();
+        AtomicBoolean installed=new AtomicBoolean();
+        TorOfflineTranslationClient.isReady(app,(ready,detail)->{
+            installed.set(ready);result.set(detail);latch.countDown();
+        });
+        assertTrue("ML Kit readiness IPC timed out",latch.await(30,TimeUnit.SECONDS));
+        String detail=result.get();
+        assertNotNull("Model readiness must return a useful response",detail);
+        assertFalse("ML Kit initialization failed inside private worker: "+detail,
+            detail.contains("TRANSLATION_WORKER_ERROR")
+              || detail.contains("MlKitContext has not been initialized")
+              || detail.contains("TRANSLATION_SERVICE_DISCONNECTED")
+              || detail.contains("TRANSLATION_BINDING_DIED"));
+    }
+
     @Test public void workerIsPrivateAndSeparateAndRespondsOverBinder()throws Exception {
         Context app=InstrumentationRegistry.getInstrumentation().getTargetContext();
         ServiceInfo info=app.getPackageManager().getServiceInfo(
