@@ -44,6 +44,17 @@ public final class TorNetworkIntegrationTest {
             JSONObject network=command(args("read").put("url",ONION),true,215);assertEquals(200,network.getInt("http_status"));assertTrue(network.getBoolean("tor_verified"));assertTrue("Tor Project content expected",network.getString("text").toLowerCase(java.util.Locale.ROOT).contains("tor"));
             proof.put("onion_http",new JSONObject().put("requested_url",ONION).put("final_url",network.getString("url")).put("redirects",network.getJSONArray("redirects")).put("http_status",network.getInt("http_status")).put("response_sha256",network.getString("response_sha256")));
             command(args("open_browser"),true,30);
+            // Native controls must have visible/accessibility-readable French labels.
+            boolean frenchControlVisible=false;
+            for(int attempt=0;attempt<20;attempt++){
+                android.view.accessibility.AccessibilityNodeInfo root=
+                    InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();
+                if(root!=null&&!root.findAccessibilityNodeInfosByText("FR · Traduire").isEmpty()){
+                    frenchControlVisible=true;break;
+                }
+                Thread.sleep(150);
+            }
+            assertTrue("Integrated Tor translator button must be visible",frenchControlVisible);
             JSONObject navigation=args("navigate").put("session_id",session).put("request_id","genuine-onion-navigation").put("url",ONION);
             JSONObject loaded=command(navigation,true,185);assertEquals("completed",loaded.getString("state"));assertEquals("webview_page_finished_and_url_readback",loaded.getString("verified"));proof.put("webview_navigation",loaded);
             JSONObject replay=command(navigation,true,30);assertTrue(replay.getBoolean("replayed"));proof.put("navigation_replayed_without_second_load",true);
