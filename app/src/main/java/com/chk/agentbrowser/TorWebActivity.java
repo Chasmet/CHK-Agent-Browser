@@ -30,7 +30,7 @@ public final class TorWebActivity extends Activity {
     private ScrollView startPage, translatedPage;
     private ProgressBar loading;
     private boolean lightweight=true;
-    private Button lightweightButton,autoTranslateButton;
+    private TextView lightweightButton,autoTranslateButton;
     private boolean translateAutomatically;
     private boolean translationSetupPending;
     private int translationRequest=0;
@@ -56,7 +56,7 @@ public final class TorWebActivity extends Activity {
         LinearLayout translationRow=new LinearLayout(this);
         translationRow.setOrientation(LinearLayout.HORIZONTAL);
         translationRow.setPadding(0,dp(6),0,dp(5));
-        Button translate=control("Traduire FR");translate.setOnClickListener(v->translatePage());
+        TextView translate=control("Traduire FR");translate.setOnClickListener(v->translatePage());
         translationRow.addView(translate,new LinearLayout.LayoutParams(0,dp(43),1));
         autoTranslateButton=control("FR auto OFF");
         autoTranslateButton.setOnClickListener(v->{
@@ -67,7 +67,7 @@ public final class TorWebActivity extends Activity {
         });
         LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(dp(103),dp(43));ap.leftMargin=dp(5);
         translationRow.addView(autoTranslateButton,ap);
-        Button homeButton=control("Accueil");homeButton.setOnClickListener(v->showHome());
+        TextView homeButton=control("Accueil");homeButton.setOnClickListener(v->showHome());
         LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(dp(72),dp(43));hp.leftMargin=dp(7);
         translationRow.addView(homeButton,hp);root.addView(translationRow);
 
@@ -80,7 +80,7 @@ public final class TorWebActivity extends Activity {
         address.setImeOptions(EditorInfo.IME_ACTION_GO);
         address.setOnEditorActionListener((v,id,event)->{openAddress();return true;});
         bar.addView(address,new LinearLayout.LayoutParams(0,dp(48),1));
-        Button go=control("Aller");go.setBackground(round(0xff6638dc,0xff6638dc));
+        TextView go=control("Aller");go.setBackground(round(0xff6638dc,0xff6638dc));
         go.setOnClickListener(v->openAddress());
         LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(dp(78),dp(48));gp.leftMargin=dp(6);
         bar.addView(go,gp);root.addView(bar);
@@ -120,7 +120,7 @@ public final class TorWebActivity extends Activity {
         search.setHint("Rechercher sur Ahmia…");search.setTextSize(15);search.setBackground(round(0xff202c46,0xff586c91));
         search.setPadding(dp(12),0,dp(12),0);
         searchRow.addView(search,new LinearLayout.LayoutParams(0,dp(48),1));
-        Button searchButton=control("Chercher");searchButton.setBackground(round(0xff6638dc,0xff6638dc));
+        TextView searchButton=control("Chercher");searchButton.setBackground(round(0xff6638dc,0xff6638dc));
         searchButton.setOnClickListener(v->searchAhmia(search.getText().toString()));
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(102),dp(48));sp.leftMargin=dp(6);
         searchRow.addView(searchButton,sp);
@@ -136,7 +136,7 @@ public final class TorWebActivity extends Activity {
         shortcut(home,"Vérifier Tor","Test officiel de la connexion",FRENCH_HOME);
         TextView tips=label("Confidentialité : vérifiez les adresses .onion. Le JavaScript est désactivé. Évitez les téléchargements inconnus. Le mode léger retire les images mais ne peut pas accélérer les relais Tor.",12,0xffa9b6d3);
         tips.setPadding(0,dp(15),0,dp(8));home.addView(tips);
-        Button prepareFrench=control("Activer le traducteur français intégré");
+        TextView prepareFrench=control("Activer le traducteur français intégré");
         prepareFrench.setOnClickListener(v->translatePage());
         home.addView(prepareFrench);
         startPage.addView(home);
@@ -144,7 +144,7 @@ public final class TorWebActivity extends Activity {
 
         translatedPage=new ScrollView(this);translatedPage.setVisibility(View.GONE);
         LinearLayout reader=new LinearLayout(this);reader.setOrientation(LinearLayout.VERTICAL);
-        Button close=control("Retour à la page");close.setOnClickListener(v->showBrowser());
+        TextView close=control("Retour à la page");close.setOnClickListener(v->showBrowser());
         reader.addView(close);
         translatedText=label("",15,0xffedf1ff);
         translatedText.setTextIsSelectable(true);
@@ -230,12 +230,19 @@ public final class TorWebActivity extends Activity {
     private TextView label(String text,int size,int color){
         TextView t=new TextView(this);t.setText(text);t.setTextSize(size);t.setTextColor(color);return t;
     }
-    private Button control(String text){
-        Button b=new Button(this);b.setAllCaps(false);b.setTextSize(13);b.setTextColor(0xfff5f2ff);
-        b.setBackground(round(0xff202a43,0xff405273));return b;
+    private TextView control(String text){
+        TextView b=new TextView(this);
+        b.setText(text);
+        b.setTextSize(14);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(dp(11),0,dp(11),0);
+        b.setTextColor(0xfff5f2ff);
+        b.setBackground(round(0xff202a43,0xff405273));
+        b.setClickable(true);
+        return b;
     }
-    private Button small(LinearLayout row,String title,Runnable click){
-        Button b=control(title);b.setOnClickListener(v->click.run());
+    private TextView small(LinearLayout row,String title,Runnable click){
+        TextView b=control(title);b.setOnClickListener(v->click.run());
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(42));p.rightMargin=dp(5);row.addView(b,p);return b;
     }
     private void shortcut(LinearLayout home,String title,String note,String url){
