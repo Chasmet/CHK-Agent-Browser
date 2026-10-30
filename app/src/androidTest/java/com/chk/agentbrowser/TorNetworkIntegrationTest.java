@@ -48,6 +48,33 @@ public final class TorNetworkIntegrationTest {
             JSONObject loaded=command(navigation,true,185);assertEquals("completed",loaded.getString("state"));assertEquals("webview_page_finished_and_url_readback",loaded.getString("verified"));proof.put("webview_navigation",loaded);
             JSONObject replay=command(navigation,true,30);assertTrue(replay.getBoolean("replayed"));proof.put("navigation_replayed_without_second_load",true);
             JSONObject capture=command(args("screenshot"),true,30);assertTrue("Screenshot must expose its actual source",java.util.Arrays.asList("pixelcopy_real_tor_window","webview_draw_main_thread").contains(capture.getString("capture_source")));byte[] jpeg=android.util.Base64.decode(capture.getString("jpeg_base64"),android.util.Base64.DEFAULT);assertTrue(jpeg.length>1000);write("tor-onion-window.jpg",jpeg);proof.put("screenshot_source",capture.getString("capture_source"));
+            // Bringing another CHK activity to the front must not disable the
+            // retained Tor WebView while the user is working in ChatGPT.
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+                Intent overlay=new Intent(app,TorEntryActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                app.startActivity(overlay);
+            });
+            JSONObject hidden=null;
+            for(int attempt=0;attempt<30;attempt++){
+                hidden=command(args("status"),true,30);
+                if(!hidden.optBoolean("ui_open")&&hidden.optBoolean("background_navigation_ready"))break;
+                Thread.sleep(200);
+            }
+            assertNotNull(hidden);
+            assertFalse("Tor WebView must be paused behind another activity",hidden.getBoolean("ui_open"));
+            assertTrue("Tor WebView should be retained",hidden.getBoolean("webview_attached"));
+            assertTrue("Background MCP navigation should be ready",hidden.getBoolean("background_navigation_ready"));
+            JSONObject backgroundNav=command(args("navigate").put("session_id",session).put("request_id","tor-mcp-background-fr")
+                .put("url","https://check.torproject.org/?lang=fr"),true,185);
+            assertEquals("completed",backgroundNav.getString("state"));
+            assertTrue(backgroundNav.getBoolean("tor_verified"));
+            assertEquals("https://check.torproject.org/?lang=fr",backgroundNav.getString("url"));
+            JSONObject backgroundCapture=command(args("screenshot"),true,30);
+            assertEquals("webview_draw_background",backgroundCapture.getString("capture_source"));
+            assertTrue("Offscreen capture must not claim PixelCopy",backgroundCapture.has("capture_limitation"));
+            assertTrue(android.util.Base64.decode(backgroundCapture.getString("jpeg_base64"),android.util.Base64.DEFAULT).length>1000);
+            proof.put("background_navigation",backgroundNav);
+            proof.put("background_capture_source",backgroundCapture.getString("capture_source"));
             JSONObject stop=command(args("disconnect").put("session_id",session),true,30);assertTrue(stop.getBoolean("process_stopped"));assertTrue(stop.getBoolean("listeners_closed"));assertTrue(stop.getBoolean("verified_disconnect"));proof.put("disconnect",stop);
             JSONObject after=command(args("status"),true,30);assertFalse(after.getBoolean("tor_connected"));assertEquals("disconnected",after.getString("connection_state"));
             JSONObject deniedAfter=command(args("navigate").put("session_id",after.getString("session_id")).put("request_id","onion-after-stop").put("url",ONION),false,30);assertTrue(deniedAfter.toString().contains("TOR_NOT_CONNECTED"));proof.put("onion_after_disconnect_blocked",true).put("status","passed");
