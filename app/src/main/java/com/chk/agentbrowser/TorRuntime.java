@@ -21,6 +21,8 @@ final class TorRuntime {
     final TorSessionPolicy policy=new TorSessionPolicy();
     final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor();
+    // Reader requests (translation) must never block the navigation queue.
+    private final ExecutorService readerIo=Executors.newSingleThreadExecutor();
     private final ExecutorService verifier=Executors.newSingleThreadExecutor();
     private final Context app;
     private final String sessionId=UUID.randomUUID().toString();
@@ -222,7 +224,7 @@ final class TorRuntime {
     private static String shortTitle(String title){return title==null?"":title.substring(0,Math.min(512,title.length()));}
     private void read(JSONObject args,Result cb)throws Exception{
         if(!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_NOT_CONNECTED");String url=TorUrlPolicy.checked(args.optString("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),"")));long ticket=policy.generation();
-        io.execute(()->{try{requireCircuit();TorHttp.Reply r=TorHttp.get(url,httpPort,524288);if(ticket!=policy.generation()||!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_SESSION_CHANGED_OR_PROOF_EXPIRED");String text=android.text.Html.fromHtml(r.body,android.text.Html.FROM_HTML_MODE_LEGACY).toString();
+        readerIo.execute(()->{try{requireCircuit();TorHttp.Reply r=TorHttp.get(url,httpPort,524288);if(ticket!=policy.generation()||!policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_SESSION_CHANGED_OR_PROOF_EXPIRED");String text=android.text.Html.fromHtml(r.body,android.text.Html.FROM_HTML_MODE_LEGACY).toString();
             JSONObject value=new JSONObject().put("state",r.code>=200&&r.code<400?"completed":"failed").put("url",r.url).put("http_status",r.code).put("response_sha256",r.sha256).put("redirects",r.redirects).put("text",text.substring(0,Math.min(16000,text.length()))).put("read_scope","fresh_http_response_through_tor_not_authenticated_webview_dom").put("session_id",sessionId).put("tor_verified",true);
             main.post(()->cb.done(r.code>=200&&r.code<400,value));
         }catch(Exception e){main.post(()->cb.done(false,TorBridge.error(e.getMessage())));}});
