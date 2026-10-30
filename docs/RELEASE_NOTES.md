@@ -1,3 +1,15 @@
+## Tor — traduction française automatique et navigation qui reste réactive (30 octobre 2026)
+
+- Ajout de l'interrupteur visible « FR auto ON/OFF » dans Tor : lorsque l'utilisateur l'active, chaque page naviguée est traduite localement dès qu'elle se termine. Le choix est mémorisé dans Tor et peut être désactivé à tout moment.
+- « FR · Traduire » reste accessible directement dans la barre haute. Option « Traduire la page complète via Tor » en plus de la lecture locale rapide du texte affiché.
+- Les nouvelles navigations remplacent proprement les chargements précédents au lieu de répondre `TOR_NAVIGATION_ACTIVE`. Les reçus de commandes sont finalisés séparément et les éventuelles réponses retardées d'anciennes requêtes ne peuvent ouvrir une autre page.
+- La preuve réseau Tor reste vérifiée et réutilisée uniquement tant qu'elle est valide ; JavaScript reste désactivé, les modèles de traduction se téléchargent hors Tor et aucune page n'est envoyée à un service de traduction distant.
+- Corrections des retours à la ligne dans le texte traduit et des indications de progression.
+- Maintien des améliorations déjà intégrées par la PR #83 : boutons français lisibles, traduction par accessibilité et lecture Tor séparée en mémoire.
+- Pas de modification du serveur PC, des autorisations et de la signature APK. Les performances des relais Tor et la disponibilité des sites .onion restent variables.
+
+---
+
 ## Tor intégré — traducteur français et navigation plus fluide (30 octobre 2026)
 
 - Bouton FR toujours visible dans Tor et panneau de lecture traduit à l'intérieur du navigateur. L'original reste accessible immédiatement.
