@@ -11,7 +11,20 @@ import java.util.ArrayList;
  */
 final class TorFrenchTranslator {
     interface Result { void done(boolean success, String translated); }
+    interface Ready { void done(boolean installed); }
     private TorFrenchTranslator(){}
+
+    /** Only checks already downloaded language models: never triggers remote downloads in :tor. */
+    static void modelsReady(Ready callback){
+        TranslateRemoteModel english=new TranslateRemoteModel.Builder(TranslateLanguage.ENGLISH).build();
+        TranslateRemoteModel french=new TranslateRemoteModel.Builder(TranslateLanguage.FRENCH).build();
+        RemoteModelManager manager=RemoteModelManager.getInstance();
+        manager.isModelDownloaded(english).addOnSuccessListener(en->
+            manager.isModelDownloaded(french).addOnSuccessListener(fr->
+                callback.done(Boolean.TRUE.equals(en)&&Boolean.TRUE.equals(fr))
+            ).addOnFailureListener(error->callback.done(false))
+        ).addOnFailureListener(error->callback.done(false));
+    }
 
     static void translate(Context context, String source, Result result) {
         if(source==null || source.trim().isEmpty()){result.done(false,"Page vide ou non lisible.");return;}
@@ -29,7 +42,7 @@ final class TorFrenchTranslator {
                         .setTargetLanguage(TranslateLanguage.FRENCH).build();
                 Translator client=Translation.getClient(options);
                 String compact=source.replaceAll("[\\t ]+"," ").trim();
-                if(compact.length()>6500)compact=compact.substring(0,6500)+"\\n[Extrait limité à 6 500 caractères]";
+                if(compact.length()>6500)compact=compact.substring(0,6500)+"\n[Extrait limité à 6 500 caractères]";
                 ArrayList<String> chunks=new ArrayList<>();
                 for(int i=0;i<compact.length();i+=700)chunks.add(compact.substring(i,Math.min(i+700,compact.length())));
                 translateNext(client,chunks,0,new StringBuilder(),result);
@@ -41,7 +54,7 @@ final class TorFrenchTranslator {
                                       StringBuilder out, Result result) {
         if(index>=chunks.size()){client.close();result.done(true,out.toString());return;}
         client.translate(chunks.get(index)).addOnSuccessListener(translated->{
-            if(out.length()>0)out.append("\\n\\n");
+            if(out.length()>0)out.append("\n\n");
             out.append(translated);
             translateNext(client,chunks,index+1,out,result);
         }).addOnFailureListener(error->{client.close();result.done(false,"Traduction locale indisponible : "+error.getMessage());});
