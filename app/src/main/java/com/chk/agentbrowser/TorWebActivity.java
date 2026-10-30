@@ -227,22 +227,97 @@ public final class TorWebActivity extends Activity {
         if(!raw.contains("://"))raw=(raw.contains(".onion")?"http://":"https://")+raw;
         action("navigate",raw);
     }
-    private void showHome(){startPage.setVisibility(View.VISIBLE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.GONE);}
+    private void showHome(){translationToken++;startPage.setVisibility(View.VISIBLE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.GONE);}
     private void showBrowser(){showBrowserForNavigation();}
     /** Called by TorRuntime on the UI thread for MCP navigations, including background use. */
-    void showBrowserForNavigation(){startPage.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);translatedPage.setVisibility(View.GONE);}
+    void showBrowserForNavigation(){translationToken++;startPage.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);translatedPage.setVisibility(View.GONE);}
+
+    private void installFrenchModel(){
+        // Download public language models in CHK's main process, not in :tor.
+        startActivity(new android.content.Intent(this,TorEntryActivity.class).putExtra("download_translate",true));
+    }
+    private void showTranslation(){
+        startPage.setVisibility(View.GONE);web.setVisibility(View.GONE);
+        translatedPage.setVisibility(View.VISIBLE);translatedPage.scrollTo(0,0);
+    }
+    private int translationToken;
+    private String translatedUrl="",translatedBody="";
     private void translatePage(){
-        showBrowser();
-        translatedText.setText("Lecture et traduction hors ligne en cours…");
-        startPage.setVisibility(View.GONE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.VISIBLE);
-        try{runtime.command(new JSONObject().put("operation","read"),(ok,value)->{
-            if(isFinishing()||isDestroyed())return;
-            if(!ok){translatedText.setText("Lecture via Tor impossible : "+value.optString("error","page indisponible"));return;}
-            String body=value.optString("text","");
-            TorFrenchTranslator.translate(this,body,(success,result)->runOnUiThread(()->{
-                if(!isFinishing()&&!isDestroyed())translatedText.setText((success?"Traduction EN → FR · Mode lecture hors ligne\\n\\n":"")+result);
+        if(web==null||web.getUrl()==null||web.getUrl().isEmpty()){
+            Toast.makeText(this,"Ouvre d'abord une page.",Toast.LENGTH_SHORT).show();return;
+        }
+        final int token=++translationToken;
+        final String url=web.getUrl();
+        pageInfo.setText("FR · vérification du traducteur local");
+        // Fast model check BEFORE any additional Tor request.
+        TorFrenchTranslator.isReady(this,(ready,detail)->runOnUiThread(()->{
+            if(token!=translationToken||isFinishing()||isDestroyed())return;
+            if(!ready){
+                new android.app.AlertDialog.Builder(this)
+                    .setTitle("Traducteur français de Tor")
+                    .setMessage(detail+" Installer le module FR dans CHK ? Les pages Tor ne sont pas envoyées à Google.")
+                    .setNegativeButton("Annuler",(dialog,which)->pageInfo.setText("Page originale affichée"))
+                    .setPositiveButton("Installer FR",(dialog,which)->installFrenchModel())
+                    .show();
+                return;
+            }
+            showTranslation();
+            if(url.equals(translatedUrl)&&!translatedBody.isEmpty()){
+                translatedText.setText(translatedBody);
+                pageInfo.setText("FR · traduction locale conservée");return;
+            }
+            translatedText.setText("Lecture du texte visible et traduction française…");
+            String nativeText=readAccessibleWebText();
+            if(nativeText.length()>=60){translateLocalText(token,url,nativeText,true);return;}
+            translatedText.setText("Lecture de la page par Tor… L'original reste disponible.");
+            try{runtime.command(new JSONObject().put("operation","read").put("url",url),(ok,value)->runOnUiThread(()->{
+                if(token!=translationToken||isFinishing()||isDestroyed())return;
+                if(!ok){translatedText.setText("Lecture impossible : "+value.optString("error","Site indisponible"));return;}
+                translateLocalText(token,url,value.optString("text",""),false);
+            }));}catch(Exception error){translatedText.setText("Lecture Tor impossible : "+error.getMessage());}
+        }));
+    }
+    private void translateLocalText(int token,String url,String text,boolean visible){
+        if(text==null||text.trim().isEmpty()){translatedText.setText("Aucun texte lisible.");return;}
+        final String header="Français · "+(visible?"texte affiché":"mode lecture")+"\n\n";
+        translatedText.setText(header+"Traduction en cours…");
+        TorFrenchTranslator.translate(this,text,
+            (partial,n,total)->runOnUiThread(()->{
+                if(token!=translationToken||isFinishing()||isDestroyed())return;
+                translatedText.setText(header+partial+"\n\n["+n+"/"+total+" passages]");
+                pageInfo.setText("FR · "+n+"/"+total+" passages traduits");
+            }),
+            (ok,translated)->runOnUiThread(()->{
+                if(token!=translationToken||isFinishing()||isDestroyed())return;
+                translatedUrl=ok?url:"";
+                translatedBody=header+translated;
+                translatedText.setText(ok?translatedBody:"Échec : "+translated);
+                pageInfo.setText(ok?"FR · texte traduit localement":"Traduction indisponible");
             }));
-        });}catch(Exception e){translatedText.setText("Traduction impossible : "+e.getMessage());}
+    }
+    private String readAccessibleWebText(){
+        StringBuilder text=new StringBuilder();
+        try{
+            android.view.accessibility.AccessibilityNodeInfo root=web.createAccessibilityNodeInfo();
+            if(root!=null){
+                collectText(root,text,new java.util.HashSet<>(),0,new int[]{0});
+                root.recycle();
+            }
+        }catch(Exception e){android.util.Log.w("CHK-Tor","Lecture native indisponible",e);}
+        return text.toString();
+    }
+    private void collectText(android.view.accessibility.AccessibilityNodeInfo node,
+            StringBuilder text,java.util.HashSet<String> seen,int depth,int[] count){
+        if(node==null||depth>20||count[0]++>500||text.length()>12000)return;
+        CharSequence cs=node.getText();
+        if(cs!=null){
+            String line=cs.toString().trim();
+            if(!line.isEmpty()&&line.length()<2500&&seen.add(line))text.append(line).append('\n');
+        }
+        for(int i=0;i<node.getChildCount()&&count[0]<500&&text.length()<12000;i++){
+            android.view.accessibility.AccessibilityNodeInfo child=node.getChild(i);
+            if(child!=null){collectText(child,text,seen,depth+1,count);child.recycle();}
+        }
     }
     private boolean allowed(String url){if(url.equals("about:blank")||url.startsWith("data:"))return true;try{TorUrlPolicy.checked(url);return runtime.policy.usable(SystemClock.elapsedRealtime());}catch(Exception e){return false;}}
     private void action(String op,String url){
