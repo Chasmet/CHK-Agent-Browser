@@ -181,7 +181,7 @@ final class TorRuntime {
         // Fail closed: expired proof is revalidated through Tor before WebView can load.
         io.execute(()->{try{
             requireCircuit();
-            final JSONObject proof=policy.proofAge(SystemClock.elapsedRealtime())<55000?null:TorHttp.diagnostic(httpPort);
+            final JSONObject proof=policy.proofAge(SystemClock.elapsedRealtime())<90000?null:TorHttp.diagnostic(httpPort);
             main.post(()->{
                 if(ticket!=policy.generation()||navigationReply==null||navigation==null||!request.equals(navigation.optString("request_id")))return;
                 if(proof!=null){
