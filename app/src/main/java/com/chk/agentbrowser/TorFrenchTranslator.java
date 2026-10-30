@@ -38,7 +38,7 @@ final class TorFrenchTranslator {
                         .setTargetLanguage(TranslateLanguage.FRENCH).build();
                 final Translator client=Translation.getClient(options);
                 String compact=source.replaceAll("[\\t ]+"," ").trim();
-                if(compact.length()>12000)compact=compact.substring(0,12000)+"\\n[Fin de l'extrait — 12 000 caractères]";
+                if(compact.length()>12000)compact=compact.substring(0,12000)+"\n[Fin de l'extrait — 12 000 caractères]";
                 ArrayList<String> pieces=new ArrayList<>();
                 // Short text segments keep the first visible result responsive.
                 for(int pos=0;pos<compact.length();pos+=500)
@@ -56,7 +56,7 @@ final class TorFrenchTranslator {
                                       StringBuilder output,Progress progress,Result cb){
         if(index==parts.size()){translator.close();cb.done(true,output.toString());return;}
         translator.translate(parts.get(index)).addOnSuccessListener(value->{
-            if(output.length()>0)output.append("\\n\\n");
+            if(output.length()>0)output.append("\n\n");
             output.append(value);
             progress.update(output.toString(),index+1,parts.size());
             translateNext(translator,parts,index+1,output,progress,cb);
