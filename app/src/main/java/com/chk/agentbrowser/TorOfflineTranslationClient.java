@@ -38,7 +38,12 @@ final class TorOfflineTranslationClient {
         private final Handler main=new Handler(Looper.getMainLooper());
         private boolean bound,finished;
         private final Runnable timeout=()->done(false,"TRANSLATION_WORKER_TIMEOUT");
-        private final Messenger receiver=new Messenger(new Handler(Looper.getMainLooper(),message->{
+        private final Messenger receiver;
+
+        Session(Context app,int operation,String text,Availability availability,Progress progress,Result result){
+            this.app=app;this.operation=operation;this.text=text;
+            this.availability=availability;this.progress=progress;this.result=result;
+        this.receiver=new Messenger(new Handler(Looper.getMainLooper(),message->{
             if(finished)return true;
             Bundle data=message.getData();
             if(message.what==2){
@@ -49,10 +54,6 @@ final class TorOfflineTranslationClient {
             }
             return true;
         }));
-
-        Session(Context app,int operation,String text,Availability availability,Progress progress,Result result){
-            this.app=app;this.operation=operation;this.text=text;
-            this.availability=availability;this.progress=progress;this.result=result;
         }
         void start(){
             main.post(()->{
