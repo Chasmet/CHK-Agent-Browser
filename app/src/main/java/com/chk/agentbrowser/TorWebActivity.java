@@ -119,6 +119,9 @@ public final class TorWebActivity extends Activity {
         shortcut(home,"Vérifier Tor","Test officiel de la connexion",FRENCH_HOME);
         TextView tips=label("Confidentialité : vérifiez les adresses .onion. Le JavaScript est désactivé. Évitez les téléchargements inconnus. Le mode léger retire les images mais ne peut pas accélérer les relais Tor.",12,0xffa9b6d3);
         tips.setPadding(0,dp(15),0,dp(8));home.addView(tips);
+        Button prepareFrench=control("Installer le modèle FR hors Tor");
+        prepareFrench.setOnClickListener(v->startActivity(new android.content.Intent(this,TorEntryActivity.class)));
+        home.addView(prepareFrench);
         startPage.addView(home);
         root.addView(startPage,new LinearLayout.LayoutParams(-1,0,1));
 
@@ -268,6 +271,9 @@ public final class TorWebActivity extends Activity {
      */
     void capture(TorRuntime.Result cb){
         if(web==null||isFinishing()||isDestroyed()){cb.done(false,TorBridge.error("TOR_WEBVIEW_UNAVAILABLE_OPEN_ONCE"));return;}
+        // The native start page has no visible WebView. Render only this Tor Activity,
+        // with an explicit non-PixelCopy provenance instead of returning TOR_VIEW_EMPTY.
+        if(web.getVisibility()!=View.VISIBLE){captureDashboard(cb);return;}
         // A native PixelCopy requires a visible window. When ChatGPT is foregrounded
         // preserve the existing isolated WebView and render it, never the phone UI.
         if(!resumed||!hasWindowFocus()){captureOffscreen(cb);return;}
@@ -276,6 +282,21 @@ public final class TorWebActivity extends Activity {
         if(w<1||h<1){cb.done(false,TorBridge.error("TOR_VIEW_EMPTY"));return;}
         Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
         capturePixels(cb,bitmap,new Rect(at[0],at[1],at[0]+w,at[1]+h),0);
+    }
+    private void captureDashboard(TorRuntime.Result cb){
+        View root=getWindow().getDecorView();
+        int w=root.getWidth(),h=root.getHeight();
+        if(w<1||h<1){cb.done(false,TorBridge.error("TOR_DASHBOARD_NOT_LAID_OUT"));return;}
+        float scale=Math.min(1f,720f/Math.max(w,h));
+        Bitmap bitmap=null;
+        try{
+            bitmap=Bitmap.createBitmap(Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)),Bitmap.Config.ARGB_8888);
+            Canvas canvas=new Canvas(bitmap);canvas.scale(scale,scale);root.draw(canvas);
+            completeCapture(cb,bitmap,"tor_activity_draw_background","Rendered native Tor controls; not live PixelCopy pixels.");
+        }catch(Exception|OutOfMemoryError e){
+            if(bitmap!=null&&!bitmap.isRecycled())bitmap.recycle();
+            cb.done(false,TorBridge.error("TOR_DASHBOARD_CAPTURE_FAILED: "+e.getMessage()));
+        }
     }
     private void captureOffscreen(TorRuntime.Result cb){
         if(web==null||isFinishing()||isDestroyed()){cb.done(false,TorBridge.error("TOR_WEBVIEW_UNAVAILABLE_OPEN_ONCE"));return;}
