@@ -14,6 +14,8 @@ import org.json.JSONObject;
 /** A script-free Tor WebView in the :tor process, created only after proxy and circuit proofs. */
 @androidx.annotation.RequiresApi(29)
 public final class TorWebActivity extends Activity {
+    private static final String FRENCH_HOME="https://check.torproject.org/?lang=fr";
+    private boolean frenchHomeRequested;
     private TorRuntime runtime;
     private WebView web;
     private TextView state;
@@ -24,7 +26,7 @@ public final class TorWebActivity extends Activity {
         if(!runtime.policy.usable(SystemClock.elapsedRealtime())){finish();return;}
         LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setBackgroundColor(0xff16141e);
         state=new TextView(this);state.setTextColor(0xffe4ceff);state.setPadding(14,10,14,10);box.addView(state);
-        LinearLayout bar=new LinearLayout(this);address=new EditText(this);address.setSingleLine();address.setTextColor(0xffeeeeee);address.setText("https://check.torproject.org/");address.setHint("Adresse HTTP(S) via Tor");address.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);bar.addView(address,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout bar=new LinearLayout(this);address=new EditText(this);address.setSingleLine();address.setTextColor(0xffeeeeee);address.setText(FRENCH_HOME);address.setHint("Adresse HTTP(S) via Tor");address.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);bar.addView(address,new LinearLayout.LayoutParams(0,-2,1));
         Button go=new Button(this);go.setText("Aller");go.setOnClickListener(v->action("navigate",address.getText().toString()));bar.addView(go);box.addView(bar);
         LinearLayout tools=new LinearLayout(this);button(tools,"←",()->action("back",null));button(tools,"→",()->action("forward",null));button(tools,"↻",()->action("reload",null));button(tools,"Stop Tor",()->startActivity(new android.content.Intent(this,TorEntryActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK|android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("disconnect_tor",true)));button(tools,"Retour CHK",this::finish);box.addView(tools);
         web=new WebView(this);web.setTag("chk_tor_webview");WebSettings settings=web.getSettings();
@@ -55,7 +57,15 @@ public final class TorWebActivity extends Activity {
     private void button(LinearLayout row,String title,Runnable action){Button b=new Button(this);b.setAllCaps(false);b.setText(title);b.setOnClickListener(v->action.run());row.addView(b,new LinearLayout.LayoutParams(0,-2,1));}
     private void action(String op,String url){try{JSONObject args=runtime.uiArgs(op);if(url!=null)args.put("url",url);runtime.command(args,(ok,value)->{if(!ok)Toast.makeText(this,value.optString("error","Navigation non confirmée"),Toast.LENGTH_LONG).show();});}catch(Exception e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}}
     private final Runnable tick=new Runnable(){public void run(){if(!resumed)return;try{JSONObject s=runtime.status();state.setText("Tor · "+s.optString("connection_state")+" · "+s.optString("error")+"\nJavaScript désactivé · stockage et réseau séparés de CHK Web");}catch(Exception ignored){}new Handler(Looper.getMainLooper()).postDelayed(this,1000);}};
-    @Override protected void onResume(){super.onResume();resumed=true;if(runtime!=null)runtime.main.post(tick);}
+    @Override protected void onResume(){
+        super.onResume();resumed=true;
+        if(runtime!=null)runtime.main.post(tick);
+        if(!frenchHomeRequested&&getIntent().getBooleanExtra("tor_direct_french",false)){
+            frenchHomeRequested=true;
+            // Only TorRuntime can navigate, and it requires an independently verified circuit.
+            action("navigate",FRENCH_HOME);
+        }
+    }
     @Override protected void onPause(){resumed=false;if(runtime!=null)runtime.main.removeCallbacks(tick);super.onPause();}
     @Override protected void onDestroy(){if(runtime!=null)runtime.detach(this);if(web!=null){web.stopLoading();web.destroy();web=null;}super.onDestroy();}
     /**
