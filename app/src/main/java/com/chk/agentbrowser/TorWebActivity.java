@@ -205,7 +205,7 @@ public final class TorWebActivity extends Activity {
                 runtime.pageFinished(url,view.getTitle());address.setText(url);
                 loading.setVisibility(View.GONE);
                 pageInfo.setText("Page : "+(view.getTitle()==null?url:view.getTitle()));
-                if(autoFrench && url!=null && url.equals(view.getUrl())){
+                if(autoFrench && resumed && url!=null && url.equals(view.getUrl())){
                     // The separate Tor reader executor avoids blocking navigation.
                     runtime.main.postDelayed(()->{
                         if(autoFrench&&!isFinishing()&&url.equals(web.getUrl()))translatePage();
@@ -369,7 +369,13 @@ public final class TorWebActivity extends Activity {
             if(!op.equals("cancel_navigation")){cachedFrenchUrl="";cachedFrenchText="";showBrowser();pageInfo.setText("Navigation via Tor…");loading.setVisibility(View.VISIBLE);loading.setProgress(5);}
             JSONObject args=runtime.uiArgs(op);if(url!=null)args.put("url",url);
             runtime.command(args,(ok,value)->{
-                if(!ok){pageInfo.setText("Navigation interrompue : "+value.optString("error","site indisponible"));loading.setVisibility(View.GONE);Toast.makeText(this,value.optString("error","Navigation non confirmée"),Toast.LENGTH_LONG).show();}
+                if(!ok){
+                    String reason=value.optString("error","site indisponible");
+                    if("TOR_NAVIGATION_SUPERSEDED".equals(reason))return;
+                    pageInfo.setText("Navigation interrompue : "+reason);
+                    loading.setVisibility(View.GONE);
+                    Toast.makeText(this,reason,Toast.LENGTH_LONG).show();
+                }
                 else if(op.equals("cancel_navigation")){loading.setVisibility(View.GONE);pageInfo.setText("Chargement arrêté.");}
             });
         }catch(Exception e){loading.setVisibility(View.GONE);pageInfo.setText(e.getMessage());Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}
