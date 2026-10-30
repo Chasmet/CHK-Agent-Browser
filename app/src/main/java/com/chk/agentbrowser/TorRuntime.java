@@ -95,6 +95,7 @@ final class TorRuntime {
         if(policy.state().equals("connecting")){connecting.add(cb);return;}
         if(!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE))throw new Exception("TOR_WEBVIEW_PROXY_UNSUPPORTED");
         if(owner==null)throw new Exception("TOR_SERVICE_NOT_BOUND");
+        readCache.clear(); // No cached page survives a new circuit.
         owner.activate();long ticket=policy.begin();proxyReady=false;diagnostic=null;connecting.add(cb);bootstrap=0;
         if(!bound){
             File config=TorService.getTorrc(app);try(FileOutputStream out=new FileOutputStream(config)){
