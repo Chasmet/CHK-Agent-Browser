@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="native_social_accessibility_description">Pilotage facultatif et temporaire d’une application sociale choisie depuis Cut. Autorisation manuelle obligatoire. Le service lit les contrôles visibles uniquement pendant la session et affiche un bouton Retour CHK / Arrêter. Aucune collecte en dehors de la session, aucun accès aux mots de passe et aucune confirmation automatique de publication.</string>
+</resources>

@@ -58,16 +58,53 @@ public final class TorWebActivity extends Activity {
     @Override protected void onResume(){super.onResume();resumed=true;if(runtime!=null)runtime.main.post(tick);}
     @Override protected void onPause(){resumed=false;if(runtime!=null)runtime.main.removeCallbacks(tick);super.onPause();}
     @Override protected void onDestroy(){if(runtime!=null)runtime.detach(this);if(web!=null){web.stopLoading();web.destroy();web=null;}super.onDestroy();}
+    /**
+     * Screenshot from the actual Tor window. Some emulator and GPU surfaces return
+     * PixelCopy.ERROR_SOURCE_NO_DATA (3) despite a completed WebView navigation.
+     * Retry the native surface first. If no surface exists, render the real WebView
+     * on the UI thread and label the evidence distinctly; never claim PixelCopy.
+     */
     void capture(TorRuntime.Result cb){
         if(web==null||!resumed||!hasWindowFocus()){cb.done(false,TorBridge.error("TOR_WINDOW_NOT_VISIBLE"));return;}
-        int[] at=new int[2];web.getLocationInWindow(at);int w=web.getWidth(),h=web.getHeight();if(w<1||h<1){cb.done(false,TorBridge.error("TOR_VIEW_EMPTY"));return;}
+        int[] at=new int[2];web.getLocationInWindow(at);
+        int w=web.getWidth(),h=web.getHeight();
+        if(w<1||h<1){cb.done(false,TorBridge.error("TOR_VIEW_EMPTY"));return;}
         Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
-        try{PixelCopy.request(getWindow(),new Rect(at[0],at[1],at[0]+w,at[1]+h),bitmap,result->{try{
-            if(result!=PixelCopy.SUCCESS)throw new Exception("TOR_PIXEL_COPY_FAILED: "+result);
-            Bitmap small=bitmap;float scale=Math.min(1,720f/Math.max(w,h));if(scale<1)small=Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)),true);
-            ByteArrayOutputStream bytes=new ByteArrayOutputStream();try{small.compress(Bitmap.CompressFormat.JPEG,80,bytes);}finally{if(small!=bitmap)small.recycle();}
-            if(bytes.size()>500000)throw new Exception("TOR_SCREENSHOT_TOO_LARGE");
-            JSONObject value=runtime.status().put("capture_source","pixelcopy_real_tor_window").put("jpeg_base64",android.util.Base64.encodeToString(bytes.toByteArray(),android.util.Base64.NO_WRAP));cb.done(true,value);
-        }catch(Exception e){cb.done(false,TorBridge.error(e.getMessage()));}finally{bitmap.recycle();}},runtime.main);}catch(Exception e){bitmap.recycle();cb.done(false,TorBridge.error(e.getMessage()));}
+        capturePixels(cb,bitmap,new Rect(at[0],at[1],at[0]+w,at[1]+h),0);
+    }
+    private void capturePixels(TorRuntime.Result cb,Bitmap bitmap,Rect rect,int tries){
+        if(web==null||!resumed){bitmap.recycle();cb.done(false,TorBridge.error("TOR_WINDOW_NOT_VISIBLE"));return;}
+        try{
+            PixelCopy.request(getWindow(),rect,bitmap,result->{
+                if(result==PixelCopy.SUCCESS){
+                    completeCapture(cb,bitmap,"pixelcopy_real_tor_window",null);
+                }else if(tries<5){
+                    runtime.main.postDelayed(()->capturePixels(cb,bitmap,rect,tries+1),300);
+                }else{
+                    // Explicitly marked WebView-only fallback: no system overlays included.
+                    try{
+                        Bitmap rendered=Bitmap.createBitmap(bitmap.getWidth(),bitmap.getHeight(),Bitmap.Config.ARGB_8888);
+                        try{web.draw(new Canvas(rendered));
+                            completeCapture(cb,rendered,"webview_draw_main_thread","PIXEL_COPY_UNAVAILABLE_"+result);
+                        }catch(Exception e){rendered.recycle();throw e;}
+                    }catch(Exception e){cb.done(false,TorBridge.error("TOR_SCREENSHOT_RENDER_FAILED: "+e.getMessage()));}
+                    finally{bitmap.recycle();}
+                }
+            },runtime.main);
+        }catch(Exception e){bitmap.recycle();cb.done(false,TorBridge.error("TOR_PIXEL_COPY_REQUEST_FAILED: "+e.getMessage()));}
+    }
+    private void completeCapture(TorRuntime.Result cb,Bitmap bitmap,String source,String note){
+        Bitmap small=bitmap;
+        try{
+            float scale=Math.min(1f,720f/Math.max(bitmap.getWidth(),bitmap.getHeight()));
+            if(scale<1f)small=Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(bitmap.getWidth()*scale)),Math.max(1,Math.round(bitmap.getHeight()*scale)),true);
+            ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+            if(!small.compress(Bitmap.CompressFormat.JPEG,80,bytes)||bytes.size()==0)throw new IOException("TOR_SCREENSHOT_ENCODING_FAILED");
+            if(bytes.size()>500000)throw new IOException("TOR_SCREENSHOT_TOO_LARGE");
+            JSONObject value=runtime.status().put("capture_source",source).put("jpeg_base64",android.util.Base64.encodeToString(bytes.toByteArray(),android.util.Base64.NO_WRAP));
+            if(note!=null)value.put("capture_limitation",note);
+            cb.done(true,value);
+        }catch(Exception e){cb.done(false,TorBridge.error(e.getMessage()));}
+        finally{if(small!=bitmap)small.recycle();bitmap.recycle();}
     }
 }

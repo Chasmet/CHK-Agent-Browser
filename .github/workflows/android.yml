@@ -127,20 +127,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: 1.0.${{ github.run_number }}
         run: |
-          RELAY_RUN=$(gh run list --workflow chk-home-mcp-windows.yml --commit "$GITHUB_SHA" --json databaseId --jq '.[0].databaseId // empty')
           ASSETS=("CHK-Agent-Browser-${RELEASE_VERSION}.apk")
-          if test -n "$RELAY_RUN"; then
-            RELAY_RESULT=$(gh run view "$RELAY_RUN" --json conclusion --jq .conclusion)
-            test "$RELAY_RESULT" = success
-            gh run download "$RELAY_RUN" -n CHK-Home-MCP-Windows -D windows-relay
-            (cd windows-relay && zip ../CHK-Home-MCP-1.4.1-Windows.zip *)
-            ASSETS+=(CHK-Home-MCP-1.4.1-Windows.zip)
-          fi
           sha256sum "${ASSETS[@]}" > SHA256SUMS.txt
           gh release create "v${RELEASE_VERSION}" "CHK-Agent-Browser-${RELEASE_VERSION}.apk" \
             --title "CHK Agent Browser ${RELEASE_VERSION}" \
             --notes-file docs/RELEASE_NOTES.md
           gh release upload "v${RELEASE_VERSION}" SHA256SUMS.txt
-          if test -f CHK-Home-MCP-1.4.1-Windows.zip; then
-            gh release upload "v${RELEASE_VERSION}" CHK-Home-MCP-1.4.1-Windows.zip
-          fi
+
