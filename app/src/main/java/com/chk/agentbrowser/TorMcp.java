@@ -7,7 +7,7 @@ import java.util.Arrays;
 
 /** Explicit Tor commands over the unchanged Local 3 desktop carrier. */
 final class TorMcp {
-    static final java.util.List<String> OPERATIONS=Arrays.asList("status","capabilities","open","connect","disconnect","open_browser","close_browser","navigate","back","forward","reload","diagnostic","read","screenshot","open_external");
+    static final java.util.List<String> OPERATIONS=Arrays.asList("status","capabilities","open","connect","disconnect","open_browser","close_browser","navigate","back","forward","reload","cancel_navigation","diagnostic","read","screenshot","open_external");
     static String operation(JSONObject args){String op=args.optString("operation","status");return op.startsWith("tor_")?op.substring(4):op;}
     static boolean readOnly(JSONObject args){return Arrays.asList("status","capabilities","diagnostic","read","screenshot").contains(operation(args));}
     private TorMcp(){}
