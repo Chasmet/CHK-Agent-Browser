@@ -85,7 +85,8 @@ public final class VideoEditorEngine {
                 DISK.execute(()->{try{
                     JSONObject project=args.has("project")?new JSONObject(args.getJSONObject("project").toString()):load(application);validate(application,project);
                     if(project.getJSONArray("clips").length()==0)throw new IllegalArgumentException("Ajoute une vidéo avant d’exporter");
-                    Composition composition=composition(application,project);
+                    project.put("_export_source_hashes",StudioAutomation.fingerprints(application,project));
+                    Composition composition=composition(application,project,new AgentClient.ResultCallback(){public void finish(boolean ok,String text){}public boolean isActive(){return ticket==exportGeneration&&state.equals("preparing");}});
                     MAIN.post(()->{if(ticket!=exportGeneration||!"preparing".equals(state)){cb.completed(false,"Export annulé");return;}startExport(application,project,composition,args.optBoolean("replace",false),ticket,cb);});
                 }catch(Exception ex){synchronized(exportLock){if(ticket==exportGeneration){state="failed";error=ex.getMessage();}}cb.completed(false,ex.getMessage());}});
             });return;
@@ -286,6 +287,11 @@ public final class VideoEditorEngine {
                     if(rendered==null||original==null){unverifiable++;continue;}
                     checked++;
                     float sourceBrightness=sampleBrightness(original);
+                    if(clip.has("crop")){
+                        JSONObject crop=StudioCrop.read(clip);int x=Math.min(original.getWidth()-1,(int)(crop.getDouble("x")*original.getWidth())),y=Math.min(original.getHeight()-1,(int)(crop.getDouble("y")*original.getHeight()));
+                        int w=Math.max(1,Math.min(original.getWidth()-x,(int)Math.round(crop.getDouble("width")*original.getWidth()))),h=Math.max(1,Math.min(original.getHeight()-y,(int)Math.round(crop.getDouble("height")*original.getHeight())));
+                        android.graphics.Bitmap region=android.graphics.Bitmap.createBitmap(original,x,y,w,h);sourceBrightness=sampleBrightness(region);if(region!=original)region.recycle();
+                    }
                     float renderedBrightness=sampleBrightness(rendered);
                     samples.put(new JSONObject().put("cut",i+1)
                         .put("source_luma",Math.round(sourceBrightness))
@@ -376,7 +382,7 @@ public final class VideoEditorEngine {
         validate(app,p);return p;
     }
     public void validate(Context context,JSONObject p)throws Exception{
-        if(p.toString().length()>64000)throw new IllegalArgumentException("Projet trop volumineux");
+        if(p.toString().length()>240000)throw new IllegalArgumentException("Projet trop volumineux");
         String aspect=p.optString("aspect_ratio","source");
         String layout=p.optString("aspect_mode","crop");
         ratio(aspect);
@@ -407,6 +413,7 @@ public final class VideoEditorEngine {
             long fade=c.optLong("fade_ms",0);
             if(fade<0||fade>Math.min(1500,duration/3))throw new IllegalArgumentException("Effet de fondu invalide");
             validateVolume(c);
+            if(c.has("crop"))StudioCrop.validate(c.getJSONObject("crop"));
             double speed=c.optDouble("speed",1);
             if((Double.isNaN(speed)||Double.isInfinite(speed))||speed<0.25||speed>4)throw new IllegalArgumentException("Vitesse entre 0,25 et 4 requise");
             double rotation=c.optDouble("rotation",0);
@@ -435,9 +442,11 @@ public final class VideoEditorEngine {
                 if(start<0||duration<500||duration>1200000)throw new IllegalArgumentException("Découpe audio invalide");
                 checkMediaDuration(f,start+duration);
                 audioDuration+=duration;
+                if(StudioAudio.enabled(p))StudioAudio.validateItem(a,StudioAudio.duration(a));
             }
-            if(sounds.length()>0&&audioDuration>videoDuration+1000)throw new IllegalArgumentException("Audio plus long que la vidéo : raccourcis la piste");
+            if(!StudioAudio.enabled(p)&&sounds.length()>0&&audioDuration>videoDuration+1000)throw new IllegalArgumentException("Audio plus long que la vidéo : raccourcis la piste");
         }
+        StudioAudio.validate(p);
         StudioLayers.validate(context,p,videoDuration);
         StudioSubtitles.validate(p,videoDuration);
         if(videoDuration>20*60*1000)throw new IllegalArgumentException("Montage limité à 20 minutes");
@@ -554,7 +563,8 @@ public final class VideoEditorEngine {
         }catch(Exception ex){throw new IllegalArgumentException("Ratio largeur:hauteur requis (entre 1:5 et 5:1)");}
     }
     /** Used by export and the live CompositionPlayer so previews include real effects. */
-    public Composition composition(Context context,JSONObject project)throws Exception{
+    public Composition composition(Context context,JSONObject project)throws Exception{return composition(context,project,null);}
+    Composition composition(Context context,JSONObject project,AgentClient.ResultCallback active)throws Exception{
         WorkspaceStore store=new WorkspaceStore(context);
         JSONArray clips=project.getJSONArray("clips"),audios=project.optJSONArray("audio");
         List<EditedMediaItem> videos=new ArrayList<>(),sounds=new ArrayList<>();
@@ -566,10 +576,12 @@ public final class VideoEditorEngine {
         final int layerHeight=layerAspect>=1?layerQuality:Math.max(2,Math.round(layerQuality/Math.max(.2f,layerAspect)/2)*2);
         java.util.Map<String,Long> sourceDurations=new java.util.HashMap<>();
         boolean external=audios!=null&&audios.length()>0;
-        boolean original=!project.optBoolean("mute_original",external);
+        boolean mixed=StudioAudio.enabled(project);
+        boolean original=!mixed&&!project.optBoolean("mute_original",false);
         for(int i=0;i<clips.length();i++){
             JSONObject c=clips.getJSONObject(i);long len=c.optLong("duration_ms",10000);
             List<androidx.media3.common.Effect> fx=effects(c.optString("filter","aucun"),len,c.optLong("fade_ms",0));
+            if(c.has("crop"))fx.addAll(StudioCrop.effects(c));
             if(c.has("grade_exposure")||c.has("grade_warmth")||c.has("grade_saturation")||
                c.has("grade_exposure_end")||c.has("grade_warmth_end")||c.has("grade_saturation_end"))
                 fx.add(gradedColor(c,len));
@@ -603,9 +615,13 @@ public final class VideoEditorEngine {
             if(speed!=1)video.setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return speed;}public long getNextSpeedChangeTimeUs(long timeUs){return androidx.media3.common.C.TIME_UNSET;}});
             videos.add(video.build());
         }
-        if(external)for(int i=0;i<audios.length();i++){
+        if(external&&!mixed)for(int i=0;i<audios.length();i++){
             JSONObject a=audios.getJSONObject(i);
             sounds.add(new EditedMediaItem.Builder(media(store.file(a.getString("path")),a.optLong("start_ms",0),a.optLong("duration_ms",10000))).setDurationUs(sourceDurationUs(store,a,sourceDurations)).setRemoveVideo(true).setEffects(new Effects(volumeProcessors(a),Collections.emptyList())).build());
+        }
+        if(mixed){
+            StudioAudioMixer.Render mix=StudioAudioMixer.render(context,project,active,value->{if(state.equals("preparing"))percent=value/2;});
+            sounds.add(new EditedMediaItem.Builder(media(mix.wav,0,StudioEdits.total(project))).setDurationUs(StudioEdits.total(project)*1000).setRemoveVideo(true).build());
         }
         EditedMediaItemSequence sequence=original?EditedMediaItemSequence.withAudioAndVideoFrom(videos):EditedMediaItemSequence.withVideoFrom(videos);
         Composition.Builder builder=sounds.isEmpty()?new Composition.Builder(sequence):new Composition.Builder(sequence,EditedMediaItemSequence.withAudioFrom(sounds));
@@ -615,12 +631,7 @@ public final class VideoEditorEngine {
             if(StudioSubtitles.items(project).length()>0)layeredBuilder.setEffects(new Effects(Collections.emptyList(),Collections.singletonList(StudioSubtitles.effect(project))));
             return layeredBuilder.build();
         }
-        float aspect=ratio(project.optString("aspect_ratio","source"));
-        if(aspect==0){
-            JSONObject first=clips.getJSONObject(0);JSONObject metadata=MediaInspection.info(context,first.getString("path"));
-            int width=metadata.optInt("width",0),height=metadata.optInt("height",0);
-            if(width>0&&height>0){aspect=(float)width/height;int rotation=metadata.optInt("rotation",0)+(int)first.optDouble("rotation",0);if(Math.abs(rotation)%180==90)aspect=1f/aspect;}
-        }
+        float aspect=outputAspect(context,project);
         List<androidx.media3.common.Effect> compositionEffects=new ArrayList<>();
         if(aspect>0){
             int quality=project.optInt("resolution",720);
@@ -633,7 +644,7 @@ public final class VideoEditorEngine {
         if(!compositionEffects.isEmpty())builder.setEffects(new Effects(Collections.emptyList(),compositionEffects));
         return builder.build();
     }
-    private static void validateVolume(JSONObject clip){double v=clip.optDouble("volume",1);if(Double.isNaN(v)||Double.isInfinite(v)||v<0||v>1)throw new IllegalArgumentException("Volume entre 0 et 1 requis");}
+    private static void validateVolume(JSONObject clip){double v=clip.optDouble("volume",1);if(Double.isNaN(v)||Double.isInfinite(v)||v<0||v>2)throw new IllegalArgumentException("Volume entre 0 et 2 requis");}
     static List<androidx.media3.common.audio.AudioProcessor> volumeProcessors(JSONObject clip){
         float volume=(float)clip.optDouble("volume",1);if(volume==1)return Collections.emptyList();
         androidx.media3.common.audio.ChannelMixingAudioProcessor processor=new androidx.media3.common.audio.ChannelMixingAudioProcessor();
@@ -646,6 +657,15 @@ public final class VideoEditorEngine {
     private long sourceDurationUs(WorkspaceStore store,JSONObject clip,java.util.Map<String,Long> cache)throws Exception{
         String path=clip.getString("path");Long value=cache.get(path);if(value==null){MediaMetadataRetriever retriever=new MediaMetadataRetriever();try{retriever.setDataSource(store.file(path).getAbsolutePath());String duration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);value=duration==null?0:Long.parseLong(duration);}finally{retriever.release();}cache.put(path,value);}return Math.max(value,clip.optLong("start_ms")+clip.optLong("duration_ms",10000))*1000;
     }
+    float outputAspect(Context context,JSONObject project)throws Exception{
+        float aspect=ratio(project.optString("aspect_ratio","source"));if(aspect>0)return aspect;
+        JSONArray clips=project.getJSONArray("clips");if(clips.length()==0)return 0;JSONObject first=clips.getJSONObject(0),info=MediaInspection.info(context,first.getString("path"));
+        double width=info.optInt("width"),height=info.optInt("height");if(width<=0||height<=0)return 0;
+        if(Math.abs(info.optInt("rotation"))%180==90){double swap=width;width=height;height=swap;}
+        if(first.has("crop")){JSONObject crop=StudioCrop.read(first);width*=crop.getDouble("width");height*=crop.getDouble("height");double angle=Math.toRadians(crop.getDouble("degrees"));double w=width; width=Math.abs(Math.cos(angle))*w+Math.abs(Math.sin(angle))*height;height=Math.abs(Math.sin(angle))*w+Math.abs(Math.cos(angle))*height;}
+        double angle=Math.toRadians(first.optDouble("rotation",0));double w=width;width=Math.abs(Math.cos(angle))*w+Math.abs(Math.sin(angle))*height;height=Math.abs(Math.sin(angle))*w+Math.abs(Math.cos(angle))*height;
+        double ratio=width/height;if(Double.isNaN(ratio)||Double.isInfinite(ratio)||ratio<=0)throw new IllegalArgumentException("Dimensions de sortie invalides");return (float)ratio;
+    }
     private void startExport(Context context,JSONObject project,Composition composition,boolean replace,long ticket,Done callback){
         try{
             WorkspaceStore store=new WorkspaceStore(context);String output=project.getString("output");
@@ -657,7 +677,7 @@ public final class VideoEditorEngine {
             // Encode portrait frames physically upright (1080x1920), not landscape
             // H.264 with a 90-degree display matrix. The previous default confused
             // clients that inspect raw track dimensions instead of rotation tags.
-            final float requestedAspect=ratio(project.optString("aspect_ratio","source"));
+            final float requestedAspect=outputAspect(context,project);
             final boolean nativePortrait=requestedAspect>0f&&requestedAspect<1f
                 &&project.optBoolean("native_portrait",true);
             transformer=new Transformer.Builder(context).setPortraitEncodingEnabled(nativePortrait).setMuxerFactory(new androidx.media3.transformer.InAppMp4Muxer.Factory()).setMaxDelayBetweenMuxerSamplesMs(60000).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
@@ -670,6 +690,7 @@ public final class VideoEditorEngine {
                         try{
                             if(!partial.isFile()||partial.length()<1000)
                                 throw new IllegalStateException("Rendu MP4 absent ou incomplet");
+                            JSONObject before=project.optJSONObject("_export_source_hashes");if(before!=null){JSONObject actual=StudioAutomation.fingerprints(context,project);for(java.util.Iterator<String> keys=before.keys();keys.hasNext();){String key=keys.next();if(!before.getString(key).equals(actual.optString(key)))throw new IllegalStateException("SOURCE_CHANGED_DURING_EXPORT: "+key);}}
                             JSONObject renderedInfo=MediaInspection.infoFile(partial);
                             if(nativePortrait){
                                 int encodedWidth=renderedInfo.optInt("width",-1);

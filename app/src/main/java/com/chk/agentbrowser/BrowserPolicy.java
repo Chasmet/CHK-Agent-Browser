@@ -12,8 +12,12 @@ public final class BrowserPolicy {
             if(value==null||value.length()>2000)return false;
             URI u=new URI(value);String s=u.getScheme();java.net.URL url=new java.net.URL(value);int port=url.getPort();
             return ("http".equalsIgnoreCase(s)||"https".equalsIgnoreCase(s))
-                &&!host(value).isEmpty()&&url.getUserInfo()==null&&u.getRawUserInfo()==null&&port!=0&&port<=65535;
+                &&!host(value).isEmpty()&&!host(value).contains("%")&&!onionUrl(value)&&url.getUserInfo()==null&&u.getRawUserInfo()==null&&port!=0&&port<=65535;
         }catch(Exception e){return false;}
+    }
+    /** .onion names never enter the ordinary CHK network stack. */
+    public static boolean onionUrl(String value){
+        try{String h=host(value).toLowerCase(Locale.ROOT);while(h.endsWith("."))h=h.substring(0,h.length()-1);return h.equals("onion")||h.endsWith(".onion");}catch(Exception e){return false;}
     }
     public static boolean publicUrl(String value){
         if(!webUrl(value))return false;

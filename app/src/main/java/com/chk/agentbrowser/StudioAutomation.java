@@ -44,7 +44,7 @@ final class StudioAutomation {
                 if(action.equals("video_editor_queue_add")){
                     String request=args.getString("request_id");if(!request.matches("[A-Za-z0-9_-]{1,80}"))throw new IOException("request_id invalide");
                     JSONArray jobs=queue.getJSONArray("jobs");
-                    for(int i=0;i<jobs.length();i++)if(request.equals(jobs.getJSONObject(i).optString("request_id"))){cb.completed(true,summary().toString());return;}
+                    for(int i=0;i<jobs.length();i++)if(request.equals(jobs.getJSONObject(i).optString("request_id"))){JSONObject old=jobs.getJSONObject(i);if(old.has("request_fingerprint")&&!old.getString("request_fingerprint").equals(StudioMcp.fingerprint(args)))throw new IOException("REQUEST_ID_REUSED_WITH_DIFFERENT_PARAMETERS");cb.completed(true,summary().toString());return;}
                     JSONArray projects=args.getJSONArray("projects");if(projects.length()<1||projects.length()>10||jobs.length()+projects.length()>40)throw new IOException("1 à 10 projets par ajout, 40 exports conservés maximum");
                     JSONArray staged=new JSONArray();Set<String> outputs=new HashSet<>();
                     for(int i=0;i<jobs.length();i++)outputs.add(jobs.getJSONObject(i).getJSONObject("project").getString("output"));
@@ -53,7 +53,7 @@ final class StudioAutomation {
                         VideoEditorEngine.get().validate(app,p);if(p.getJSONArray("clips").length()==0)throw new IOException("Projet vide");
                         String out=p.getString("output");if(!outputs.add(out)||new WorkspaceStore(app).file(out).exists())throw new IOException("Destination déjà utilisée : "+out);
                         staged.put(new JSONObject().put("id",UUID.randomUUID().toString()).put("request_id",request).put("project",p)
-                            .put("sources",fingerprints(app,p)).put("state","queued").put("created_at",System.currentTimeMillis()));
+                            .put("sources",fingerprints(app,p)).put("request_fingerprint",StudioMcp.fingerprint(args)).put("state","queued").put("created_at",System.currentTimeMillis()));
                     }
                     for(int i=0;i<staged.length();i++)jobs.put(staged.get(i));queue.put("paused",false);saveQueue(app);pump(app);result=summary();
                 }else if(action.equals("video_editor_queue_resume")){
@@ -92,17 +92,24 @@ final class StudioAutomation {
         String track=op.optString("track","clips");if(!track.equals("clips")&&!track.equals("audio")&&!track.equals("layers"))throw new IOException("Piste inconnue");
         JSONArray items=p.optJSONArray(track);if(items==null){items=new JSONArray();p.put(track,items);}
         int index=op.optInt("index",items.length());
+        if(!type.equals("add")&&op.has("clip_id")){
+            String id=op.getString("clip_id");index=-1;for(int i=0;i<items.length();i++)if(id.equals(items.getJSONObject(i).optString("studio_id"))){index=i;break;}
+            if(index<0)throw new IOException("CLIP_NOT_FOUND: "+id);
+        }
+        if(type.equals("add")&&op.getJSONObject("clip").has("studio_id")){
+            String id=op.getJSONObject("clip").getString("studio_id");for(String lane:new String[]{"clips","audio"}){JSONArray existing=p.optJSONArray(lane);if(existing!=null)for(int i=0;i<existing.length();i++)if(id.equals(existing.getJSONObject(i).optString("studio_id")))throw new IOException("CLIP_ID_EXISTS: "+id);}
+        }
         if(type.equals("add")){if(index<0||index>items.length())throw new IOException("Index invalide");JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==index)out.put(new JSONObject(op.getJSONObject("clip").toString()));if(i<items.length())out.put(items.get(i));}p.put(track,out);}
         else{
             if(index<0||index>=items.length())throw new IOException("Plan absent");
             if(type.equals("update")){JSONObject c=items.getJSONObject(index),values=op.getJSONObject("values");for(Iterator<String> it=values.keys();it.hasNext();){String key=it.next();
-                if(!(track.equals("layers")?Arrays.asList("path","start_ms","duration_ms","offset_ms","x","y","scale","opacity"):Arrays.asList("path","start_ms","duration_ms","volume","speed","mute","filter","fade_ms","rotation","text","grade_exposure","grade_exposure_end","grade_warmth","grade_warmth_end","grade_saturation","grade_saturation_end","zoom","zoom_end","pan_x","pan_x_end","pan_y","pan_y_end")).contains(key))throw new IOException("Paramètre inconnu : "+key);c.put(key,values.get(key));}}
+                if(!(track.equals("layers")?Arrays.asList("path","start_ms","duration_ms","offset_ms","x","y","scale","opacity"):Arrays.asList("path","start_ms","duration_ms","volume","speed","mute","filter","fade_ms","rotation","text","grade_exposure","grade_exposure_end","grade_warmth","grade_warmth_end","grade_saturation","grade_saturation_end","zoom","zoom_end","pan_x","pan_x_end","pan_y","pan_y_end","crop","track_id","offset_ms","gain_keyframes","audio_fade_in_ms","audio_fade_out_ms")).contains(key))throw new IOException("Paramètre inconnu : "+key);c.put(key,values.get(key));}}
             else if(type.equals("delete"))items.remove(index);
             else if(type.equals("move")){int to=op.getInt("to");if(to<0||to>=items.length())throw new IOException("Destination invalide");Object moved=items.remove(index);JSONArray out=new JSONArray();for(int i=0;i<=items.length();i++){if(i==to)out.put(moved);if(i<items.length())out.put(items.get(i));}p.put(track,out);}
             else throw new IOException("Opération inconnue : "+type);
         }
     }
-    private static JSONObject fingerprints(Context app,JSONObject p)throws Exception{
+    static JSONObject fingerprints(Context app,JSONObject p)throws Exception{
         JSONObject out=new JSONObject();WorkspaceStore store=new WorkspaceStore(app);
         for(String track:new String[]{"clips","audio","layers"}){JSONArray items=p.optJSONArray(track);if(items!=null)for(int i=0;i<items.length();i++){String path=items.getJSONObject(i).getString("path");if(!out.has(path))out.put(path,WorkspaceTransfer.hash(store.file(path)));}}return out;
     }
@@ -132,12 +139,14 @@ final class StudioAutomation {
         try{JSONObject status=VideoEditorEngine.get().status();String state=status.optString("state");
             if(state.equals("running")||state.equals("preparing")){poll(app,job);return;}
             if(state.equals("completed")){
+                JSONObject actual=fingerprints(app,job.getJSONObject("project")),expected=job.getJSONObject("sources");for(Iterator<String> keys=expected.keys();keys.hasNext();){String key=keys.next();if(!expected.getString(key).equals(actual.optString(key)))throw new IOException("SOURCE_CHANGED_DURING_EXPORT: "+key);}
                 JSONObject check=VideoEditorEngine.get().verifyProjectOutput(app,job.getJSONObject("project"));
                 job.put("verification",check).put("state",check.optBoolean("valid")?"completed":"failed");
-            }else job.put("state","failed").put("error",status.optString("error",state));
+            }else job.put("state",state.equals("cancelled")?"cancelled":"failed").put("error",status.optString("error",state));
             job.put("finished_at",System.currentTimeMillis());polling=false;saveQueue(app);pump(app);
         }catch(Exception ex){try{job.put("state","failed").put("error",ex.getMessage());saveQueue(app);}catch(Exception ignored){}polling=false;}
     }),1000);}
+    static JSONObject queueSnapshot(Context app)throws Exception{loadQueue(app);return summary();}
     private static JSONObject summary()throws Exception{
         JSONArray rows=new JSONArray();JSONArray jobs=queue.getJSONArray("jobs");for(int i=0;i<jobs.length();i++){JSONObject j=jobs.getJSONObject(i),p=j.getJSONObject("project");
             JSONObject row=new JSONObject(j.toString());row.remove("project");row.remove("sources");row.put("name",p.optString("name")).put("output",p.getString("output"));rows.put(row);}
@@ -147,7 +156,7 @@ final class StudioAutomation {
         .put("image_formats",new JSONArray("[\"png\",\"jpg\",\"jpeg\",\"webp\"]")).put("image_duration_ms_min",1000).put("image_duration_ms_max",60000).put("max_clips",100)
         .put("timeline_operations",new JSONArray("[\"add\",\"update\",\"move\",\"delete\",\"settings\"]"))
         .put("subtitle_generation",new JSONObject().put("action","video_editor_subtitles_generate via android_action").put("expected_revision","required").put("languages","fr,en").put("timing","Vosk word timestamps").put("audio_uploaded",false))
-        .put("tracks",new JSONArray("[\"clips\",\"audio\",\"layers\",\"subtitles\"]")).put("audio_layout","sequential").put("video_layout","sequential + 3 timed image/video PiP layers").put("max_layers",3).put("layer_parameters",new JSONObject().put("offset_ms","position dans le montage").put("scale","0.1..1, largeur relative").put("x / y","-1..1, centre=0").put("opacity","0..1").put("audio","muet"))
+        .put("tracks",new JSONArray("[\"clips\",\"audio\",\"layers\",\"subtitles\"]")).put("audio_layout","legacy sequential; audio_model_version=2 enables parallel tracks via desktop tool=studio").put("video_layout","sequential + 3 timed image/video PiP layers").put("max_layers",3).put("layer_parameters",new JSONObject().put("offset_ms","position dans le montage").put("scale","0.1..1, largeur relative").put("x / y","-1..1, centre=0").put("opacity","0..1").put("audio","muet"))
         .put("queue_actions",new JSONArray("[\"add\",\"status\",\"pause\",\"resume\"]"))
         .put("timeline_request",new JSONObject()
             .put("expected_revision","integer obligatoire, obtenu par video_editor_project_read")
@@ -160,7 +169,7 @@ final class StudioAutomation {
         .put("clip_parameters",new JSONObject().put("path","fichier Android existant").put("start_ms","entier >=0 ; 0 pour photo").put("duration_ms","photo 1000..60000 ; vidéo 500..1200000")
             .put("filter","aucun,noir,vintage,chaud,froid,cinema,contraste,nuit,vibrant,doux,desature,sepia")
             .put("fade_ms","0..min(1500,duration/3), passage par le noir")
-            .put("volume","0..1 · vidéo et audio, aperçu et export").put("speed","0.25..4").put("rotation","-180..180").put("mute","boolean").put("text","500 caractères maximum")
+            .put("volume","0..2 · 0 à 200 %, gain dB=20log10(gain), 0 = silence ; vidéo et audio").put("speed","0.25..4").put("rotation","-180..180").put("mute","boolean").put("text","500 caractères maximum")
             .put("grade_exposure / grade_exposure_end","-0.5..0.5").put("grade_warmth / grade_warmth_end","-0.5..0.5").put("grade_saturation / grade_saturation_end","0..2")
             .put("zoom / zoom_end","1..4").put("pan_x / pan_x_end / pan_y / pan_y_end","-1..1"))
         .put("queue_request",new JSONObject().put("request_id","identifiant stable, lettres/chiffres/tirets/soulignés, 1..80 caractères").put("projects",new JSONArray().put(new JSONObject().put("path","dossier/montage.json")).put(new JSONObject().put("project","objet projet complet, alternative à path"))))

@@ -1,0 +1,17 @@
+{
+  "tor_android_version": "0.4.9.14",
+  "maven_commit": "5fdb8dbcfe98d1b7e027e2f99bc086709870b005",
+  "native_aar_sha256": "28ff2bb6d4d42eabe57183dedd7a97fce77e8ce4b6f5af6fa03993b3ca054edd",
+  "source_jar_sha256": "095118a41782a91b9002038461c4c6a65f5c41bc6f5a37323362eceaf0088a2b",
+  "source_binding": "Published TorService.java recompiled unchanged with Java 17 and SDK 36; native libraries unchanged",
+  "runtime_min_android_api": 29,
+  "submodules": {
+    "tor": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
+    "openssl": "45e844fa2a14ec92d146bd8f5778ac130b6625fb",
+    "libevent": "79ddfb460847999b807cba76d04e73891f29c6ee",
+    "zlib": "da607da739fa6047df13e66a2af6b8bec7c2a498",
+    "zstd": "f8745da6ff1ad1e7bab384bd1f9d742439278e99"
+  },
+  "upstream": "https://github.com/guardianproject/tor-android/tree/0.4.9.14",
+  "notes": "Guardian upstream LICENSE includes historical Orbot components that are not all bundled here. Zstandard BSD license copied from upstream v1.5.7. No pluggable transport, Privoxy, iptables or VPN is added."
+}

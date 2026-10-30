@@ -114,6 +114,7 @@ public class MainActivity extends Activity {
             if(BrowserWebState.alive(current)){beginNavigation(current);current.loadUrl(BrowserWebState.url(current));}
         });
         findViewById(R.id.nav_browser).setOnClickListener(v->showSpace("browser"));
+        findViewById(R.id.nav_tor).setOnClickListener(v->startActivity(new Intent(this,TorEntryActivity.class)));
         findViewById(R.id.nav_files).setOnClickListener(v->showSpace("files"));
         findViewById(R.id.nav_notes).setOnClickListener(v->showSpace("notes"));
         findViewById(R.id.nav_video).setOnClickListener(v->startActivity(new Intent(this,StudioProjectsActivity.class)));
@@ -179,6 +180,7 @@ public class MainActivity extends Activity {
         showSpace("browser");
         String url=normalize(text);
         if(url.isEmpty()){toast("Adresse non autorisée");return;}
+        if(BrowserPolicy.onionUrl(url)){toast("Domaine .onion bloqué dans Web : ouvrir Tor et vérifier la connexion dans Tor Browser");return;}
         if(current!=null){beginNavigation(current);current.loadUrl(url);}
         ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(),0);
         address.clearFocus();
@@ -204,10 +206,12 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebViewClient(new WebViewClient(){
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                android.webkit.WebResourceResponse blocked=TorNetworkGuard.blockedOnion(request.getUrl().toString());if(blocked!=null)return blocked;
                 android.webkit.WebResourceResponse local=BrowserStreamUploader.intercept(view,request);
                 return local==null?super.shouldInterceptRequest(view,request):local;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
+                if(BrowserPolicy.onionUrl(request.getUrl().toString())){toast(".onion nécessite Tor Browser et une connexion Tor vérifiée");return true;}
                 String scheme=request.getUrl().getScheme();
                 if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme))return false;
                 if(request.isForMainFrame()&&request.hasGesture()&&BrowserSiteSettings.external(MainActivity.this,request.getUrl().toString()))return true;
@@ -499,7 +503,7 @@ public class MainActivity extends Activity {
                 if(android.os.SystemClock.elapsedRealtime()>=deadline){
                     finish(false,"Chargement non confirmé dans le délai. Relis la page avant une nouvelle navigation.");return;
                 }
-                if(BrowserWebState.documentVersion(target)<=before||!BrowserWebState.committed(target)){
+                if(BrowserWebState.documentVersion(target)<=before||!BrowserWebState.committed(target)||!BrowserWebState.loaded(target)){
                     transferHandler.postDelayed(this,150L);return;
                 }
                 long document=BrowserWebState.documentVersion(target);

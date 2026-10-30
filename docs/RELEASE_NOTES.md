@@ -1,3 +1,13 @@
+## CHK Studio / Tor — branche de validation, aucune Release finale
+
+Le moteur audio v2, le mixeur tactile et les commandes MCP correspondantes sont décrits dans [le contrat Studio](STUDIO_AUDIO_CROP_MCP_20261029.md). Les anciens projets séquentiels restent lisibles. Le mode avancé ajoute pistes parallèles, gains séparés, keyframes, fondus, Mute/Solo, ducking Vosk et limitation avant encodage du master.
+
+L'outil Recadrer sauvegarde une géométrie non destructive et génère un aperçu réel sur demande. Les commandes passent par `desktop / tool=studio` sur le serveur Local 3 1.0.4 inchangé. Les écritures exigent projet, révision et identifiant de requête ; un reçu de sauvegarde ne valide pas un MP4.
+
+Tor utilise une application externe isolée. CHK ne peut ni vérifier sa connexion réseau ni la déconnecter, et n'annonce aucun .onion comme opérationnel. Les URL .onion sont bloquées dans le navigateur ordinaire.
+
+La PR #76 reste en brouillon. Consulter le rapport de validation pour les résultats effectifs. Aucun APK de cette branche n'est annoncé comme une mise à jour de production détectée ou installée sur le téléphone.
+
 ## Correction des accusés MCP et reprises sans doublons — 29 octobre 2026
 
 - Après l'expiration d'un retour `evaluateJavascript`, `VerifiedClick` vérifie indépendamment la nouvelle URL ou la condition DOM pendant une fenêtre bornée, sans envoyer de second clic. Une action reste incertaine sans preuve.

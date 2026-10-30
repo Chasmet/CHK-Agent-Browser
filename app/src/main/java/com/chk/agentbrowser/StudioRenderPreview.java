@@ -18,12 +18,13 @@ final class StudioRenderPreview {
     StudioRenderPreview(Context context){app=context.getApplicationContext();}
     boolean busy(){return busy;}
     int progress(){if(transformer==null)return 0;ProgressHolder h=new ProgressHolder();transformer.getProgress(h);return h.progress;}
-    void start(JSONObject project,Result result){
+    void start(JSONObject project,Result result){start(project,result,null);}
+    void start(JSONObject project,Result result,AgentClient.ResultCallback caller){
         cancel();long ticket=generation;busy=true;
         IO.execute(()->{try{
             JSONObject copy=new JSONObject(project.toString());VideoEditorEngine.get().validate(app,copy);copy.put("resolution",480);
-            Composition composition=VideoEditorEngine.get().composition(app,copy);
-            main.post(()->{if(ticket!=generation)return;try{
+            Composition composition=VideoEditorEngine.get().composition(app,copy,new AgentClient.ResultCallback(){public void finish(boolean ok,String text){}public boolean isActive(){return ticket==generation&&(caller==null||caller.isActive());}});
+            main.post(()->{if(ticket!=generation)return;if(caller!=null&&!caller.isActive()){cancel();return;}try{
                 output=new File(app.getCacheDir(),"studio-preview-"+UUID.randomUUID()+".mp4");File file=output;
                 transformer=new Transformer.Builder(app).addListener(new Transformer.Listener(){
                     public void onCompleted(Composition c,ExportResult proof){if(ticket!=generation){file.delete();return;}transformer=null;busy=false;output=null;

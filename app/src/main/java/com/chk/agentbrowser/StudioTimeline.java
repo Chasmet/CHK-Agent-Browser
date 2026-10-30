@@ -27,6 +27,7 @@ final class StudioTimeline extends View {
     private final Set<String> loading=new HashSet<>();
     private final Map<String,Long> sources=new HashMap<>();
     private long total,position,downPosition;
+    private int audioScrollRow,downAudioRow;
     private int selected,generation,dragFrom,dragTo,trimEdge,selectedAudio=-1;
     private float scale=1,downX,downY,lastX;
     private boolean moving,dragging,pinching;
@@ -60,7 +61,11 @@ final class StudioTimeline extends View {
     void fit(){scale=Math.max(.15f,Math.min(64,(getWidth()-dp(40))/Math.max(1,total*dp(48)/1000f)));seek(total/2);invalidate();}
     float zoomLevel(){return scale;}
     long playhead(){return position;}
-    void audioSelection(int index){selectedAudio=index;invalidate();}
+    void audioSelection(int index){selectedAudio=index;if(StudioAudio.enabled(project)&&index>=0){JSONArray audio=project.optJSONArray("audio"),tracks=project.optJSONArray("audio_tracks");if(audio!=null&&tracks!=null&&index<audio.length()){String id=audio.optJSONObject(index).optString("track_id","audio");for(int i=0;i<tracks.length();i++)if(id.equals(tracks.optJSONObject(i).optString("id")))audioScrollRow=Math.max(0,Math.min(Math.max(0,tracks.length()-3),i));}}invalidate();}
+    private int visibleAudioRows(){return StudioAudio.enabled(project)?Math.max(1,Math.min(3,project.optJSONArray("audio_tracks")==null?1:project.optJSONArray("audio_tracks").length())):1;}
+    private int textTop(){return 111+visibleAudioRows()*34+9;}
+    private int layerTop(){return textTop()+40;}
+
     void sourceDuration(String path,long duration){sources.put(path,duration);}
     void setProject(JSONObject value,int clip){
         project=value;selected=clip;total=StudioEdits.total(project);position=Math.min(position,total);
@@ -97,17 +102,25 @@ final class StudioTimeline extends View {
             }
         }
         JSONArray audio=project.optJSONArray("audio");long audioAt=0;
-        if(audio!=null&&audio.length()>0)for(int i=0;i<audio.length();i++){
+        if(StudioAudio.enabled(project)){
+            JSONArray tracks=project.optJSONArray("audio_tracks");if(tracks!=null){audioScrollRow=Math.max(0,Math.min(audioScrollRow,Math.max(0,tracks.length()-3)));
+                for(int row=0;row<visibleAudioRows();row++){
+                    JSONObject track=tracks.optJSONObject(audioScrollRow+row);String id=track.optString("id");int top=111+row*34;
+                    segment(canvas,dp(4),getWidth()-dp(4),top,top+30,0xff24333c,track.optString("name",id)+(tracks.length()>3?" · glisser verticalement":""));
+                    if(audio!=null)for(int i=0;i<audio.length();i++){JSONObject c=audio.optJSONObject(i);if(!id.equals(c.optString("track_id","audio")))continue;long atAudio=c.optLong("offset_ms");segment(canvas,x(atAudio),x(atAudio+StudioAudio.duration(c)),top,top+30,i==selectedAudio?0xff148d8a:0xff22575f,"♫ "+filename(c.optString("path")));}
+                }
+            }
+        }else if(audio!=null&&audio.length()>0)for(int i=0;i<audio.length();i++){
             JSONObject c=audio.optJSONObject(i);long len=c.optLong("duration_ms");segment(canvas,x(audioAt),x(audioAt+len),111,145,i==selectedAudio?0xff148d8a:0xff22575f,"♫ "+filename(c.optString("path")));audioAt+=len;
         }else segment(canvas,dp(12),getWidth()-dp(12),111,145,0xff28353f,"＋ Ajouter un audio");
         long textAt=0;boolean captions=false;
         for(int i=0;i<clips.length();i++){JSONObject c=clips.optJSONObject(i);long len=StudioEdits.duration(c);
-            if(!c.optString("text").isEmpty()){captions=true;segment(canvas,x(textAt),x(textAt+len),154,184,0xff53457b,"T  "+c.optString("text"));}textAt+=len;}
+            if(!c.optString("text").isEmpty()){captions=true;segment(canvas,x(textAt),x(textAt+len),textTop(),textTop()+30,0xff53457b,"T  "+c.optString("text"));}textAt+=len;}
         JSONArray subtitles=StudioSubtitles.items(project);
-        for(int i=0;i<subtitles.length();i++){JSONObject cue=subtitles.optJSONObject(i);segment(canvas,x(cue.optLong("start_ms")),x(cue.optLong("end_ms")),154,184,0xff7863b2,"T  "+cue.optString("text"));captions=true;}
-        if(!captions)segment(canvas,dp(12),getWidth()-dp(12),154,184,0xff302d40,"＋ Ajouter un texte");
-        JSONArray layers=StudioLayers.items(project);for(int i=layers.length()-1;i>=0;i--){JSONObject layer=layers.optJSONObject(i);segment(canvas,x(layer.optLong("offset_ms")),x(layer.optLong("offset_ms")+layer.optLong("duration_ms")),194+i*2,224+i*2,0xff925a2d,"▣ "+(i+1)+" · "+filename(layer.optString("path")));}
-        paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff1f6ff);paint.setStrokeWidth(dp(2));canvas.drawLine(getWidth()/2f,dp(27),getWidth()/2f,dp(StudioLayers.items(project).length()>0?230:190),paint);canvas.drawRoundRect(getWidth()/2f-dp(4),dp(27),getWidth()/2f+dp(4),dp(34),dp(2),dp(2),paint);
+        for(int i=0;i<subtitles.length();i++){JSONObject cue=subtitles.optJSONObject(i);segment(canvas,x(cue.optLong("start_ms")),x(cue.optLong("end_ms")),textTop(),textTop()+30,0xff7863b2,"T  "+cue.optString("text"));captions=true;}
+        if(!captions)segment(canvas,dp(12),getWidth()-dp(12),textTop(),textTop()+30,0xff302d40,"＋ Ajouter un texte");
+        JSONArray layers=StudioLayers.items(project);for(int i=layers.length()-1;i>=0;i--){JSONObject layer=layers.optJSONObject(i);segment(canvas,x(layer.optLong("offset_ms")),x(layer.optLong("offset_ms")+layer.optLong("duration_ms")),layerTop()+i*2,layerTop()+30+i*2,0xff925a2d,"▣ "+(i+1)+" · "+filename(layer.optString("path")));}
+        paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff1f6ff);paint.setStrokeWidth(dp(2));canvas.drawLine(getWidth()/2f,dp(27),getWidth()/2f,dp(StudioLayers.items(project).length()>0?layerTop()+36:textTop()+36),paint);canvas.drawRoundRect(getWidth()/2f-dp(4),dp(27),getWidth()/2f+dp(4),dp(34),dp(2),dp(2),paint);
         if(pendingTrim!=null)text(canvas,"Durée : "+String.format(java.util.Locale.ROOT,"%.2f s",StudioEdits.duration(pendingTrim)/1000f),dp(12),dp(109),10,0xff55e2ca);
 
     }
@@ -137,12 +150,15 @@ final class StudioTimeline extends View {
         if(event.getPointerCount()>1){pinching=true;removeCallbacks(startDrag);getParent().requestDisallowInterceptTouchEvent(true);return true;}
         switch(event.getActionMasked()){
             case MotionEvent.ACTION_DOWN:
-                downX=lastX=event.getX();downY=event.getY();downPosition=position;moving=false;dragging=false;pinching=false;trimEdge=0;pendingTrim=null;
+                downX=lastX=event.getX();downY=event.getY();downAudioRow=audioScrollRow;downPosition=position;moving=false;dragging=false;pinching=false;trimEdge=0;pendingTrim=null;
                 if(downY>=dp(38)&&downY<=dp(100)&&selectedAudio<0&&clips().length()>0){float left=x(start(selected)),right=x(start(selected)+StudioEdits.duration(clips().optJSONObject(selected)));
                     if(Math.abs(downX-left)<dp(18))trimEdge=-1;else if(Math.abs(downX-right)<dp(18))trimEdge=1;}
                 postDelayed(startDrag,450);getParent().requestDisallowInterceptTouchEvent(true);return true;
             case MotionEvent.ACTION_MOVE:
                 if(pinching)return true;
+                if(StudioAudio.enabled(project)&&downY>=dp(111)&&downY<dp(textTop()-8)&&Math.abs(event.getY()-downY)>Math.abs(event.getX()-downX)*1.3f&&Math.abs(event.getY()-downY)>dp(8)){
+                    moving=true;removeCallbacks(startDrag);JSONArray tracks=project.optJSONArray("audio_tracks");audioScrollRow=Math.max(0,Math.min(Math.max(0,tracks.length()-3),downAudioRow-Math.round((event.getY()-downY)/dp(34))));invalidate();return true;
+                }
                 if(Math.abs(event.getX()-downX)>dp(6)||Math.abs(event.getY()-downY)>dp(6)){moving=true;removeCallbacks(startDrag);}
                 if(dragging){dragTo=indexAt(timeAt(event.getX()));if(event.getX()<dp(32))position=Math.max(0,position-100);else if(event.getX()>getWidth()-dp(32))position=Math.min(total,position+100);invalidate();}
                 else if(trimEdge!=0){try{JSONObject c=clips().getJSONObject(selected);long source=sources.containsKey(c.optString("path"))?sources.get(c.optString("path")):c.optLong("start_ms")+c.optLong("duration_ms");pendingTrim=StudioEdits.trimmed(c,trimEdge<0,Math.round((event.getX()-downX)/pixelsPerMs()),source);invalidate();}catch(Exception ignored){}}
@@ -154,11 +170,12 @@ final class StudioTimeline extends View {
                 if(dragging){dragging=false;if(listener!=null&&dragFrom!=dragTo)listener.move(dragFrom,dragTo);}
                 else if(trimEdge!=0&&pendingTrim!=null&&moving){if(listener!=null)listener.trim(selected,pendingTrim);}
                 else if(!moving){long at=timeAt(event.getX());
-                    if(downY>=dp(194)){int hit=-1;JSONArray layers=StudioLayers.items(project);for(int i=0;i<layers.length();i++){JSONObject layer=layers.optJSONObject(i);if(at>=layer.optLong("offset_ms")&&at<layer.optLong("offset_ms")+layer.optLong("duration_ms")){hit=i;break;}}if(listener!=null)listener.layer(hit);
-                    }else if(downY>=dp(111)&&downY<dp(146)){
-                        JSONArray a=project.optJSONArray("audio");int hit=-1;long n=0;if(a!=null)for(int i=0;i<a.length();i++){n+=a.optJSONObject(i).optLong("duration_ms");if(at<n){hit=i;break;}}
+                    if(downY>=dp(layerTop())){int hit=-1;JSONArray layers=StudioLayers.items(project);for(int i=0;i<layers.length();i++){JSONObject layer=layers.optJSONObject(i);if(at>=layer.optLong("offset_ms")&&at<layer.optLong("offset_ms")+layer.optLong("duration_ms")){hit=i;break;}}if(listener!=null)listener.layer(hit);
+                    }else if(downY>=dp(111)&&downY<dp(textTop()-8)){
+                        JSONArray a=project.optJSONArray("audio");int hit=-1;long n=0;String targetTrack="";if(StudioAudio.enabled(project)){int row=audioScrollRow+(int)((downY-dp(111))/dp(34));JSONObject t=project.optJSONArray("audio_tracks").optJSONObject(row);if(t!=null)targetTrack=t.optString("id");}
+                        if(a!=null)for(int i=0;i<a.length();i++){JSONObject c=a.optJSONObject(i);long begin=StudioAudio.enabled(project)?c.optLong("offset_ms"):n;n=begin+StudioAudio.duration(c);if(StudioAudio.enabled(project)&&!targetTrack.equals(c.optString("track_id","audio")))continue;if(at>=begin&&at<n){hit=i;break;}}
                         selectedAudio=hit;if(listener!=null){if(hit>=0)listener.audio(hit);else listener.add("audio");}
-                    }else if(downY>=dp(154)&&downY<dp(185)){int hit=-1;JSONArray sub=StudioSubtitles.items(project);for(int i=0;i<sub.length();i++){JSONObject cue=sub.optJSONObject(i);if(at>=cue.optLong("start_ms")&&at<cue.optLong("end_ms")){hit=i;break;}}if(listener!=null){if(hit>=0)listener.subtitle(hit);else listener.text(indexAt(at));}}
+                    }else if(downY>=dp(textTop())&&downY<dp(textTop()+31)){int hit=-1;JSONArray sub=StudioSubtitles.items(project);for(int i=0;i<sub.length();i++){JSONObject cue=sub.optJSONObject(i);if(at>=cue.optLong("start_ms")&&at<cue.optLong("end_ms")){hit=i;break;}}if(listener!=null){if(hit>=0)listener.subtitle(hit);else listener.text(indexAt(at));}}
                     else seek(at);
                     performClick();
                 }

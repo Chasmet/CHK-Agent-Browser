@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <service android:name="org.torproject.jni.TorService" tools:targetApi="29" android:foregroundServiceType="specialUse" android:exported="false" android:process=":tor" android:enabled="@bool/tor_integrated_supported"><property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Native Tor client bound within the user-initiated isolated Tor foreground session" /></service>
+    </application>
+</manifest>

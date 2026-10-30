@@ -1,4 +1,12 @@
 pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories {
+    google(); mavenCentral()
+    exclusiveContent {
+        forRepository { maven { url 'https://raw.githubusercontent.com/guardianproject/gpmaven/5fdb8dbcfe98d1b7e027e2f99bc086709870b005' } }
+        filter { includeModule 'info.guardianproject', 'tor-android' }
+    }
+} }
 rootProject.name = 'CHK-Agent-Browser'
 include ':app'
+
+include ':tor-wrapper'

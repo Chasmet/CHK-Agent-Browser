@@ -230,7 +230,7 @@ public final class AgentKeyboardIntegrationTest {
         try{
             main(()->{
                 WebView fake=new WebView(context){@Override public String getUrl(){return "https://fixture.example/";}@Override public void evaluateJavascript(String script,android.webkit.ValueCallback<String> cb){late.set(cb);}};
-                stalled.set(fake);current.set(activity,fake);BrowserWebState.remember(fake,fake.getUrl());BrowserWebState.committed(fake,fake.getUrl());
+                stalled.set(fake);current.set(activity,fake);BrowserWebState.remember(fake,fake.getUrl());BrowserWebState.committed(fake,fake.getUrl());BrowserWebState.finished(fake,fake.getUrl());
                 Method verify=MainActivity.class.getDeclaredMethod("verifyNavigation",WebView.class,String.class,long.class,int.class,AgentClient.ResultCallback.class);verify.setAccessible(true);
                 verify.invoke(activity,fake,fake.getUrl(),0L,1000,new AgentClient.ResultCallback(){public void finish(boolean ok,String text){finished.incrementAndGet();result.set(text);done.countDown();}});
             });

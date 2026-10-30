@@ -17,27 +17,24 @@ final class StudioEdits {
         else length=Math.max(minimum,Math.min(Math.max(minimum,sourceLength-begin),length+delta));
         out.put("start_ms",begin).put("duration_ms",length);clampFade(out);return out;
     }
-    /** Sequential soundtrack follows project end, without changing or deleting any source. */
+    /** Keep every soundtrack edit when shortening video; the renderer limits output to the timeline. */
     static void fitAudio(JSONObject project)throws Exception {
+        if(StudioAudio.enabled(project))return;
         JSONArray sounds=project.optJSONArray("audio");if(sounds==null)return;
-        long available=total(project);JSONArray out=new JSONArray();
-        for(int i=0;i<sounds.length()&&available>=500;i++){
-            JSONObject copy=new JSONObject(sounds.getJSONObject(i).toString());long len=Math.min(available,copy.optLong("duration_ms"));
-            if(len>=500){copy.put("duration_ms",len);out.put(copy);available-=len;}
-        }
-        project.put("audio",out);
+        long end=0;for(int i=0;i<sounds.length();i++)end+=StudioAudio.duration(sounds.getJSONObject(i));
+        if(end>total(project))StudioAudio.enable(project);
     }
     static void clampFade(JSONObject clip)throws Exception {if(clip.has("fade_ms"))clip.put("fade_ms",Math.min(clip.optLong("fade_ms"),Math.min(1500,clip.optLong("duration_ms")/3)));}
     static void conform(JSONObject project)throws Exception {fitAudio(project);JSONArray layers=StudioLayers.items(project),kept=new JSONArray();long total=total(project);for(int i=0;i<layers.length();i++){JSONObject layer=new JSONObject(layers.getJSONObject(i).toString());long duration=Math.min(layer.optLong("duration_ms"),total-layer.optLong("offset_ms"));if(duration>=(StudioImages.isImage(new java.io.File(layer.optString("path")))?1000:500)){layer.put("duration_ms",duration);kept.put(layer);}}if(project.has("layers"))project.put("layers",kept);JSONArray clips=project.optJSONArray("clips");if(clips!=null)for(int i=0;i<clips.length();i++)clampFade(clips.getJSONObject(i));}
     static long framePosition(long position,int direction,int fps,long total){long frame=Math.max(0,Math.round(position*fps/1000.0)+direction);return Math.max(0,Math.min(Math.max(0,total-1),Math.round(frame*1000.0/fps)));}
     static void clipVolume(JSONObject project,JSONObject target,double volume)throws Exception {
-        JSONArray clips=project.getJSONArray("clips");JSONArray audio=project.optJSONArray("audio");
-        if(project.optBoolean("mute_original",audio!=null&&audio.length()>0))for(int i=0;i<clips.length();i++)if(clips.getJSONObject(i)!=target)clips.getJSONObject(i).put("mute",true);
-        target.put("volume",volume).put("mute",false);project.put("mute_original",false);
+        if(!Double.isFinite(volume)||volume<0||volume>2)throw new IllegalArgumentException("Volume 0 à 200 % requis");
+        // Never mute any other clip, soundtrack or layer as a side-effect.
+        target.put("volume",volume).put("mute",false);
     }
     static void duplicate(JSONObject project,int index)throws Exception {
         JSONArray clips=project.getJSONArray("clips"),out=new JSONArray();
-        for(int i=0;i<clips.length();i++){out.put(clips.get(i));if(i==index)out.put(new JSONObject(clips.getJSONObject(i).toString()));}
+        for(int i=0;i<clips.length();i++){out.put(clips.get(i));if(i==index){JSONObject copy=new JSONObject(clips.getJSONObject(i).toString());copy.remove("studio_id");out.put(copy);}}
         project.put("clips",out);
     }
 }
