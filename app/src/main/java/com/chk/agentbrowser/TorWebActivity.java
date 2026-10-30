@@ -264,18 +264,119 @@ public final class TorWebActivity extends Activity {
     private void showBrowser(){showBrowserForNavigation();}
     /** Called by TorRuntime on the UI thread for MCP navigations, including background use. */
     void showBrowserForNavigation(){startPage.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);translatedPage.setVisibility(View.GONE);}
+    /** Native reader within Tor: no JavaScript, no external translation web service. */
     private void translatePage(){
-        showBrowser();
-        translatedText.setText("Lecture et traduction hors ligne en cours…");
-        startPage.setVisibility(View.GONE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.VISIBLE);
-        try{runtime.command(new JSONObject().put("operation","read"),(ok,value)->{
-            if(isFinishing()||isDestroyed())return;
-            if(!ok){translatedText.setText("Lecture via Tor impossible : "+value.optString("error","page indisponible"));return;}
-            String body=value.optString("text","");
-            TorFrenchTranslator.translate(this,body,(success,result)->runOnUiThread(()->{
-                if(!isFinishing()&&!isDestroyed())translatedText.setText((success?"Traduction EN → FR · Mode lecture hors ligne\\n\\n":"")+result);
-            }));
-        });}catch(Exception e){translatedText.setText("Traduction impossible : "+e.getMessage());}
+        if(web==null||web.getUrl()==null||!web.getUrl().startsWith("http")){
+            pageInfo.setText("Ouvrez d'abord une page via Tor, puis utilisez Traduire FR.");
+            return;
+        }
+        final String url=web.getUrl();
+        final int token=++translationRequest;
+        TorFrenchTranslator.modelsReady(installed->runOnUiThread(()->{
+            if(isFinishing()||isDestroyed()||token!=translationRequest||web==null||!url.equals(web.getUrl()))return;
+            if(!installed){
+                if(translationSetupPending)return;
+                translationSetupPending=true;
+                pageInfo.setText("Préparation du français hors ligne dans CHK…");
+                try{
+                    startActivityForResult(new Intent(this,TorEntryActivity.class)
+                        .putExtra("translate_setup",true),TRANSLATION_SETUP_REQUEST);
+                }catch(Exception e){
+                    translationSetupPending=false;
+                    pageInfo.setText("Installation de traduction impossible : "+e.getMessage());
+                }
+                return;
+            }
+            translateCurrentPage(token,url);
+        }));
+    }
+    private void translateCurrentPage(int token,String url){
+        // Read text from the already-rendered WebView accessibility tree first.
+        // This avoids a second expensive Tor download on supported pages.
+        String rendered=readVisibleText();
+        startPage.setVisibility(View.GONE);
+        web.setVisibility(View.GONE);
+        translatedPage.setVisibility(View.VISIBLE);
+        translatedPage.scrollTo(0,0);
+        translatedText.setText("Traduction française locale en cours…\nLe texte reste dans CHK.");
+        if(rendered.length()>=100){
+            translateText(token,url,rendered,"Texte accessible de la page");
+        }else{
+            translatedText.setText("Extraction du texte via Tor en cours…\nCertains sites .onion répondent lentement.");
+            try{
+                runtime.command(new JSONObject().put("operation","read").put("url",url),(ok,value)->{
+                    if(token!=translationRequest||isFinishing()||isDestroyed())return;
+                    if(!ok){
+                        translatedText.setText("Impossible d'obtenir le texte de cette page via Tor : "+
+                            value.optString("error","page indisponible")+
+                            "\nRevenez à la page originale.");
+                        return;
+                    }
+                    translateText(token,url,value.optString("text",""),"Lecture simplifiée via Tor");
+                });
+            }catch(Exception e){
+                translatedText.setText("Lecture Tor indisponible : "+e.getMessage());
+            }
+        }
+    }
+    private void translateText(int token,String url,String original,String source){
+        TorFrenchTranslator.translate(this,original,(success,result)->runOnUiThread(()->{
+            if(isFinishing()||isDestroyed()||web==null||token!=translationRequest)return;
+            if(!success){
+                translatedText.setText("Traduction locale indisponible : "+result+
+                    "\nRetournez à la page originale pour continuer.");
+                return;
+            }
+            translatedText.setText("Français · "+source+
+                "\nMode lecture simplifié, sans traduction des images ou des formulaires.\n\n"+result);
+        }));
+    }
+    /** Text extraction never enables JS or sends user data to an external service. */
+    private String readVisibleText(){
+        if(web==null)return "";
+        AccessibilityNodeInfo root=null;
+        try{
+            root=web.createAccessibilityNodeInfo();
+            if(root==null)return "";
+            StringBuilder out=new StringBuilder();
+            HashSet<String> known=new HashSet<>();
+            collectText(root,out,known,0);
+            return out.toString().trim();
+        }catch(Exception e){return "";}
+        finally{if(root!=null)root.recycle();}
+    }
+    private void collectText(AccessibilityNodeInfo node,StringBuilder out,HashSet<String> known,int depth){
+        if(node==null||depth>18||out.length()>8000||known.size()>650)return;
+        if(!node.isPassword()&&!node.isEditable()){
+            CharSequence value=node.getText();
+            if(value!=null){
+                String text=value.toString().trim();
+                if(text.length()>1&&text.length()<1800&&known.add(text)){
+                    if(out.length()>0)out.append('\n');
+                    out.append(text);
+                }
+            }
+        }
+        for(int i=0;i<node.getChildCount()&&out.length()<=8000;i++){
+            AccessibilityNodeInfo child=node.getChild(i);
+            if(child!=null){
+                try{collectText(child,out,known,depth+1);}finally{child.recycle();}
+            }
+        }
+    }
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==TRANSLATION_SETUP_REQUEST){
+            translationSetupPending=false;
+            if(resultCode==Activity.RESULT_OK)translatePage();
+            else pageInfo.setText("La traduction française hors ligne n'est pas encore installée.");
+        }
+    }
+    @Override public void onBackPressed(){
+        if(translatedPage!=null&&translatedPage.getVisibility()==View.VISIBLE){showBrowser();return;}
+        if(web!=null&&web.getVisibility()==View.VISIBLE&&web.canGoBack()){action("back",null);return;}
+        if(startPage!=null&&startPage.getVisibility()!=View.VISIBLE){showHome();return;}
+        super.onBackPressed();
     }
     private boolean allowed(String url){if(url.equals("about:blank")||url.startsWith("data:"))return true;try{TorUrlPolicy.checked(url);return runtime.policy.usable(SystemClock.elapsedRealtime());}catch(Exception e){return false;}}
     private void action(String op,String url){
