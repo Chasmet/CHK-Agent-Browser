@@ -18,21 +18,36 @@ AUDIENCE="https://modeliseur-trellis-mcp.onrender.com/agentbrowser/ci/signing"
 REQUEST_URL=os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
 REQUEST_TOKEN=os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]
 url=REQUEST_URL+("&" if "?" in REQUEST_URL else "?")+"audience="+urllib.parse.quote(AUDIENCE,safe="")
-req=urllib.request.Request(url,headers={"Authorization":"Bearer "+REQUEST_TOKEN})
-with urllib.request.urlopen(req,timeout=30) as response:
-    identity=json.load(response)["value"]
-req=urllib.request.Request(AUDIENCE,headers={"Authorization":"Bearer "+identity,
-                                            "User-Agent":"CHK-Agent-Browser-CI/1.0"})
+# Render may cold-start after GitHub's first request. A transient network timeout
+# must not strand a release, and an OIDC identity must be fresh on every retry.
+# Never log a bearer token, response body or signing material.
 signing=None
-for attempt in range(12):
+max_attempts=7
+for attempt in range(max_attempts):
     try:
-        with urllib.request.urlopen(req,timeout=75) as response:
+        identity_request=urllib.request.Request(
+            url,headers={"Authorization":"Bearer "+REQUEST_TOKEN})
+        with urllib.request.urlopen(identity_request,timeout=25) as response:
+            identity=json.load(response)["value"]
+        signing_request=urllib.request.Request(
+            AUDIENCE,headers={"Authorization":"Bearer "+identity,
+                              "User-Agent":"CHK-Agent-Browser-CI/1.0"})
+        with urllib.request.urlopen(signing_request,timeout=75) as response:
             signing=json.load(response)
         break
     except urllib.error.HTTPError as error:
-        if error.code not in (404,502,503) or attempt==11:
+        # Authentication and policy errors are permanent, never retried.
+        if error.code not in (404,429,500,502,503,504) or attempt==max_attempts-1:
             raise
-        time.sleep(10)
+        print("Signature distante temporairement indisponible (HTTP "+
+              str(error.code)+"), tentative "+str(attempt+2)+"/"+str(max_attempts))
+    except (TimeoutError, urllib.error.URLError, ConnectionError, OSError) as error:
+        if attempt==max_attempts-1:
+            raise RuntimeError("Service de signature injoignable après "+
+                               str(max_attempts)+" essais sécurisés") from error
+        print("Délai réseau du service de signature, nouvelle tentative "+
+              str(attempt+2)+"/"+str(max_attempts))
+    time.sleep(min(8+attempt*4,24))
 if signing is None:
     raise RuntimeError("Signature persistante non disponible")
 if (signing.get("alias")!="androiddebugkey" or
