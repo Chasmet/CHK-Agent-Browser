@@ -228,7 +228,9 @@ public final class TorWebActivity extends Activity {
         action("navigate",raw);
     }
     private void showHome(){startPage.setVisibility(View.VISIBLE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.GONE);}
-    private void showBrowser(){startPage.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);translatedPage.setVisibility(View.GONE);}
+    private void showBrowser(){showBrowserForNavigation();}
+    /** Called by TorRuntime on the UI thread for MCP navigations, including background use. */
+    void showBrowserForNavigation(){startPage.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);translatedPage.setVisibility(View.GONE);}
     private void translatePage(){
         showBrowser();
         translatedText.setText("Lecture et traduction hors ligne en cours…");
