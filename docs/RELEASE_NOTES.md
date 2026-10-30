@@ -1,3 +1,13 @@
+## Tor intégré · contrôle MCP en arrière-plan — 30 octobre 2026
+
+- Correctif Android Tor : une WebView Tor **déjà ouverte** reste pilotable par Local 3 si elle passe en arrière-plan lorsque ChatGPT est au premier plan. La navigation exige toujours une session valide, la preuve du circuit Tor et un identifiant de requête stable. Aucune bascule de connexion directe.
+- Capture hors écran limitée au rendu de la WebView Tor conservée, sous la source `webview_draw_background` ; **ce n'est pas une capture native PixelCopy et certains éléments graphiques peuvent manquer**.
+- Indicateurs MCP `webview_attached` et `background_navigation_ready` pour distinguer une session connectée d'une fenêtre effectivement pilotable.
+- Page de contrôle Tor préremplie en français ; JavaScript désactivé, WebView et données isolées dans le processus `:tor`. Les protections anti-empreinte complètes du navigateur Tor officiel ne sont pas revendiquées.
+- Tests instrumentés ajoutés pour la navigation et la capture après masquage de Tor. La validation GitHub Actions et un test après installation sur Android restent nécessaires. Serveur PC 1.0.4 inchangé.
+
+---
+
 ## CHK Studio / Tor — branche de validation, aucune Release finale
 
 Le moteur audio v2, le mixeur tactile et les commandes MCP correspondantes sont décrits dans [le contrat Studio](STUDIO_AUDIO_CROP_MCP_20261029.md). Les anciens projets séquentiels restent lisibles. Le mode avancé ajoute pistes parallèles, gains séparés, keyframes, fondus, Mute/Solo, ducking Vosk et limitation avant encodage du master.

@@ -20,7 +20,9 @@ final class TorMcp {
             .put("tor_connected",JSONObject.NULL).put("tor_verified",false).put("isolation","dedicated_process_and_webview_data_directory")
             .put("operations",new JSONArray(OPERATIONS))
             .put("write_guard","navigation: session_id from status/connect and stable request_id required")
-            .put("javascript_enabled",false).put("external_tor_state_observable",false);
+            .put("javascript_enabled",false).put("external_tor_state_observable",false)
+            .put("background_navigation","retained_isolated_webview_only; open_browser once; no direct network fallback")
+            .put("background_capture","webview_draw_background is an offscreen render, not native window pixels");
     }
     static void execute(Context app,JSONObject args,AgentClient.ResultCallback cb){WorkspaceCommands.UI.post(()->{
         try{

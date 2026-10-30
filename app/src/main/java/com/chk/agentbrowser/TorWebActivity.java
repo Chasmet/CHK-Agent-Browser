@@ -24,11 +24,11 @@ public final class TorWebActivity extends Activity {
         if(!runtime.policy.usable(SystemClock.elapsedRealtime())){finish();return;}
         LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setBackgroundColor(0xff16141e);
         state=new TextView(this);state.setTextColor(0xffe4ceff);state.setPadding(14,10,14,10);box.addView(state);
-        LinearLayout bar=new LinearLayout(this);address=new EditText(this);address.setSingleLine();address.setTextColor(0xffeeeeee);address.setText("https://check.torproject.org/");address.setHint("Adresse HTTP(S) via Tor");address.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);bar.addView(address,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout bar=new LinearLayout(this);address=new EditText(this);address.setSingleLine();address.setTextColor(0xffeeeeee);address.setText("https://check.torproject.org/?lang=fr");address.setHint("Adresse HTTP(S) via Tor");address.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);bar.addView(address,new LinearLayout.LayoutParams(0,-2,1));
         Button go=new Button(this);go.setText("Aller");go.setOnClickListener(v->action("navigate",address.getText().toString()));bar.addView(go);box.addView(bar);
         LinearLayout tools=new LinearLayout(this);button(tools,"←",()->action("back",null));button(tools,"→",()->action("forward",null));button(tools,"↻",()->action("reload",null));button(tools,"Stop Tor",()->startActivity(new android.content.Intent(this,TorEntryActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK|android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("disconnect_tor",true)));button(tools,"Retour CHK",this::finish);box.addView(tools);
         web=new WebView(this);web.setTag("chk_tor_webview");WebSettings settings=web.getSettings();
-        settings.setJavaScriptEnabled(false);settings.setDomStorageEnabled(false);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setGeolocationEnabled(false);settings.setSaveFormData(false);settings.setSafeBrowsingEnabled(false);settings.setSupportMultipleWindows(false);settings.setMediaPlaybackRequiresUserGesture(true);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setJavaScriptEnabled(false);settings.setOffscreenPreRaster(true);settings.setDomStorageEnabled(false);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setGeolocationEnabled(false);settings.setSaveFormData(false);settings.setSafeBrowsingEnabled(false);settings.setSupportMultipleWindows(false);settings.setMediaPlaybackRequiresUserGesture(true);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebChromeClient(new WebChromeClient(){@Override public void onPermissionRequest(PermissionRequest request){request.deny();}});
         web.setDownloadListener((url,agent,disposition,type,size)->Toast.makeText(this,"Téléchargement Tor non pris en charge ; aucune requête directe envoyée",Toast.LENGTH_LONG).show());
@@ -65,15 +65,35 @@ public final class TorWebActivity extends Activity {
      * on the UI thread and label the evidence distinctly; never claim PixelCopy.
      */
     void capture(TorRuntime.Result cb){
-        if(web==null||!resumed||!hasWindowFocus()){cb.done(false,TorBridge.error("TOR_WINDOW_NOT_VISIBLE"));return;}
+        if(web==null||isFinishing()||isDestroyed()){cb.done(false,TorBridge.error("TOR_WEBVIEW_UNAVAILABLE_OPEN_ONCE"));return;}
+        // A native PixelCopy requires a visible window. When ChatGPT is foregrounded
+        // preserve the existing isolated WebView and render it, never the phone UI.
+        if(!resumed||!hasWindowFocus()){captureOffscreen(cb);return;}
         int[] at=new int[2];web.getLocationInWindow(at);
         int w=web.getWidth(),h=web.getHeight();
         if(w<1||h<1){cb.done(false,TorBridge.error("TOR_VIEW_EMPTY"));return;}
         Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
         capturePixels(cb,bitmap,new Rect(at[0],at[1],at[0]+w,at[1]+h),0);
     }
+    private void captureOffscreen(TorRuntime.Result cb){
+        if(web==null||isFinishing()||isDestroyed()){cb.done(false,TorBridge.error("TOR_WEBVIEW_UNAVAILABLE_OPEN_ONCE"));return;}
+        int w=web.getWidth(),h=web.getHeight();
+        if(w<1||h<1){cb.done(false,TorBridge.error("TOR_VIEW_EMPTY"));return;}
+        // Cap allocation before drawing; background WebViews may retain large layouts.
+        float factor=Math.min(1f,720f/Math.max(w,h));
+        Bitmap bitmap=null;
+        try{
+            bitmap=Bitmap.createBitmap(Math.max(1,Math.round(w*factor)),Math.max(1,Math.round(h*factor)),Bitmap.Config.ARGB_8888);
+            Canvas canvas=new Canvas(bitmap);canvas.scale(factor,factor);web.draw(canvas);
+            completeCapture(cb,bitmap,"webview_draw_background","Retained Tor WebView only, not a live native screenshot; GPU/composited surfaces may be missing.");
+        }catch(Exception|OutOfMemoryError e){
+            if(bitmap!=null&&!bitmap.isRecycled())bitmap.recycle();
+            cb.done(false,TorBridge.error("TOR_BACKGROUND_CAPTURE_FAILED: "+e.getMessage()));
+        }
+    }
     private void capturePixels(TorRuntime.Result cb,Bitmap bitmap,Rect rect,int tries){
-        if(web==null||!resumed){bitmap.recycle();cb.done(false,TorBridge.error("TOR_WINDOW_NOT_VISIBLE"));return;}
+        if(web==null||isFinishing()||isDestroyed()){bitmap.recycle();cb.done(false,TorBridge.error("TOR_WEBVIEW_UNAVAILABLE_OPEN_ONCE"));return;}
+        if(!resumed||!hasWindowFocus()){bitmap.recycle();captureOffscreen(cb);return;}
         try{
             PixelCopy.request(getWindow(),rect,bitmap,result->{
                 if(result==PixelCopy.SUCCESS){
