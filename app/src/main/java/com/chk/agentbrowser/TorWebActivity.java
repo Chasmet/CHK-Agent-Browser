@@ -50,9 +50,9 @@ public final class TorWebActivity extends Activity {
         LinearLayout translationRow=new LinearLayout(this);
         translationRow.setOrientation(LinearLayout.HORIZONTAL);
         translationRow.setPadding(0,dp(6),0,dp(5));
-        Button translate=control("FR  Traduire cette page");translate.setOnClickListener(v->translatePage());
+        TextView translate=control("FR  Traduire cette page");translate.setOnClickListener(v->translatePage());
         translationRow.addView(translate,new LinearLayout.LayoutParams(0,dp(43),1));
-        Button homeButton=control("Accueil");homeButton.setOnClickListener(v->showHome());
+        TextView homeButton=control("Accueil");homeButton.setOnClickListener(v->showHome());
         LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(dp(100),dp(43));hp.leftMargin=dp(7);
         translationRow.addView(homeButton,hp);root.addView(translationRow);
 
@@ -65,7 +65,7 @@ public final class TorWebActivity extends Activity {
         address.setImeOptions(EditorInfo.IME_ACTION_GO);
         address.setOnEditorActionListener((v,id,event)->{openAddress();return true;});
         bar.addView(address,new LinearLayout.LayoutParams(0,dp(48),1));
-        Button go=control("Aller");go.setBackground(round(0xff6638dc,0xff6638dc));
+        TextView go=control("Aller");go.setBackground(round(0xff6638dc,0xff6638dc));
         go.setOnClickListener(v->openAddress());
         LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(dp(78),dp(48));gp.leftMargin=dp(6);
         bar.addView(go,gp);root.addView(bar);
@@ -104,7 +104,7 @@ public final class TorWebActivity extends Activity {
         search.setHint("Rechercher sur Ahmia…");search.setTextSize(15);search.setBackground(round(0xff202c46,0xff586c91));
         search.setPadding(dp(12),0,dp(12),0);
         searchRow.addView(search,new LinearLayout.LayoutParams(0,dp(48),1));
-        Button searchButton=control("Chercher");searchButton.setBackground(round(0xff6638dc,0xff6638dc));
+        TextView searchButton=control("Chercher");searchButton.setBackground(round(0xff6638dc,0xff6638dc));
         searchButton.setOnClickListener(v->searchAhmia(search.getText().toString()));
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(102),dp(48));sp.leftMargin=dp(6);
         searchRow.addView(searchButton,sp);
@@ -120,7 +120,7 @@ public final class TorWebActivity extends Activity {
         shortcut(home,"Vérifier Tor","Test officiel de la connexion",FRENCH_HOME);
         TextView tips=label("Confidentialité : vérifiez les adresses .onion. Le JavaScript est désactivé. Évitez les téléchargements inconnus. Le mode léger retire les images mais ne peut pas accélérer les relais Tor.",12,0xffa9b6d3);
         tips.setPadding(0,dp(15),0,dp(8));home.addView(tips);
-        Button prepareFrench=control("Installer le traducteur FR (une seule fois)");
+        TextView prepareFrench=control("Installer le traducteur FR (une seule fois)");
         prepareFrench.setOnClickListener(v->installFrenchModel());
         home.addView(prepareFrench);
         startPage.addView(home);
@@ -128,7 +128,7 @@ public final class TorWebActivity extends Activity {
 
         translatedPage=new ScrollView(this);translatedPage.setVisibility(View.GONE);
         LinearLayout reader=new LinearLayout(this);reader.setOrientation(LinearLayout.VERTICAL);
-        Button close=control("Afficher l'original");close.setOnClickListener(v->showBrowser());
+        TextView close=control("Afficher l'original");close.setOnClickListener(v->showBrowser());
         reader.addView(close);
         translatedText=label("",16,0xffedf1ff);
         translatedText.setLineSpacing(dp(4),1.05f);
@@ -204,13 +204,15 @@ public final class TorWebActivity extends Activity {
     private TextView label(String text,int size,int color){
         TextView t=new TextView(this);t.setText(text);t.setTextSize(size);t.setTextColor(color);return t;
     }
-    private Button control(String text){
-        Button b=new Button(this);b.setAllCaps(false);b.setText(text);
-        b.setTextSize(14);b.setTextColor(android.graphics.Color.WHITE);
-        b.setGravity(Gravity.CENTER);
-        b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);
-        b.setPadding(dp(8),0,dp(8),0);
-        b.setBackground(round(0xff202a43,0xff405273));return b;
+    private TextView control(String caption){
+        TextView text=label(caption,14,android.graphics.Color.WHITE);
+        text.setGravity(Gravity.CENTER);
+        text.setTypeface(null,android.graphics.Typeface.BOLD);
+        text.setClickable(true);text.setFocusable(true);
+        text.setMinWidth(0);text.setMinHeight(0);
+        text.setPadding(dp(10),0,dp(10),0);
+        text.setBackground(round(0xff202a43,0xff405273));
+        return text;
     }
     // Always-visible labels remain readable while the WebView repaints.
     private TextView small(LinearLayout row,String title,Runnable click){
