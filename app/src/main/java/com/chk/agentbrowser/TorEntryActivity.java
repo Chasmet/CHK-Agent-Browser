@@ -27,10 +27,35 @@ public final class TorEntryActivity extends Activity {
         add(layout,"Retour à CHK Web",this::finish);ScrollView scroll=new ScrollView(this);scroll.addView(layout);setContentView(scroll);
     }
     private void add(LinearLayout layout,String name,Runnable action){Button b=new Button(this);b.setAllCaps(false);b.setText(name);b.setOnClickListener(v->action.run());layout.addView(b,new LinearLayout.LayoutParams(-1,-2));}
+    /** A tap on the Tor tab enters the verified isolated browser directly. */
+    private void connectAndOpenFrench(){
+        if(Build.VERSION.SDK_INT<29)return;
+        status.setText("Connexion Tor sécurisée en cours…");
+        try{
+            TorBridge.request(this,new JSONObject().put("operation","connect"),(connected,proof)->{
+                if(!resumed)return;
+                if(!connected||!proof.optBoolean("tor_verified")){
+                    show(proof);
+                    Toast.makeText(this,"Connexion Tor non vérifiée : navigation bloquée.",Toast.LENGTH_LONG).show();
+                    return;
+                }
+                status.setText("Tor vérifié · ouverture du navigateur en français…");
+                try{
+                    TorBridge.request(this,new JSONObject().put("operation","open_browser").put("french_home",true),(opened,details)->{
+                        if(!opened&&resumed){
+                            show(details);
+                            Toast.makeText(this,details.optString("error","Ouverture Tor non confirmée"),Toast.LENGTH_LONG).show();
+                        }
+                    });
+                }catch(Exception e){if(resumed)status.setText("Erreur : "+e.getMessage());}
+            });
+        }catch(Exception e){status.setText("Erreur : "+e.getMessage());}
+    }
     private void command(String op){try{status.setText(op.equals("disconnect")?"Déconnexion en cours · vérification de l’arrêt…":"Demande Tor en cours…");TorBridge.request(this,new JSONObject().put("operation",op),(ok,value)->{if(!resumed)return;show(value);if(!ok)Toast.makeText(this,value.optString("error","Opération Tor non confirmée"),Toast.LENGTH_LONG).show();});}catch(Exception e){status.setText("Erreur : "+e.getMessage());}}
     private void show(JSONObject state){String value=state.optString("connection_state","error"),label=value.equals("connected")?"Connecté":value.equals("connecting")?"Connexion en cours":value.equals("disconnected")?"Déconnecté":"Erreur";status.setText(label+" · "+state.optInt("bootstrap_percent")+" %\n"+state.optString("error")+(state.optBoolean("tor_verified")?"\nCircuit Tor et diagnostic HTTPS vérifiés.":"\nAucune navigation .onion autorisée sans preuve Tor."));}
     private final Runnable tick=new Runnable(){public void run(){if(!resumed)return;if(Build.VERSION.SDK_INT>=29)TorBridge.request(TorEntryActivity.this,new JSONObject(),(ok,value)->{if(resumed)show(value);});else status.setText("Le moteur intégré demande Android 10 ou plus. Utiliser Tor Browser externe ; son état réseau n’est pas observable par CHK.");main.postDelayed(this,1500);}};
     private void openExternal(){Intent launch=getPackageManager().getLaunchIntentForPackage(PACKAGE);if(launch==null){status.setText("Tor Browser externe non installé.");return;}try{startActivity(launch);status.setText("Application externe lancée · signature et circuit non vérifiés par CHK.");}catch(Exception e){status.setText("Erreur de lancement : "+e.getMessage());}}
-    @Override protected void onResume(){super.onResume();resumed=true;visible=true;main.post(tick);if(getIntent().getBooleanExtra("disconnect_tor",false)){getIntent().removeExtra("disconnect_tor");command("disconnect");}}
+    @Override protected void onResume(){super.onResume();resumed=true;visible=true;main.post(tick);if(getIntent().getBooleanExtra("disconnect_tor",false)){getIntent().removeExtra("disconnect_tor");command("disconnect");}
+        else if(getIntent().getBooleanExtra("direct_tor",false)){getIntent().removeExtra("direct_tor");connectAndOpenFrench();}}
     @Override protected void onPause(){resumed=false;visible=false;main.removeCallbacks(tick);super.onPause();}
 }
