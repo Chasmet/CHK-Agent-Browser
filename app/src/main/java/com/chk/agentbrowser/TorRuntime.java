@@ -62,7 +62,7 @@ final class TorRuntime {
             .put("engine_process_id",android.os.Process.myPid()).put("process_name",android.app.Application.getProcessName())
             .put("http_tunnel_port",httpPort).put("socks_port",socksPort).put("proxy_scope","dedicated_tor_process_only")
             .put("web_storage_suffix","chk_tor").put("javascript_enabled",false).put("vpn_used",false)
-            .put("ui_open",screen!=null&&screen.resumed).put("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),"")).put("title",web==null?lastTitle:shortTitle(web.getTitle())).put("last_successful_url",lastUrl)
+            .put("ui_open",screen!=null&&screen.resumed).put("webview_attached",hasLiveWebView()).put("background_navigation_ready",hasLiveWebView()&&proxyReady&&policy.usable(now)).put("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),"")).put("title",web==null?lastTitle:shortTitle(web.getTitle())).put("last_successful_url",lastUrl)
             .put("page_error",lastPageError).put("navigation",navigation==null?JSONObject.NULL:new JSONObject(navigation.toString()))
             .put("diagnostic",diagnostic==null?JSONObject.NULL:new JSONObject(diagnostic.toString()));
     }
@@ -74,7 +74,7 @@ final class TorRuntime {
             if(op.equals("open_browser")){openBrowser(cb);return;}
             if(op.equals("diagnostic")){refresh(cb);return;}
             if(op.equals("read")){read(args,cb);return;}
-            if(op.equals("screenshot")){if(!args.optBoolean("preview_allowed"))throw new Exception("PREVIEW_SHARING_DISABLED");if(screen==null||!screen.resumed)throw new Exception("TOR_UI_NOT_VISIBLE");screen.capture(cb);return;}
+            if(op.equals("screenshot")){if(!args.optBoolean("preview_allowed"))throw new Exception("PREVIEW_SHARING_DISABLED");if(!hasLiveWebView())throw new Exception("TOR_WEBVIEW_UNAVAILABLE_OPEN_ONCE");screen.capture(cb);return;}
             if(op.equals("close_browser")){if(screen!=null)screen.finish();waitClosed(cb,SystemClock.elapsedRealtime()+5000);return;}
             if(!Arrays.asList("navigate","back","forward","reload").contains(op))throw new Exception("TOR_OPERATION_UNSUPPORTED");
             navigate(args,cb);
@@ -140,6 +140,9 @@ final class TorRuntime {
         io.execute(()->{try{requireCircuit();JSONObject proof=TorHttp.diagnostic(httpPort);main.post(()->{if(policy.refresh(ticket,true,true,SystemClock.elapsedRealtime())){diagnostic=proof;reply(cb,true);}else cb.done(false,TorBridge.error("TOR_SESSION_CHANGED"));});}
             catch(Exception e){main.post(()->{block(e.getMessage());reply(cb,false);});}});
     }
+    /** Keep control in :tor when ChatGPT moves the activity into the background.
+     * Never create a new WebView outside the isolated, proxy-guarded Tor activity. */
+    private boolean hasLiveWebView(){return web!=null&&screen!=null&&!screen.isFinishing()&&!screen.isDestroyed();}
     void attach(TorWebActivity a,WebView view){screen=a;web=view;}
     void detach(TorWebActivity a){if(screen==a){screen=null;web=null;if(navigationReply!=null)finishNavigation(false,"TOR_UI_CLOSED");}}
     private void openBrowser(Result cb)throws Exception{
@@ -152,7 +155,7 @@ final class TorRuntime {
         for(Iterator<String> keys=args.keys();keys.hasNext();){String key=keys.next();if(!Arrays.asList("operation","session_id","request_id","url").contains(key))throw new Exception("TOR_PARAMETER_UNSUPPORTED: "+key);}
         if(!sessionId.equals(args.optString("session_id")))throw new Exception("TOR_SESSION_MISMATCH");
         if(!policy.usable(SystemClock.elapsedRealtime())||!proxyReady)throw new Exception("TOR_NOT_CONNECTED");
-        if(web==null||screen==null||!screen.resumed)throw new Exception("TOR_UI_NOT_VISIBLE");
+        if(!hasLiveWebView())throw new Exception("TOR_WEBVIEW_UNAVAILABLE_OPEN_ONCE");
         String request=args.optString("request_id");if(!request.matches("[A-Za-z0-9_-]{1,80}"))throw new Exception("TOR_REQUEST_ID_REQUIRED");
         String fingerprint=canonical(args);JSONObject old=receipts.optJSONObject(request);
         if(old!=null){if(!fingerprint.equals(old.optString("fingerprint")))throw new Exception("TOR_REQUEST_ID_REUSED_WITH_DIFFERENT_PARAMETERS");JSONObject value=new JSONObject(old.getJSONObject("result").toString()).put("replayed",true).put("current_url",lastUrl);cb.done(value.optString("state").equals("completed"),value);return;}
