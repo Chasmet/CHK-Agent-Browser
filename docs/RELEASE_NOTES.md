@@ -1,3 +1,15 @@
+## Tor FR auto et navigation plus fluide — 30 octobre 2026
+
+- Bascule **FR auto ON/OFF** directement dans la barre de Tor, avec préférence mémorisée ; traduction du texte en mode lecture après ouverture des pages. Le bouton Traduire FR reste utilisable.
+- Le premier téléchargement du modèle de langue est réalisé dans CHK, hors processus Tor ; retour automatique dans Tor et reprise de la traduction après installation réussie.
+- Une nouvelle navigation peut remplacer une page .onion toujours occupée, sans rejouer les anciens clics. Les réponses de navigations remplacées ne perturbent plus l'état de l'interface.
+- Preuve de connexion Tor vérifiée réutilisée pendant 90 secondes, sans changer son délai maximal d'expiration (120 s), ni les vérifications du circuit ; aucune connexion directe de secours.
+- Les images restent bloquées par défaut pour un chargement plus léger, avec commande Images ON/OFF.
+- Rappel : le traducteur est un **mode lecture simplifié** ; il ne réécrit ni la mise en page originale ni les images. JavaScript désactivé.
+- Aucun changement du serveur PC 1.0.4, du jumelage ou de la signature Android.
+
+---
+
 ## Tor intégré — traducteur français et navigation plus fluide (30 octobre 2026)
 
 - Bouton FR toujours visible dans Tor et panneau de lecture traduit à l'intérieur du navigateur. L'original reste accessible immédiatement.

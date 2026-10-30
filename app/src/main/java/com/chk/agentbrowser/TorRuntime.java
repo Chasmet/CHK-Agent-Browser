@@ -168,19 +168,25 @@ final class TorRuntime {
         String request=args.optString("request_id");if(!request.matches("[A-Za-z0-9_-]{1,80}"))throw new Exception("TOR_REQUEST_ID_REQUIRED");
         String fingerprint=canonical(args);JSONObject old=receipts.optJSONObject(request);
         if(old!=null){if(!fingerprint.equals(old.optString("fingerprint")))throw new Exception("TOR_REQUEST_ID_REUSED_WITH_DIFFERENT_PARAMETERS");JSONObject value=new JSONObject(old.getJSONObject("result").toString()).put("replayed",true).put("current_url",lastUrl);cb.done(value.optString("state").equals("completed"),value);return;}
-        if(navigationReply!=null)throw new Exception("TOR_NAVIGATION_ACTIVE");if(receipts.length()>=128)throw new Exception("TOR_SESSION_RECEIPT_LIMIT: déconnecter puis créer une nouvelle session");
+        if(receipts.length()>=128)throw new Exception("TOR_SESSION_RECEIPT_LIMIT: déconnecter puis créer une nouvelle session");
         String op=args.getString("operation"),url=args.optString("url",web==null?lastUrl:java.util.Objects.toString(web.getUrl(),""));
         if(op.equals("back")||op.equals("forward")){WebBackForwardList history=web.copyBackForwardList();int index=history.getCurrentIndex()+(op.equals("back")?-1:1);if(index<0||index>=history.getSize())throw new Exception("TOR_HISTORY_BOUNDARY");url=history.getItemAtIndex(index).getUrl();}
-        final String target=TorUrlPolicy.checked(url);long ticket=policy.generation();navigationStart=SystemClock.elapsedRealtime();pageLoadStarted=false;
+        final String target=TorUrlPolicy.checked(url);
+        // Give new user navigation precedence over a stale or slow onion request.
+        if(navigationReply!=null){
+            finishNavigation(false,"TOR_NAVIGATION_REPLACED");
+            if(web!=null)web.stopLoading();
+        }
+        long ticket=policy.generation();navigationStart=SystemClock.elapsedRealtime();pageLoadStarted=false;
         navigation=new JSONObject().put("state","running").put("request_id",request).put("requested_url",target).put("session_id",sessionId);navigationReply=cb;lastPageError="";
         receipts.put(request,new JSONObject().put("fingerprint",fingerprint).put("result",new JSONObject(navigation.toString())));persistReceipts();
         // Reuse a recent Tor proof to avoid a full network probe before every tap.
         // Fail closed: expired proof is revalidated through Tor before WebView can load.
         io.execute(()->{try{
             requireCircuit();
-            final JSONObject proof=policy.proofAge(SystemClock.elapsedRealtime())<30000?null:TorHttp.diagnostic(httpPort);
+            final JSONObject proof=policy.proofAge(SystemClock.elapsedRealtime())<90000?null:TorHttp.diagnostic(httpPort);
             main.post(()->{
-                if(ticket!=policy.generation()||navigationReply==null)return;
+                if(ticket!=policy.generation()||navigationReply==null||navigation==null||!request.equals(navigation.optString("request_id")))return;
                 if(proof!=null){
                     if(!policy.refresh(ticket,true,true,SystemClock.elapsedRealtime())){finishNavigation(false,"TOR_SESSION_CHANGED");return;}
                     diagnostic=proof;
@@ -193,7 +199,8 @@ final class TorRuntime {
                 if(op.equals("back"))web.goBack();else if(op.equals("forward"))web.goForward();else if(op.equals("reload"))web.reload();else web.loadUrl(target);
             });
         }catch(Exception e){main.post(()->{
-            // A failed diagnostic must not permit clear-network fallback.
+            if(navigationReply==null||navigation==null||!request.equals(navigation.optString("request_id")))return;
+            // A failed diagnostic must never permit a non-Tor connection.
             block(e.getMessage());finishNavigation(false,e.getMessage());
         });}});
         final long navigationTimeout=target.contains(".onion")?90000:45000;
