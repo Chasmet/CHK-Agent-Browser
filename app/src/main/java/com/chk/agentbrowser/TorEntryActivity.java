@@ -28,9 +28,29 @@ public final class TorEntryActivity extends Activity {
     }
     private void add(LinearLayout layout,String name,Runnable action){Button b=new Button(this);b.setAllCaps(false);b.setText(name);b.setOnClickListener(v->action.run());layout.addView(b,new LinearLayout.LayoutParams(-1,-2));}
     private void command(String op){try{status.setText(op.equals("disconnect")?"Déconnexion en cours · vérification de l’arrêt…":"Demande Tor en cours…");TorBridge.request(this,new JSONObject().put("operation",op),(ok,value)->{if(!resumed)return;show(value);if(!ok)Toast.makeText(this,value.optString("error","Opération Tor non confirmée"),Toast.LENGTH_LONG).show();});}catch(Exception e){status.setText("Erreur : "+e.getMessage());}}
+    /** A normal tap on CHK's Tor icon connects first and then opens the French browser. */
+    private void connectAndOpenDirectly(){
+        try{
+            status.setText("Connexion au réseau Tor…");
+            TorBridge.request(this,new JSONObject().put("operation","connect"),(ok,value)->{
+                if(isFinishing()||isDestroyed())return;
+                if(!ok||!value.optBoolean("tor_verified")){
+                    if(resumed){show(value);Toast.makeText(this,"Connexion Tor non vérifiée",Toast.LENGTH_LONG).show();}
+                    return;
+                }
+                status.setText("Tor connecté · ouverture du navigateur en français…");
+                try{
+                    TorBridge.request(this,new JSONObject().put("operation","open_browser").put("home_on_open",true),(opened,openedState)->{
+                        if(opened){finish();return;}
+                        if(resumed){show(openedState);Toast.makeText(this,openedState.optString("error","Ouverture du navigateur non confirmée"),Toast.LENGTH_LONG).show();}
+                    });
+                }catch(Exception e){if(resumed)status.setText("Ouverture impossible : "+e.getMessage());}
+            });
+        }catch(Exception e){status.setText("Connexion impossible : "+e.getMessage());}
+    }
     private void show(JSONObject state){String value=state.optString("connection_state","error"),label=value.equals("connected")?"Connecté":value.equals("connecting")?"Connexion en cours":value.equals("disconnected")?"Déconnecté":"Erreur";status.setText(label+" · "+state.optInt("bootstrap_percent")+" %\n"+state.optString("error")+(state.optBoolean("tor_verified")?"\nCircuit Tor et diagnostic HTTPS vérifiés.":"\nAucune navigation .onion autorisée sans preuve Tor."));}
     private final Runnable tick=new Runnable(){public void run(){if(!resumed)return;if(Build.VERSION.SDK_INT>=29)TorBridge.request(TorEntryActivity.this,new JSONObject(),(ok,value)->{if(resumed)show(value);});else status.setText("Le moteur intégré demande Android 10 ou plus. Utiliser Tor Browser externe ; son état réseau n’est pas observable par CHK.");main.postDelayed(this,1500);}};
     private void openExternal(){Intent launch=getPackageManager().getLaunchIntentForPackage(PACKAGE);if(launch==null){status.setText("Tor Browser externe non installé.");return;}try{startActivity(launch);status.setText("Application externe lancée · signature et circuit non vérifiés par CHK.");}catch(Exception e){status.setText("Erreur de lancement : "+e.getMessage());}}
-    @Override protected void onResume(){super.onResume();resumed=true;visible=true;main.post(tick);if(getIntent().getBooleanExtra("disconnect_tor",false)){getIntent().removeExtra("disconnect_tor");command("disconnect");}}
+    @Override protected void onResume(){super.onResume();resumed=true;visible=true;main.post(tick);if(getIntent().getBooleanExtra("disconnect_tor",false)){getIntent().removeExtra("disconnect_tor");command("disconnect");}else if(Build.VERSION.SDK_INT>=29&&getIntent().getBooleanExtra("direct_tor",false)){getIntent().removeExtra("direct_tor");connectAndOpenDirectly();}}
     @Override protected void onPause(){resumed=false;visible=false;main.removeCallbacks(tick);super.onPause();}
 }
