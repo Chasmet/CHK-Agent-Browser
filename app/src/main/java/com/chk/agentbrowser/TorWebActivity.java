@@ -51,7 +51,9 @@ public final class TorWebActivity extends Activity {
         TextView heading=label("◉  Tor  ·  Navigateur indépendant",18,0xfff2f0ff);
         heading.setTypeface(null,android.graphics.Typeface.BOLD);
         root.addView(heading);
-        state=label("Connexion Tor vérifiée",12,0xff80e7ab);root.addView(state);
+        state=label("Tor connecté · JS désactivé · isolé",12,0xff80e7ab);
+        state.setSingleLine(true);state.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        root.addView(state);
 
         LinearLayout translationRow=new LinearLayout(this);
         translationRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -391,7 +393,14 @@ public final class TorWebActivity extends Activity {
             if(!op.equals("cancel_navigation")){showBrowser();pageInfo.setText("Navigation via Tor…");loading.setVisibility(View.VISIBLE);loading.setProgress(5);}
             JSONObject args=runtime.uiArgs(op);if(url!=null)args.put("url",url);
             runtime.command(args,(ok,value)->{
-                if(!ok){pageInfo.setText("Navigation interrompue : "+value.optString("error","site indisponible"));loading.setVisibility(View.GONE);Toast.makeText(this,value.optString("error","Navigation non confirmée"),Toast.LENGTH_LONG).show();}
+                if(!ok){
+                    String reason=value.optString("error","site indisponible");
+                    if("TOR_NAVIGATION_REPLACED".equals(reason))return;
+                    if("TOR_HISTORY_BOUNDARY".equals(reason))reason="Aucune page dans cet historique.";
+                    pageInfo.setText("Navigation Tor : "+reason);
+                    loading.setVisibility(View.GONE);
+                    Toast.makeText(this,reason,Toast.LENGTH_LONG).show();
+                }
                 else if(op.equals("cancel_navigation")){loading.setVisibility(View.GONE);pageInfo.setText("Chargement arrêté.");}
             });
         }catch(Exception e){loading.setVisibility(View.GONE);pageInfo.setText(e.getMessage());Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}
@@ -402,7 +411,7 @@ public final class TorWebActivity extends Activity {
         if("disconnected".equals(value))return "Déconnecté";
         return "Erreur";
     }
-    private final Runnable tick=new Runnable(){public void run(){if(!resumed)return;try{JSONObject s=runtime.status();state.setText("Tor · "+frenchState(s.optString("connection_state"))+" · "+s.optString("error")+"\nJavaScript désactivé · stockage et réseau séparés de CHK Web");}catch(Exception ignored){}new Handler(Looper.getMainLooper()).postDelayed(this,1000);}};
+    private final Runnable tick=new Runnable(){public void run(){if(!resumed)return;try{JSONObject s=runtime.status();state.setText("Tor · "+frenchState(s.optString("connection_state"))+" · JavaScript OFF · isolé"+(s.optString("error").isEmpty()?"":" · "+s.optString("error")));}catch(Exception ignored){}new Handler(Looper.getMainLooper()).postDelayed(this,1000);}};
     @Override protected void onResume(){super.onResume();resumed=true;if(runtime!=null)runtime.main.post(tick);}
     @Override protected void onPause(){resumed=false;if(runtime!=null)runtime.main.removeCallbacks(tick);super.onPause();}
     @Override protected void onDestroy(){if(runtime!=null)runtime.detach(this);if(web!=null){web.stopLoading();web.destroy();web=null;}super.onDestroy();}
