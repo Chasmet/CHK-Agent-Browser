@@ -1,7 +1,7 @@
 name: Tor isolated engine verification
 on:
   push:
-    branches: [feature/local3-studio-tor-20261029]
+    branches: [main, feature/local3-studio-tor-20261029]
     paths: ['validation/probe_tor_bundle.py', '.github/workflows/tor-connectivity.yml', 'app/**Tor**', 'app/build.gradle', 'settings.gradle', 'tor-wrapper/**', 'validation/tor_android_checks.sh', 'validation/with_tor_dns_capture.sh', 'validation/verify_tor_dns.py']
   workflow_dispatch:
 permissions:

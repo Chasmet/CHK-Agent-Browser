@@ -69,7 +69,8 @@ jobs:
           script: |
             ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.AgentKeyboardIntegrationTest,com.chk.agentbrowser.StudioLayersIntegrationTest,com.chk.agentbrowser.PrivateWebCaptureTest,com.chk.agentbrowser.Local3RecoveryTest,com.chk.agentbrowser.Local2BrowserAutomationTest,com.chk.agentbrowser.Local2SessionIntegrationTest,com.chk.agentbrowser.StudioSubtitlesTest,com.chk.agentbrowser.VideoEditorIntegrationTest#timedSubtitlesAppearAndDisappearAcrossRealExportClipBoundary
             bash validation/install_studio_test_model.sh
-            bash validation/with_tor_dns_capture.sh ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true -Pandroid.testInstrumentationRunnerArguments.tor_network_test=true
+            # Full regression suite is deterministic; real Tor DNS/onion validation lives in tor-connectivity.yml.
+            ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
             adb pull /data/local/tmp/chk-autonomy-fixtures app/build/autonomy-fixtures
       - uses: actions/setup-python@v5
         with:
@@ -96,6 +97,16 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 1
           if-no-files-found: error
+      - name: Exiger la validation réseau Tor réelle du commit avant la signature
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TOR_VALIDATED=$(gh run list --workflow tor-connectivity.yml --commit "$GITHUB_SHA" --limit 30 --json conclusion --jq '[.[] | select(.conclusion=="success")] | length')
+          if test "${TOR_VALIDATED:-0}" -lt 1; then
+            echo "Aucun test Tor réel réussi pour ce commit ; Release bloquée."
+            exit 1
+          fi
       - name: Charger signature persistante via GitHub OIDC et Render existant
         if: github.ref == 'refs/heads/main'
         run: python3 signing/prepare_ci.py
