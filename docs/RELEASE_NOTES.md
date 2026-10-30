@@ -1,3 +1,16 @@
+## Tor : nouvelle interface française et navigation plus réactive — 30 octobre 2026
+
+- Accueil natif en français avec raccourcis officiels Ahmia, DuckDuckGo .onion, ProPublica SecureDrop, Projet Tor, guide de sécurité et vérification de connexion. Adresse Ahmia vérifiée auprès d'ahmia.fi (l'ancien lien diffusé était différent).
+- Barre d'adresse compacte, bouton « Aller », navigation retour/suivant, indicateur de chargement, annulation explicite et « Mode léger » désactivant les images.
+- Réutilisation courte d'une preuve réseau Tor encore valide (moins de 30 secondes), au lieu de relancer le diagnostic HTTPS avant chaque clic ; nouvelle vérification obligatoire dès que la preuve vieillit. Aucun accès direct autorisé.
+- Limite de chargement par navigation : 45 s sur le Web, 90 s pour les .onion ; un site protégé ou lent peut toujours échouer.
+- Mode lecture en français avec modèle local ML Kit anglais → français : téléchargement explicite dans la partie CHK ordinaire, **jamais depuis le processus Tor**. Les pages sont relues à travers Tor puis traduites localement après installation du modèle.
+- JavaScript désactivé ; isolation des données et du processus Tor inchangée. Cette WebView ne revendique pas toutes les protections anti-empreinte de Tor Browser officiel.
+- Serveur PC CHK Universal Control 1.0.4, autorisations, jumelage et CHK Web inchangés.
+- La livraison exige la compilation, les tests et la publication de l'APK signé dans les Releases GitHub.
+
+---
+
 ## Tor intégré · contrôle MCP en arrière-plan — 30 octobre 2026
 
 - Correctif Android Tor : une WebView Tor **déjà ouverte** reste pilotable par Local 3 si elle passe en arrière-plan lorsque ChatGPT est au premier plan. La navigation exige toujours une session valide, la preuve du circuit Tor et un identifiant de requête stable. Aucune bascule de connexion directe.
