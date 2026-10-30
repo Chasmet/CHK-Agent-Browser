@@ -27,7 +27,10 @@ public final class TorWebActivity extends Activity {
     private ScrollView startPage, translatedPage;
     private ProgressBar loading;
     private boolean lightweight;
-    private Button lightweightButton;
+    private TextView lightweightButton, autoFrenchButton;
+    private boolean autoFrench;
+    private String cachedFrenchUrl="", cachedFrenchText="";
+    private int translationTicket;
     private static final String AHMIA="http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/";
     private static final String DDG="http://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/";
     boolean resumed;
@@ -49,10 +52,20 @@ public final class TorWebActivity extends Activity {
         LinearLayout translationRow=new LinearLayout(this);
         translationRow.setOrientation(LinearLayout.HORIZONTAL);
         translationRow.setPadding(0,dp(6),0,dp(5));
-        Button translate=control("Traduire en français");translate.setOnClickListener(v->translatePage());
+        TextView translate=control("FR · Traduire");translate.setOnClickListener(v->translatePage());
         translationRow.addView(translate,new LinearLayout.LayoutParams(0,dp(43),1));
-        Button homeButton=control("Accueil");homeButton.setOnClickListener(v->showHome());
-        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(dp(100),dp(43));hp.leftMargin=dp(7);
+        autoFrench=getPreferences(MODE_PRIVATE).getBoolean("tor_fr_auto",false);
+        autoFrenchButton=control(autoFrench?"FR auto ON":"FR auto OFF");
+        autoFrenchButton.setOnClickListener(v->{
+            autoFrench=!autoFrench;
+            getPreferences(MODE_PRIVATE).edit().putBoolean("tor_fr_auto",autoFrench).apply();
+            autoFrenchButton.setText(autoFrench?"FR auto ON":"FR auto OFF");
+            if(autoFrench&&web!=null&&web.getUrl()!=null)translatePage();
+        });
+        LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,dp(43),1);ap.leftMargin=dp(6);
+        translationRow.addView(autoFrenchButton,ap);
+        TextView homeButton=control("Accueil");homeButton.setOnClickListener(v->showHome());
+        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(dp(75),dp(43));hp.leftMargin=dp(6);
         translationRow.addView(homeButton,hp);root.addView(translationRow);
 
         LinearLayout bar=new LinearLayout(this);bar.setOrientation(LinearLayout.HORIZONTAL);
@@ -64,7 +77,7 @@ public final class TorWebActivity extends Activity {
         address.setImeOptions(EditorInfo.IME_ACTION_GO);
         address.setOnEditorActionListener((v,id,event)->{openAddress();return true;});
         bar.addView(address,new LinearLayout.LayoutParams(0,dp(48),1));
-        Button go=control("Aller");go.setBackground(round(0xff6638dc,0xff6638dc));
+        TextView go=control("Aller");go.setBackground(round(0xff6638dc,0xff6638dc));
         go.setOnClickListener(v->openAddress());
         LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(dp(78),dp(48));gp.leftMargin=dp(6);
         bar.addView(go,gp);root.addView(bar);
@@ -103,7 +116,7 @@ public final class TorWebActivity extends Activity {
         search.setHint("Rechercher sur Ahmia…");search.setTextSize(15);search.setBackground(round(0xff202c46,0xff586c91));
         search.setPadding(dp(12),0,dp(12),0);
         searchRow.addView(search,new LinearLayout.LayoutParams(0,dp(48),1));
-        Button searchButton=control("Chercher");searchButton.setBackground(round(0xff6638dc,0xff6638dc));
+        TextView searchButton=control("Chercher");searchButton.setBackground(round(0xff6638dc,0xff6638dc));
         searchButton.setOnClickListener(v->searchAhmia(search.getText().toString()));
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(102),dp(48));sp.leftMargin=dp(6);
         searchRow.addView(searchButton,sp);
@@ -119,16 +132,22 @@ public final class TorWebActivity extends Activity {
         shortcut(home,"Vérifier Tor","Test officiel de la connexion",FRENCH_HOME);
         TextView tips=label("Confidentialité : vérifiez les adresses .onion. Le JavaScript est désactivé. Évitez les téléchargements inconnus. Le mode léger retire les images mais ne peut pas accélérer les relais Tor.",12,0xffa9b6d3);
         tips.setPadding(0,dp(15),0,dp(8));home.addView(tips);
-        Button prepareFrench=control("Installer le modèle FR hors Tor");
-        prepareFrench.setOnClickListener(v->startActivity(new android.content.Intent(this,TorEntryActivity.class)));
+        TextView prepareFrench=control("Préparer la traduction française hors ligne");
+        prepareFrench.setOnClickListener(v->openFrenchSetup());
         home.addView(prepareFrench);
         startPage.addView(home);
         root.addView(startPage,new LinearLayout.LayoutParams(-1,0,1));
 
         translatedPage=new ScrollView(this);translatedPage.setVisibility(View.GONE);
         LinearLayout reader=new LinearLayout(this);reader.setOrientation(LinearLayout.VERTICAL);
-        Button close=control("Retour à la page");close.setOnClickListener(v->showBrowser());
+        TextView readerTitle=label("Français intégré · Mode lecture",18,0xffede8ff);
+        readerTitle.setTypeface(null,android.graphics.Typeface.BOLD);reader.addView(readerTitle);
+        TextView close=control("Page originale");close.setOnClickListener(v->showBrowser());
         reader.addView(close);
+        TextView setup=control("Installer le modèle français (une fois)");
+        setup.setOnClickListener(v->openFrenchSetup());
+        LinearLayout.LayoutParams setupParams=new LinearLayout.LayoutParams(-1,dp(43));
+        setupParams.topMargin=dp(6);reader.addView(setup,setupParams);
         translatedText=label("",15,0xffedf1ff);
         translatedText.setTextIsSelectable(true);
         translatedText.setPadding(dp(10),dp(12),dp(10),dp(20));
@@ -168,10 +187,23 @@ public final class TorWebActivity extends Activity {
                 if(!allowed(request.getUrl().toString()))return new WebResourceResponse("text/plain","UTF-8",403,"Tor required",Collections.emptyMap(),new ByteArrayInputStream("TOR_REQUEST_BLOCKED".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                 return null;
             }
-            @Override public void onPageStarted(WebView view,String url,Bitmap favicon){runtime.pageStarted(url);}
+            @Override public void onPageStarted(WebView view,String url,Bitmap favicon){
+                runtime.pageStarted(url);
+                // Display real content as it arrives; no black hold screen during loading.
+                if(web!=null&&translatedPage.getVisibility()!=View.VISIBLE)showBrowserForNavigation();
+                loading.setVisibility(View.VISIBLE);
+                loading.setProgress(8);
+            }
             @Override public void onPageFinished(WebView view,String url){
                 runtime.pageFinished(url,view.getTitle());address.setText(url);
+                loading.setVisibility(View.GONE);
                 pageInfo.setText("Page : "+(view.getTitle()==null?url:view.getTitle()));
+                if(autoFrench && url!=null && url.equals(view.getUrl())){
+                    // The separate Tor reader executor avoids blocking navigation.
+                    runtime.main.postDelayed(()->{
+                        if(autoFrench&&!isFinishing()&&url.equals(web.getUrl()))translatePage();
+                    },300);
+                }
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){
                 if(request.isForMainFrame()){runtime.pageFailed("TOR_PAGE_NETWORK_ERROR: "+error.getErrorCode());pageInfo.setText("Échec réseau Tor : "+error.getDescription());}
@@ -197,13 +229,19 @@ public final class TorWebActivity extends Activity {
     private TextView label(String text,int size,int color){
         TextView t=new TextView(this);t.setText(text);t.setTextSize(size);t.setTextColor(color);return t;
     }
-    private Button control(String text){
-        Button b=new Button(this);b.setAllCaps(false);b.setTextSize(13);b.setTextColor(0xfff5f2ff);
-        b.setBackground(round(0xff202a43,0xff405273));return b;
+    /** TextView-based native controls avoid unreadable themed Button text on some Android skins. */
+    private TextView control(String text){
+        TextView t=label(text,14,0xffffffff);
+        t.setGravity(Gravity.CENTER);t.setTypeface(null,android.graphics.Typeface.BOLD);
+        t.setPadding(dp(12),0,dp(12),0);
+        t.setBackground(round(0xff202a43,0xff405273));
+        t.setClickable(true);t.setFocusable(true);t.setContentDescription(text);
+        return t;
     }
-    private Button small(LinearLayout row,String title,Runnable click){
-        Button b=control(title);b.setOnClickListener(v->click.run());
-        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(42));p.rightMargin=dp(5);row.addView(b,p);return b;
+    private TextView small(LinearLayout row,String title,Runnable click){
+        TextView t=control(title);t.setOnClickListener(v->click.run());
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(42));
+        p.rightMargin=dp(5);row.addView(t,p);return t;
     }
     private void shortcut(LinearLayout home,String title,String note,String url){
         LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);
@@ -227,27 +265,62 @@ public final class TorWebActivity extends Activity {
         if(!raw.contains("://"))raw=(raw.contains(".onion")?"http://":"https://")+raw;
         action("navigate",raw);
     }
-    private void showHome(){startPage.setVisibility(View.VISIBLE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.GONE);}
+    private void showHome(){++translationTicket;startPage.setVisibility(View.VISIBLE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.GONE);}
     private void showBrowser(){showBrowserForNavigation();}
     /** Called by TorRuntime on the UI thread for MCP navigations, including background use. */
-    void showBrowserForNavigation(){startPage.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);translatedPage.setVisibility(View.GONE);}
+    void showBrowserForNavigation(){++translationTicket;startPage.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);translatedPage.setVisibility(View.GONE);}
+    private void openFrenchSetup(){
+        startActivity(new android.content.Intent(this,TorEntryActivity.class)
+            .putExtra("prepare_translation_model",true));
+    }
     private void translatePage(){
-        showBrowser();
-        translatedText.setText("Lecture et traduction hors ligne en cours…");
-        startPage.setVisibility(View.GONE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.VISIBLE);
-        try{runtime.command(new JSONObject().put("operation","read"),(ok,value)->{
-            if(isFinishing()||isDestroyed())return;
-            if(!ok){translatedText.setText("Lecture via Tor impossible : "+value.optString("error","page indisponible"));return;}
-            String body=value.optString("text","");
-            TorFrenchTranslator.translate(this,body,(success,result)->runOnUiThread(()->{
-                if(!isFinishing()&&!isDestroyed())translatedText.setText((success?"Traduction EN → FR · Mode lecture hors ligne\\n\\n":"")+result);
-            }));
-        });}catch(Exception e){translatedText.setText("Traduction impossible : "+e.getMessage());}
+        if(web==null || web.getUrl()==null || web.getUrl().isEmpty()){
+            pageInfo.setText("Ouvre d'abord une page pour la traduire.");return;
+        }
+        final String requested=web.getUrl();
+        final int ticket=++translationTicket;
+        if(requested.equals(cachedFrenchUrl)&&!cachedFrenchText.isEmpty()){
+            translatedText.setText(cachedFrenchText);
+            showReader();return;
+        }
+        translatedText.setText("Vérification du modèle FR hors ligne…");
+        showReader();
+        TorFrenchTranslator.ready((ready,message)->runOnUiThread(()->{
+            if(ticket!=translationTicket || isFinishing() || isDestroyed())return;
+            if(!ready){
+                translatedText.setText(message+"\n\nAppuie sur « Installer le modèle français » ci-dessus, puis reviens dans Tor.");
+                return;
+            }
+            translatedText.setText("Lecture de la page via Tor…\nLa traduction se fait ensuite sur le téléphone.");
+            try{
+                runtime.command(new JSONObject().put("operation","read").put("url",requested),(ok,value)->{
+                    if(ticket!=translationTicket||isFinishing()||isDestroyed())return;
+                    if(!ok){
+                        translatedText.setText("Lecture indisponible : "+
+                            value.optString("error","site lent ou inaccessible")+"\n\nTu peux continuer à naviguer sur la page originale.");
+                        return;
+                    }
+                    translatedText.setText("Traduction locale EN → FR…");
+                    TorFrenchTranslator.translate(this,value.optString("text",""),(success,content)->
+                        runOnUiThread(()->{
+                            if(ticket!=translationTicket||isFinishing()||isDestroyed())return;
+                            String rendered=success?"Traduction EN → FR (lecture native)\n\n"+content:content;
+                            translatedText.setText(rendered);
+                            if(success){cachedFrenchUrl=requested;cachedFrenchText=rendered;}
+                        }));
+                });
+            }catch(Exception e){translatedText.setText("Traduction impossible : "+e.getMessage());}
+        }));
+    }
+    private void showReader(){
+        startPage.setVisibility(View.GONE);
+        web.setVisibility(View.GONE);
+        translatedPage.setVisibility(View.VISIBLE);
     }
     private boolean allowed(String url){if(url.equals("about:blank")||url.startsWith("data:"))return true;try{TorUrlPolicy.checked(url);return runtime.policy.usable(SystemClock.elapsedRealtime());}catch(Exception e){return false;}}
     private void action(String op,String url){
         try{
-            if(!op.equals("cancel_navigation")){showBrowser();pageInfo.setText("Navigation via Tor…");loading.setVisibility(View.VISIBLE);loading.setProgress(5);}
+            if(!op.equals("cancel_navigation")){cachedFrenchUrl="";cachedFrenchText="";showBrowser();pageInfo.setText("Navigation via Tor…");loading.setVisibility(View.VISIBLE);loading.setProgress(5);}
             JSONObject args=runtime.uiArgs(op);if(url!=null)args.put("url",url);
             runtime.command(args,(ok,value)->{
                 if(!ok){pageInfo.setText("Navigation interrompue : "+value.optString("error","site indisponible"));loading.setVisibility(View.GONE);Toast.makeText(this,value.optString("error","Navigation non confirmée"),Toast.LENGTH_LONG).show();}
