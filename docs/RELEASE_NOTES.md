@@ -5,7 +5,7 @@
 - Extraction du texte accessible de la page déjà affichée, sans nouvelle requête réseau lorsque c'est possible ; lecture exclusivement via Tor si nécessaire. Lecture et traduction séparées de la file de navigation.
 - **Mode léger ON** par défaut : images distantes ignorées, réactivables. Gain dépendant du site, du circuit Tor et du réseau.
 - Nouvelle navigation prioritaire sur la précédente si elle est bloquée ; reçu de chaque commande et rejet des réponses obsolètes. Correction du conflit TOR_NAVIGATION_ACTIVE.
-- Preuve réseau Tor valide réutilisable pendant 55 secondes, avec renouvellement obligatoire et protection contre les connexions directes.
+- Preuve réseau Tor valide réutilisable pendant 90 secondes, avec renouvellement obligatoire et protection contre les connexions directes.
 - Application Android seule ; serveur PC CHK Universal Control 1.0.4, identité, signature et processus Tor séparé inchangés.
 
 ---
