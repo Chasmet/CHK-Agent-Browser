@@ -51,7 +51,7 @@ public final class TorNetworkIntegrationTest {
             // Bringing another CHK activity to the front must not disable the
             // retained Tor WebView while the user is working in ChatGPT.
             InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
-                Intent overlay=new Intent(app,TorEntryActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                Intent overlay=new Intent(app,TorEntryActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
                 app.startActivity(overlay);
             });
             JSONObject hidden=null;
