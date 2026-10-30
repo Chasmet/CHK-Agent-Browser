@@ -187,7 +187,10 @@ public final class TorWebActivity extends Activity {
                 if(!allowed(request.getUrl().toString()))return new WebResourceResponse("text/plain","UTF-8",403,"Tor required",Collections.emptyMap(),new ByteArrayInputStream("TOR_REQUEST_BLOCKED".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                 return null;
             }
-            @Override public void onPageStarted(WebView view,String url,Bitmap favicon){runtime.pageStarted(url);}
+            @Override public void onPageStarted(WebView view,String url,Bitmap favicon){
+                translatedUrl="";translatedBody="";
+                runtime.pageStarted(url);
+            }
             @Override public void onPageFinished(WebView view,String url){
                 runtime.pageFinished(url,view.getTitle());address.setText(url);
                 pageInfo.setText("Page : "+(view.getTitle()==null?url:view.getTitle()));
