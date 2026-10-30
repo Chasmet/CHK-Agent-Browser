@@ -180,6 +180,9 @@ final class TorRuntime {
                     diagnostic=proof;
                 }
                 if(!policy.usable(SystemClock.elapsedRealtime())||!proxyReady){finishNavigation(false,"TOR_PROOF_EXPIRED");return;}
+                // Navigation MCP must reveal the actual Tor WebView, not leave the home dashboard on screen.
+                // This only changes views inside the already-open isolated Tor Activity.
+                if(screen!=null)screen.showBrowserForNavigation();
                 web.getSettings().setBlockNetworkLoads(false);
                 if(op.equals("back"))web.goBack();else if(op.equals("forward"))web.goForward();else if(op.equals("reload"))web.reload();else web.loadUrl(target);
             });
