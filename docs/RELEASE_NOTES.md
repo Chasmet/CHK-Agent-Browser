@@ -1,3 +1,15 @@
+## Tor intégré — traduction FR et navigation réactive (30 octobre 2026)
+
+- Bouton **Traduire FR** et interrupteur **FR auto ON/OFF** en haut de Tor. Première activation : préparation du modèle de traduction anglais-français hors ligne dans le processus principal de CHK, puis retour automatique à Tor. Les pages consultées ne sont pas envoyées à un traducteur externe.
+- Traduction dans un lecteur de texte simplifié **à l'intérieur de Tor** : ce n'est pas une traduction de la mise en page, des images ou des formulaires. JavaScript reste désactivé.
+- Extraction du texte accessible de la page déjà affichée, sans nouvelle requête réseau lorsque c'est possible ; lecture exclusivement via Tor si nécessaire. Lecture et traduction séparées de la file de navigation.
+- **Mode léger ON** par défaut : images distantes ignorées, réactivables. Gain dépendant du site, du circuit Tor et du réseau.
+- Nouvelle navigation prioritaire sur la précédente si elle est bloquée ; reçu de chaque commande et rejet des réponses obsolètes. Correction du conflit TOR_NAVIGATION_ACTIVE.
+- Preuve réseau Tor valide réutilisable pendant 55 secondes, avec renouvellement obligatoire et protection contre les connexions directes.
+- Application Android seule ; serveur PC CHK Universal Control 1.0.4, identité, signature et processus Tor séparé inchangés.
+
+---
+
 ## Tor : nouvelle interface française et navigation plus réactive — 30 octobre 2026
 
 - Accueil natif en français avec raccourcis officiels Ahmia, DuckDuckGo .onion, ProPublica SecureDrop, Projet Tor, guide de sécurité et vérification de connexion. Adresse Ahmia vérifiée auprès d'ahmia.fi (l'ancien lien diffusé était différent).
