@@ -277,13 +277,15 @@ public final class TorWebActivity extends Activity {
                     .show();
                 return;
             }
+            // Obtain native accessibility nodes while WebView is still visible.
+            // Hiding the WebView first makes its virtual children inaccessible.
+            String nativeText=url.equals(translatedUrl)?"":readAccessibleWebText();
             showTranslation();
             if(url.equals(translatedUrl)&&!translatedBody.isEmpty()){
                 translatedText.setText(translatedBody);
                 pageInfo.setText("FR · traduction locale conservée");return;
             }
             translatedText.setText("Lecture du texte visible et traduction française…");
-            String nativeText=readAccessibleWebText();
             if(nativeText.length()>=60){translateLocalText(token,url,nativeText,true);return;}
             translatedText.setText("Lecture de la page par Tor… L'original reste disponible.");
             try{runtime.command(new JSONObject().put("operation","read").put("url",url),(ok,value)->runOnUiThread(()->{
