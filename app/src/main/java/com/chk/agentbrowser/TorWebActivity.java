@@ -27,6 +27,7 @@ public final class TorWebActivity extends Activity {
     private ScrollView startPage, translatedPage;
     private ProgressBar loading;
     private boolean lightweight;
+    private boolean modelInstallationActive;
     private TextView lightweightButton;
     private static final String AHMIA="http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/";
     private static final String DDG="http://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/";
@@ -120,7 +121,8 @@ public final class TorWebActivity extends Activity {
         shortcut(home,"Vérifier Tor","Test officiel de la connexion",FRENCH_HOME);
         TextView tips=label("Confidentialité : vérifiez les adresses .onion. Le JavaScript est désactivé. Évitez les téléchargements inconnus. Le mode léger retire les images mais ne peut pas accélérer les relais Tor.",12,0xffa9b6d3);
         tips.setPadding(0,dp(15),0,dp(8));home.addView(tips);
-        TextView prepareFrench=control("Installer le traducteur FR (une seule fois)");
+        home.addView(label("Traducteur intégré : la traduction reste dans Tor. Seul le modèle linguistique public est téléchargé une fois par la connexion Android classique ; aucune page ni adresse Tor n'est envoyée.",12,0xffa9b6d3));
+        TextView prepareFrench=control("Installer le traducteur FR dans Tor");
         prepareFrench.setOnClickListener(v->installFrenchModel());
         home.addView(prepareFrench);
         startPage.addView(home);
@@ -250,9 +252,41 @@ public final class TorWebActivity extends Activity {
     /** Called by TorRuntime on the UI thread for MCP navigations, including background use. */
     void showBrowserForNavigation(){translationToken++;startPage.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);translatedPage.setVisibility(View.GONE);}
 
+    /** Install public ML Kit language models through a private bound service.
+     * The :tor UI stays in front; only a command code and a success flag cross IPC.
+     * No URL, page text, cookies or Tor proxy settings are ever sent to the main process.
+     */
     private void installFrenchModel(){
-        // Download public language models in CHK's main process, not in :tor.
-        startActivity(new android.content.Intent(this,TorEntryActivity.class).putExtra("download_translate",true));
+        if(modelInstallationActive){
+            Toast.makeText(this,"Installation du traducteur déjà en cours.",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        modelInstallationActive=true;
+        final int startedAtToken=translationToken;
+        final String sourceUrl=web==null?null:web.getUrl();
+        final boolean returnToTranslation=startPage.getVisibility()!=View.VISIBLE
+            && sourceUrl!=null&&!sourceUrl.isEmpty();
+        pageInfo.setText("FR · installation locale en cours ; vous restez dans Tor");
+        TorTranslationModelBridge.prepare(this,(ok,detail)->{
+            if(isFinishing()||isDestroyed())return;
+            modelInstallationActive=false;
+            if(!ok){
+                pageInfo.setText("FR · installation impossible : "+detail);
+                Toast.makeText(this,"Modèle français indisponible : "+detail,Toast.LENGTH_LONG).show();
+                return;
+            }
+            TorFrenchTranslator.isReady(this,(ready,reason)->runOnUiThread(()->{
+                if(isFinishing()||isDestroyed())return;
+                if(!ready){
+                    pageInfo.setText("FR · modèle téléchargé mais inaccessible : "+reason);
+                    return;
+                }
+                pageInfo.setText("FR · modèle français installé dans Tor");
+                Toast.makeText(this,"Traducteur local prêt · Tor reste ouvert",Toast.LENGTH_SHORT).show();
+                if(returnToTranslation&&startedAtToken==translationToken
+                    &&web!=null&&sourceUrl.equals(web.getUrl()))translatePage();
+            }));
+        });
     }
     private void showTranslation(){
         startPage.setVisibility(View.GONE);web.setVisibility(View.GONE);
@@ -273,9 +307,9 @@ public final class TorWebActivity extends Activity {
             if(!ready){
                 new android.app.AlertDialog.Builder(this)
                     .setTitle("Traducteur français de Tor")
-                    .setMessage(detail+" Installer le module FR dans CHK ? Les pages Tor ne sont pas envoyées à Google.")
+                    .setMessage(detail+" Télécharger une seule fois le modèle linguistique par la connexion Android classique, sans quitter Tor ? Aucune URL ni aucun texte des pages Tor n'est transmis.")
                     .setNegativeButton("Annuler",(dialog,which)->pageInfo.setText("Page originale affichée"))
-                    .setPositiveButton("Installer FR",(dialog,which)->installFrenchModel())
+                    .setPositiveButton("Installer dans Tor",(dialog,which)->installFrenchModel())
                     .show();
                 return;
             }

@@ -58,6 +58,8 @@
         <activity android:name=".CutStudioLibraryActivity" android:exported="false" />
         <activity android:name=".CutStudioSettingsActivity" android:exported="false" />
         <activity android:name=".CutStudioActivity" android:exported="false" android:screenOrientation="portrait" />
+        <!-- Private model downloader in the ordinary app process. No Tor page data or URLs cross this bridge. -->
+        <service android:name=".TorTranslationModelService" android:exported="false" />
         <service android:name=".TorRuntimeService" tools:targetApi="29" android:exported="false" android:process=":tor" android:enabled="@bool/tor_integrated_supported" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-requested isolated Tor circuit for the separate CHK Tor space" />
         </service>
