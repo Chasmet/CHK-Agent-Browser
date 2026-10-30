@@ -1,3 +1,17 @@
+## Tor français dans le navigateur — correctifs Android du 30 octobre 2026
+
+- Interface native Tor : libellés des boutons rendus par des `TextView` contrastés, accessibles sur les surcouches Android où les `Button` restaient visuellement vides.
+- Traduction intégrée dans l'écran Tor : « FR · Traduire », « FR auto ON/OFF » et « Page originale ». Le modèle EN→FR est préparé dans le processus CHK ordinaire, les textes restent traduits localement. La première installation peut télécharger des modèles de langue, mais le contenu des pages n'est jamais envoyé à un traducteur externe.
+- Lecture de texte déjà chargé via les informations d'accessibilité de la WebView (quand disponibles) : évite une seconde visite Tor lente. Alternative « Lire toute la page via Tor » avec une nouvelle lecture réseau dans le processus isolé.
+- Traduction et navigation sur des exécuteurs distincts pour éviter qu'une lecture .onion lente ne bloque les commandes de navigation.
+- Une nouvelle navigation remplace proprement la navigation précédente encore en cours, avec accusés de réception distincts. Le délai `TOR_NAVIGATION_ACTIVE` n'oblige plus à attendre la fin d'une page abandonnée.
+- Indicateurs de progression, boutons français visibles, affichage WebView immédiat et messages d'erreur lisibles.
+- Preuve Tor réutilisée seulement dans sa fenêtre de validité ; vérifications Tor, JavaScript désactivé et isolation du navigateur inchangés.
+- Limites : certains .onion restent intrinsèquement lents ou inaccessibles ; la traduction locale en mode lecture peut perdre la mise en page ; sites qui exigent JavaScript peuvent rester incompatibles.
+- Serveur PC CHK Universal Control 1.0.4 inchangé. Release conditionnée aux tests Tor réels et à une APK signée avec la même identité.
+
+---
+
 ## Tor : nouvelle interface française et navigation plus réactive — 30 octobre 2026
 
 - Accueil natif en français avec raccourcis officiels Ahmia, DuckDuckGo .onion, ProPublica SecureDrop, Projet Tor, guide de sécurité et vérification de connexion. Adresse Ahmia vérifiée auprès d'ahmia.fi (l'ancien lien diffusé était différent).
