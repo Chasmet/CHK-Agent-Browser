@@ -2,6 +2,10 @@ package com.chk.agentbrowser;
 
 import android.app.Activity;
 import android.graphics.*;
+import android.graphics.drawable.GradientDrawable;
+import android.text.InputType;
+import android.view.inputmethod.EditorInfo;
+import java.net.URLEncoder;
 import android.net.http.SslError;
 import android.os.*;
 import android.view.*;
@@ -19,25 +23,142 @@ public final class TorWebActivity extends Activity {
     private WebView web;
     private TextView state;
     private EditText address;
+    private TextView pageInfo, translatedText;
+    private ScrollView startPage, translatedPage;
+    private ProgressBar loading;
+    private boolean lightweight;
+    private Button lightweightButton;
+    private static final String AHMIA="http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/";
+    private static final String DDG="http://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/";
     boolean resumed;
     @Override public void onCreate(Bundle saved){
-        super.onCreate(saved);runtime=TorRuntime.get(this);
+        super.onCreate(saved);
+        runtime=TorRuntime.get(this);
         if(!runtime.policy.usable(SystemClock.elapsedRealtime())){finish();return;}
-        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setBackgroundColor(0xff16141e);
-        state=new TextView(this);state.setTextColor(0xffe4ceff);state.setPadding(14,10,14,10);box.addView(state);
-        LinearLayout bar=new LinearLayout(this);address=new EditText(this);address.setSingleLine();address.setTextColor(0xffeeeeee);address.setText(FRENCH_HOME);address.setHint("Adresse HTTP(S) via Tor");address.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);bar.addView(address,new LinearLayout.LayoutParams(0,-2,1));
-        Button go=new Button(this);go.setText("Aller");go.setOnClickListener(v->action("navigate",address.getText().toString()));bar.addView(go);box.addView(bar);
-        LinearLayout tools=new LinearLayout(this);button(tools,"←",()->action("back",null));button(tools,"→",()->action("forward",null));button(tools,"↻",()->action("reload",null));button(tools,"Stop Tor",()->startActivity(new android.content.Intent(this,TorEntryActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK|android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("disconnect_tor",true)));button(tools,"Retour CHK",this::finish);box.addView(tools);
-        web=new WebView(this);web.setTag("chk_tor_webview");WebSettings settings=web.getSettings();
-        settings.setJavaScriptEnabled(false);settings.setOffscreenPreRaster(true);settings.setDomStorageEnabled(false);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setGeolocationEnabled(false);settings.setSaveFormData(false);settings.setSafeBrowsingEnabled(false);settings.setSupportMultipleWindows(false);settings.setMediaPlaybackRequiresUserGesture(true);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(0xff0c1427);
+        root.setPadding(dp(10),dp(6),dp(10),0);
+
+        TextView heading=label("◉  Tor  ·  Navigateur indépendant",18,0xfff2f0ff);
+        heading.setTypeface(null,android.graphics.Typeface.BOLD);
+        root.addView(heading);
+        state=label("Connexion Tor vérifiée",12,0xff80e7ab);root.addView(state);
+
+        LinearLayout translationRow=new LinearLayout(this);
+        translationRow.setOrientation(LinearLayout.HORIZONTAL);
+        translationRow.setPadding(0,dp(6),0,dp(5));
+        Button translate=control("Traduire en français");translate.setOnClickListener(v->translatePage());
+        translationRow.addView(translate,new LinearLayout.LayoutParams(0,dp(43),1));
+        Button homeButton=control("Accueil");homeButton.setOnClickListener(v->showHome());
+        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(dp(100),dp(43));hp.leftMargin=dp(7);
+        translationRow.addView(homeButton,hp);root.addView(translationRow);
+
+        LinearLayout bar=new LinearLayout(this);bar.setOrientation(LinearLayout.HORIZONTAL);
+        address=new EditText(this);address.setSingleLine();address.setSelectAllOnFocus(true);
+        address.setTextColor(0xfff4f4ff);address.setHintTextColor(0xff9ba9c5);
+        address.setTextSize(14);address.setHint("Adresse .onion ou HTTPS");address.setPadding(dp(12),0,dp(8),0);
+        address.setBackground(round(0xff1d2a44,0xff61759a));
+        address.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);
+        address.setImeOptions(EditorInfo.IME_ACTION_GO);
+        address.setOnEditorActionListener((v,id,event)->{openAddress();return true;});
+        bar.addView(address,new LinearLayout.LayoutParams(0,dp(48),1));
+        Button go=control("Aller");go.setBackground(round(0xff6638dc,0xff6638dc));
+        go.setOnClickListener(v->openAddress());
+        LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(dp(78),dp(48));gp.leftMargin=dp(6);
+        bar.addView(go,gp);root.addView(bar);
+
+        HorizontalScrollView scroller=new HorizontalScrollView(this);
+        scroller.setHorizontalScrollBarEnabled(false);
+        LinearLayout tools=new LinearLayout(this);tools.setOrientation(LinearLayout.HORIZONTAL);
+        small(tools,"←",()->action("back",null));
+        small(tools,"→",()->action("forward",null));
+        small(tools,"↻",()->action("reload",null));
+        small(tools,"Annuler",()->action("cancel_navigation",null));
+        lightweightButton=small(tools,"Mode léger OFF",()->{
+            lightweight=!lightweight;
+            web.getSettings().setLoadsImagesAutomatically(!lightweight);
+            web.getSettings().setBlockNetworkImage(lightweight);
+            lightweightButton.setText(lightweight?"Mode léger ON":"Mode léger OFF");
+            pageInfo.setText(lightweight?"Images bloquées pour alléger les pages.":"Images autorisées.");
+        });
+        small(tools,"Stop Tor",()->startActivity(new android.content.Intent(this,TorEntryActivity.class)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK|android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra("disconnect_tor",true)));
+        small(tools,"CHK",this::finish);
+        scroller.addView(tools);root.addView(scroller);
+        loading=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+        loading.setMax(100);loading.setVisibility(View.GONE);root.addView(loading,new LinearLayout.LayoutParams(-1,dp(3)));
+        pageInfo=label("Accès rapides · les liens .onion passent uniquement par Tor",12,0xffb6c3dd);
+        pageInfo.setMaxLines(2);pageInfo.setPadding(dp(4),dp(4),dp(2),dp(5));root.addView(pageInfo);
+
+        startPage=new ScrollView(this);
+        startPage.setFillViewport(false);
+        LinearLayout home=new LinearLayout(this);home.setOrientation(LinearLayout.VERTICAL);home.setPadding(dp(6),dp(4),dp(6),dp(10));
+        TextView intro=label("Recherche .onion",24,0xffe8dfff);intro.setTypeface(null,android.graphics.Typeface.BOLD);home.addView(intro);
+        home.addView(label("Découvrir le réseau Tor et ses services publics.",13,0xffb5c1de));
+        LinearLayout searchRow=new LinearLayout(this);
+        EditText search=new EditText(this);search.setSingleLine();search.setTextColor(0xfff8f7ff);search.setHintTextColor(0xffadb2c3);
+        search.setHint("Rechercher sur Ahmia…");search.setTextSize(15);search.setBackground(round(0xff202c46,0xff586c91));
+        search.setPadding(dp(12),0,dp(12),0);
+        searchRow.addView(search,new LinearLayout.LayoutParams(0,dp(48),1));
+        Button searchButton=control("Chercher");searchButton.setBackground(round(0xff6638dc,0xff6638dc));
+        searchButton.setOnClickListener(v->searchAhmia(search.getText().toString()));
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(102),dp(48));sp.leftMargin=dp(6);
+        searchRow.addView(searchButton,sp);
+        LinearLayout.LayoutParams searchParams=new LinearLayout.LayoutParams(-1,-2);searchParams.topMargin=dp(14);home.addView(searchRow,searchParams);
+
+        TextView quick=label("Accès rapides",19,0xfff8f5ff);quick.setTypeface(null,android.graphics.Typeface.BOLD);
+        quick.setPadding(0,dp(18),0,dp(6));home.addView(quick);
+        shortcut(home,"Ahmia Search","Recherche de services .onion",AHMIA);
+        shortcut(home,"DuckDuckGo Onion","Recherche privée",""+DDG);
+        shortcut(home,"Tor Project","Répertoire de services vérifiés","https://onion.torproject.org/");
+        shortcut(home,"ProPublica SecureDrop","Contact sécurisé pour les sources","http://33xu4yhum2eiisxm6fntaslayop76fvaqgt3ak5dakdm3t7cub25cead.onion/");
+        shortcut(home,"Guide Tor en français","Documentation et réglages","https://support.torproject.org/fr/");
+        shortcut(home,"Vérifier Tor","Test officiel de la connexion",FRENCH_HOME);
+        TextView tips=label("Confidentialité : vérifiez les adresses .onion. Le JavaScript est désactivé. Évitez les téléchargements inconnus. Le mode léger retire les images mais ne peut pas accélérer les relais Tor.",12,0xffa9b6d3);
+        tips.setPadding(0,dp(15),0,dp(8));home.addView(tips);
+        startPage.addView(home);
+        root.addView(startPage,new LinearLayout.LayoutParams(-1,0,1));
+
+        translatedPage=new ScrollView(this);translatedPage.setVisibility(View.GONE);
+        LinearLayout reader=new LinearLayout(this);reader.setOrientation(LinearLayout.VERTICAL);
+        Button close=control("Retour à la page");close.setOnClickListener(v->showBrowser());
+        reader.addView(close);
+        translatedText=label("",15,0xffedf1ff);
+        translatedText.setTextIsSelectable(true);
+        translatedText.setPadding(dp(10),dp(12),dp(10),dp(20));
+        reader.addView(translatedText);translatedPage.addView(reader);
+        root.addView(translatedPage,new LinearLayout.LayoutParams(-1,0,1));
+
+        web=new WebView(this);
+        web.setTag("chk_tor_webview");
+        WebSettings settings=web.getSettings();
+        settings.setJavaScriptEnabled(false);settings.setOffscreenPreRaster(false);
+        settings.setDomStorageEnabled(false);settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);settings.setGeolocationEnabled(false);
+        settings.setSaveFormData(false);settings.setSafeBrowsingEnabled(false);
+        settings.setSupportMultipleWindows(false);
+        settings.setMediaPlaybackRequiresUserGesture(true);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
-        web.setWebChromeClient(new WebChromeClient(){@Override public void onPermissionRequest(PermissionRequest request){request.deny();}});
+        web.setWebChromeClient(new WebChromeClient(){
+            @Override public void onPermissionRequest(PermissionRequest request){request.deny();}
+            @Override public void onProgressChanged(WebView view,int progress){
+                loading.setProgress(progress);
+                loading.setVisibility(progress>=100?View.GONE:View.VISIBLE);
+            }
+        });
         web.setDownloadListener((url,agent,disposition,type,size)->Toast.makeText(this,"Téléchargement Tor non pris en charge ; aucune requête directe envoyée",Toast.LENGTH_LONG).show());
         web.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
                 if(!request.isForMainFrame())return !allowed(request.getUrl().toString());
-                try{String url=TorUrlPolicy.checked(request.getUrl().toString());if(!runtime.policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_NOT_CONNECTED");
-                    if(request.isRedirect())return false;action("navigate",url);return true;
+                try{
+                    String url=TorUrlPolicy.checked(request.getUrl().toString());
+                    if(!runtime.policy.usable(SystemClock.elapsedRealtime()))throw new Exception("TOR_NOT_CONNECTED");
+                    if(request.isRedirect())return false;
+                    action("navigate",url);return true;
                 }catch(Exception e){runtime.pageFailed(e.getMessage());return true;}
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
@@ -45,19 +166,90 @@ public final class TorWebActivity extends Activity {
                 return null;
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap favicon){runtime.pageStarted(url);}
-            @Override public void onPageFinished(WebView view,String url){runtime.pageFinished(url,view.getTitle());address.setText(url);}
-            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(request.isForMainFrame())runtime.pageFailed("TOR_PAGE_NETWORK_ERROR: "+error.getErrorCode());}
-            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame())runtime.pageFailed("TOR_PAGE_HTTP_ERROR: "+response.getStatusCode());}
-            @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){handler.cancel();runtime.pageFailed("TOR_PAGE_TLS_REJECTED");}
+            @Override public void onPageFinished(WebView view,String url){
+                runtime.pageFinished(url,view.getTitle());address.setText(url);
+                pageInfo.setText("Page : "+(view.getTitle()==null?url:view.getTitle()));
+            }
+            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){
+                if(request.isForMainFrame()){runtime.pageFailed("TOR_PAGE_NETWORK_ERROR: "+error.getErrorCode());pageInfo.setText("Échec réseau Tor : "+error.getDescription());}
+            }
+            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
+                if(request.isForMainFrame()){runtime.pageFailed("TOR_PAGE_HTTP_ERROR: "+response.getStatusCode());pageInfo.setText("Site indisponible ou protection anti-Tor (HTTP "+response.getStatusCode()+")");}
+            }
+            @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){
+                handler.cancel();runtime.pageFailed("TOR_PAGE_TLS_REJECTED");pageInfo.setText("Certificat HTTPS rejeté.");
+            }
         });
-        box.addView(web,new LinearLayout.LayoutParams(-1,0,1));setContentView(box);runtime.attach(this,web);
-        if(getIntent().getBooleanExtra("start_french_home",false))runtime.main.post(()->{
-            if(!isFinishing()&&!isDestroyed()&&web!=null)action("navigate",FRENCH_HOME);
-        });
+        web.setVisibility(View.GONE);
+        root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
+        setContentView(root);runtime.attach(this,web);
+        // Always open the local dashboard first, even on direct launch.
+        showHome();
+    }
+    private int dp(float value){return Math.round(value*getResources().getDisplayMetrics().density);}
+    private GradientDrawable round(int color,int stroke){
+        GradientDrawable bg=new GradientDrawable();
+        bg.setColor(color);bg.setCornerRadius(dp(13));bg.setStroke(dp(1),stroke);return bg;
+    }
+    private TextView label(String text,int size,int color){
+        TextView t=new TextView(this);t.setText(text);t.setTextSize(size);t.setTextColor(color);return t;
+    }
+    private Button control(String text){
+        Button b=new Button(this);b.setAllCaps(false);b.setTextSize(13);b.setTextColor(0xfff5f2ff);
+        b.setBackground(round(0xff202a43,0xff405273));return b;
+    }
+    private Button small(LinearLayout row,String title,Runnable click){
+        Button b=control(title);b.setOnClickListener(v->click.run());
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(42));p.rightMargin=dp(5);row.addView(b,p);return b;
+    }
+    private void shortcut(LinearLayout home,String title,String note,String url){
+        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(round(0xff192640,0xff304560));card.setPadding(dp(15),dp(10),dp(8),dp(10));
+        TextView name=label(title+"  ›",15,0xfffbf7ff);name.setTypeface(null,android.graphics.Typeface.BOLD);
+        card.addView(name);card.addView(label(note,12,0xffa9bbd5));
+        card.setOnClickListener(v->action("navigate",url));
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.bottomMargin=dp(7);home.addView(card,params);
+    }
+    private void searchAhmia(String query){
+        String q=query==null?"":query.trim();
+        if(q.isEmpty()){Toast.makeText(this,"Écris un mot pour chercher.",Toast.LENGTH_SHORT).show();return;}
+        if(q.length()>200)q=q.substring(0,200);
+        try{action("navigate",AHMIA+"search/?q="+URLEncoder.encode(q,"UTF-8"));}
+        catch(Exception e){pageInfo.setText("Recherche invalide : "+e.getMessage());}
+    }
+    private void openAddress(){
+        String raw=address.getText().toString().trim();
+        if(raw.isEmpty()){showHome();return;}
+        if(raw.contains(" ")&&!raw.startsWith("http")){searchAhmia(raw);return;}
+        if(!raw.contains("://"))raw=(raw.contains(".onion")?"http://":"https://")+raw;
+        action("navigate",raw);
+    }
+    private void showHome(){startPage.setVisibility(View.VISIBLE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.GONE);}
+    private void showBrowser(){startPage.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);translatedPage.setVisibility(View.GONE);}
+    private void translatePage(){
+        showBrowser();
+        translatedText.setText("Lecture et traduction hors ligne en cours…");
+        startPage.setVisibility(View.GONE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.VISIBLE);
+        try{runtime.command(new JSONObject().put("operation","read"),(ok,value)->{
+            if(isFinishing()||isDestroyed())return;
+            if(!ok){translatedText.setText("Lecture via Tor impossible : "+value.optString("error","page indisponible"));return;}
+            String body=value.optString("text","");
+            TorFrenchTranslator.translate(this,body,(success,result)->runOnUiThread(()->{
+                if(!isFinishing()&&!isDestroyed())translatedText.setText((success?"Traduction EN → FR · Mode lecture hors ligne\\n\\n":"")+result);
+            }));
+        });}catch(Exception e){translatedText.setText("Traduction impossible : "+e.getMessage());}
     }
     private boolean allowed(String url){if(url.equals("about:blank")||url.startsWith("data:"))return true;try{TorUrlPolicy.checked(url);return runtime.policy.usable(SystemClock.elapsedRealtime());}catch(Exception e){return false;}}
-    private void button(LinearLayout row,String title,Runnable action){Button b=new Button(this);b.setAllCaps(false);b.setText(title);b.setOnClickListener(v->action.run());row.addView(b,new LinearLayout.LayoutParams(0,-2,1));}
-    private void action(String op,String url){try{JSONObject args=runtime.uiArgs(op);if(url!=null)args.put("url",url);runtime.command(args,(ok,value)->{if(!ok)Toast.makeText(this,value.optString("error","Navigation non confirmée"),Toast.LENGTH_LONG).show();});}catch(Exception e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}}
+    private void action(String op,String url){
+        try{
+            if(!op.equals("cancel_navigation")){showBrowser();pageInfo.setText("Navigation via Tor…");loading.setVisibility(View.VISIBLE);loading.setProgress(5);}
+            JSONObject args=runtime.uiArgs(op);if(url!=null)args.put("url",url);
+            runtime.command(args,(ok,value)->{
+                if(!ok){pageInfo.setText("Navigation interrompue : "+value.optString("error","site indisponible"));loading.setVisibility(View.GONE);Toast.makeText(this,value.optString("error","Navigation non confirmée"),Toast.LENGTH_LONG).show();}
+                else if(op.equals("cancel_navigation")){loading.setVisibility(View.GONE);pageInfo.setText("Chargement arrêté.");}
+            });
+        }catch(Exception e){loading.setVisibility(View.GONE);pageInfo.setText(e.getMessage());Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}
+    }
     private static String frenchState(String value){
         if("connected".equals(value))return "Connecté";
         if("connecting".equals(value))return "Connexion en cours";
