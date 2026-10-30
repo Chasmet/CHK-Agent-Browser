@@ -76,6 +76,7 @@ final class TorRuntime {
             if(op.equals("read")){read(args,cb);return;}
             if(op.equals("screenshot")){if(!args.optBoolean("preview_allowed"))throw new Exception("PREVIEW_SHARING_DISABLED");if(!hasLiveWebView())throw new Exception("TOR_WEBVIEW_UNAVAILABLE_OPEN_ONCE");screen.capture(cb);return;}
             if(op.equals("close_browser")){if(screen!=null)screen.finish();waitClosed(cb,SystemClock.elapsedRealtime()+5000);return;}
+            if(op.equals("cancel_navigation")){if(navigationReply==null){reply(cb,true);return;}if(web!=null)web.stopLoading();finishNavigation(false,"TOR_NAVIGATION_CANCELLED_BY_USER");reply(cb,true);return;}
             if(!Arrays.asList("navigate","back","forward","reload").contains(op))throw new Exception("TOR_OPERATION_UNSUPPORTED");
             navigate(args,cb);
         }catch(Exception|LinkageError e){
@@ -167,12 +168,27 @@ final class TorRuntime {
         final String target=TorUrlPolicy.checked(url);long ticket=policy.generation();navigationStart=SystemClock.elapsedRealtime();pageLoadStarted=false;
         navigation=new JSONObject().put("state","running").put("request_id",request).put("requested_url",target).put("session_id",sessionId);navigationReply=cb;lastPageError="";
         receipts.put(request,new JSONObject().put("fingerprint",fingerprint).put("result",new JSONObject(navigation.toString())));persistReceipts();
-        io.execute(()->{try{requireCircuit();JSONObject proof=TorHttp.diagnostic(httpPort);main.post(()->{
-            if(ticket!=policy.generation()||navigationReply==null)return;
-            if(!policy.refresh(ticket,true,true,SystemClock.elapsedRealtime())){finishNavigation(false,"TOR_SESSION_CHANGED");return;}diagnostic=proof;
-            web.getSettings().setBlockNetworkLoads(false);if(op.equals("back"))web.goBack();else if(op.equals("forward"))web.goForward();else if(op.equals("reload"))web.reload();else web.loadUrl(target);
-        });}catch(Exception e){main.post(()->{block(e.getMessage());finishNavigation(false,e.getMessage());});}});
-        main.postDelayed(()->{if(navigationReply!=null&&navigation!=null&&request.equals(navigation.optString("request_id"))){if(web!=null)web.stopLoading();finishNavigation(false,"TOR_PAGE_LOAD_TIMEOUT");}},150000);
+        // Reuse a recent Tor proof to avoid a full network probe before every tap.
+        // Fail closed: expired proof is revalidated through Tor before WebView can load.
+        io.execute(()->{try{
+            requireCircuit();
+            final JSONObject proof=policy.proofAge(SystemClock.elapsedRealtime())<30000?null:TorHttp.diagnostic(httpPort);
+            main.post(()->{
+                if(ticket!=policy.generation()||navigationReply==null)return;
+                if(proof!=null){
+                    if(!policy.refresh(ticket,true,true,SystemClock.elapsedRealtime())){finishNavigation(false,"TOR_SESSION_CHANGED");return;}
+                    diagnostic=proof;
+                }
+                if(!policy.usable(SystemClock.elapsedRealtime())||!proxyReady){finishNavigation(false,"TOR_PROOF_EXPIRED");return;}
+                web.getSettings().setBlockNetworkLoads(false);
+                if(op.equals("back"))web.goBack();else if(op.equals("forward"))web.goForward();else if(op.equals("reload"))web.reload();else web.loadUrl(target);
+            });
+        }catch(Exception e){main.post(()->{
+            // A failed diagnostic must not permit clear-network fallback.
+            block(e.getMessage());finishNavigation(false,e.getMessage());
+        });}});
+        final long navigationTimeout=target.contains(".onion")?90000:45000;
+        main.postDelayed(()->{if(navigationReply!=null&&navigation!=null&&request.equals(navigation.optString("request_id"))){if(web!=null)web.stopLoading();finishNavigation(false,"TOR_PAGE_LOAD_TIMEOUT");}},navigationTimeout);
     }
     void pageStarted(String url){if(navigationReply==null)return;try{if(pageLoadStarted||TorUrlPolicy.checked(url).equals(navigation.optString("requested_url")))pageLoadStarted=true;}catch(Exception e){pageFailed(e.getMessage());}}
     void pageFinished(String url,String title){
