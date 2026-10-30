@@ -8,6 +8,9 @@ import android.os.Bundle;
 public final class AgentApplication extends Application {
     @Override public void onCreate(){
         super.onCreate();
+        // The offline translation worker is a separate private process. It must not
+        // start the normal browser, MCP agent or other background services.
+        if(getProcessName().endsWith(":tortranslate"))return;
         if(android.os.Build.VERSION.SDK_INT>=28&&getProcessName().endsWith(":tor")){
             // Must precede any WebView/CookieManager access. Never start MCP or the normal browser here.
             android.webkit.WebView.setDataDirectorySuffix("chk_tor");

@@ -254,7 +254,7 @@ public final class TorWebActivity extends Activity {
 
     /** Install public ML Kit language models through a private bound service.
      * The :tor UI stays in front; only a command code and a success flag cross IPC.
-     * No URL, page text, cookies or Tor proxy settings are ever sent to the main process.
+     * No URL, page text, cookies or Tor proxy settings are ever sent to the model downloader.
      */
     private void installFrenchModel(){
         if(modelInstallationActive){
@@ -275,7 +275,7 @@ public final class TorWebActivity extends Activity {
                 Toast.makeText(this,"Modèle français indisponible : "+detail,Toast.LENGTH_LONG).show();
                 return;
             }
-            TorFrenchTranslator.isReady(this,(ready,reason)->runOnUiThread(()->{
+            TorOfflineTranslationClient.isReady(this,(ready,reason)->runOnUiThread(()->{
                 if(isFinishing()||isDestroyed())return;
                 if(!ready){
                     pageInfo.setText("FR · modèle téléchargé mais inaccessible : "+reason);
@@ -302,7 +302,7 @@ public final class TorWebActivity extends Activity {
         final String url=web.getUrl();
         pageInfo.setText("FR · vérification du traducteur local");
         // Fast model check BEFORE any additional Tor request.
-        TorFrenchTranslator.isReady(this,(ready,detail)->runOnUiThread(()->{
+        TorOfflineTranslationClient.isReady(this,(ready,detail)->runOnUiThread(()->{
             if(token!=translationToken||isFinishing()||isDestroyed())return;
             if(!ready){
                 new android.app.AlertDialog.Builder(this)
@@ -335,7 +335,7 @@ public final class TorWebActivity extends Activity {
         if(text==null||text.trim().isEmpty()){translatedText.setText("Aucun texte lisible.");return;}
         final String header="Français · "+(visible?"texte affiché":"mode lecture")+"\n\n";
         translatedText.setText(header+"Traduction en cours…");
-        TorFrenchTranslator.translate(this,text,
+        TorOfflineTranslationClient.translate(this,text,
             (partial,n,total)->runOnUiThread(()->{
                 if(token!=translationToken||isFinishing()||isDestroyed())return;
                 translatedText.setText(header+partial+"\n\n["+n+"/"+total+" passages]");
