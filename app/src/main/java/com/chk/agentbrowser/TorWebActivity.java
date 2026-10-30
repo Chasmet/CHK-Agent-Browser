@@ -5,6 +5,9 @@ import android.graphics.*;
 import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
 import android.view.inputmethod.EditorInfo;
+import android.view.accessibility.AccessibilityNodeInfo;
+import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.net.URLEncoder;
 import android.net.http.SslError;
 import android.os.*;
@@ -144,6 +147,10 @@ public final class TorWebActivity extends Activity {
         readerTitle.setTypeface(null,android.graphics.Typeface.BOLD);reader.addView(readerTitle);
         TextView close=control("Page originale");close.setOnClickListener(v->showBrowser());
         reader.addView(close);
+        TextView fullReader=control("Lire toute la page via Tor");
+        fullReader.setOnClickListener(v->translatePage(true));
+        LinearLayout.LayoutParams fullParams=new LinearLayout.LayoutParams(-1,dp(43));
+        fullParams.topMargin=dp(6);reader.addView(fullReader,fullParams);
         TextView setup=control("Installer le modèle français (une fois)");
         setup.setOnClickListener(v->openFrenchSetup());
         LinearLayout.LayoutParams setupParams=new LinearLayout.LayoutParams(-1,dp(43));
@@ -273,17 +280,20 @@ public final class TorWebActivity extends Activity {
         startActivity(new android.content.Intent(this,TorEntryActivity.class)
             .putExtra("prepare_translation_model",true));
     }
-    private void translatePage(){
+    private void translatePage(){translatePage(false);}
+    private void translatePage(boolean forceEntirePage){
         if(web==null || web.getUrl()==null || web.getUrl().isEmpty()){
             pageInfo.setText("Ouvre d'abord une page pour la traduire.");return;
         }
         final String requested=web.getUrl();
+        // Local accessibility tree first: avoids a second, sometimes very slow, Tor request.
+        final String visible=forceEntirePage?"":extractVisiblePageText();
         final int ticket=++translationTicket;
-        if(requested.equals(cachedFrenchUrl)&&!cachedFrenchText.isEmpty()){
+        if(!forceEntirePage&&requested.equals(cachedFrenchUrl)&&!cachedFrenchText.isEmpty()){
             translatedText.setText(cachedFrenchText);
             showReader();return;
         }
-        translatedText.setText("Vérification du modèle FR hors ligne…");
+        translatedText.setText("Vérification du modèle français…");
         showReader();
         TorFrenchTranslator.ready((ready,message)->runOnUiThread(()->{
             if(ticket!=translationTicket || isFinishing() || isDestroyed())return;
@@ -291,26 +301,62 @@ public final class TorWebActivity extends Activity {
                 translatedText.setText(message+"\n\nAppuie sur « Installer le modèle français » ci-dessus, puis reviens dans Tor.");
                 return;
             }
-            translatedText.setText("Lecture de la page via Tor…\nLa traduction se fait ensuite sur le téléphone.");
+            if(visible.length()>=90){
+                translateText(visible,ticket,requested,"Texte affiché · traduction locale");
+                return;
+            }
+            translatedText.setText("Récupération du texte via Tor…\nCe site peut être lent à répondre.");
             try{
                 runtime.command(new JSONObject().put("operation","read").put("url",requested),(ok,value)->{
                     if(ticket!=translationTicket||isFinishing()||isDestroyed())return;
                     if(!ok){
                         translatedText.setText("Lecture indisponible : "+
-                            value.optString("error","site lent ou inaccessible")+"\n\nTu peux continuer à naviguer sur la page originale.");
+                            value.optString("error","site lent ou inaccessible")+
+                            "\n\nTu peux continuer à naviguer sur la page originale.");
                         return;
                     }
-                    translatedText.setText("Traduction locale EN → FR…");
-                    TorFrenchTranslator.translate(this,value.optString("text",""),(success,content)->
-                        runOnUiThread(()->{
-                            if(ticket!=translationTicket||isFinishing()||isDestroyed())return;
-                            String rendered=success?"Traduction EN → FR (lecture native)\n\n"+content:content;
-                            translatedText.setText(rendered);
-                            if(success){cachedFrenchUrl=requested;cachedFrenchText=rendered;}
-                        }));
+                    translateText(value.optString("text",""),ticket,requested,
+                                  "Page via Tor · traduction locale");
                 });
             }catch(Exception e){translatedText.setText("Traduction impossible : "+e.getMessage());}
         }));
+    }
+    private void translateText(String source,int ticket,String url,String label){
+        translatedText.setText("Traduction EN → FR sur le téléphone…");
+        TorFrenchTranslator.translate(this,source,(success,content)->runOnUiThread(()->{
+            if(ticket!=translationTicket || isFinishing() || isDestroyed())return;
+            String rendered=success?label+"\n\n"+content:content;
+            translatedText.setText(rendered);
+            if(success){cachedFrenchUrl=url;cachedFrenchText=rendered;}
+        }));
+    }
+    /** Read only WebView native accessibility text. No JavaScript, no direct network. */
+    private String extractVisiblePageText(){
+        if(web==null)return "";
+        StringBuilder content=new StringBuilder();
+        HashSet<String> seen=new HashSet<>();
+        ArrayDeque<AccessibilityNodeInfo> pending=new ArrayDeque<>();
+        try{
+            AccessibilityNodeInfo root=web.createAccessibilityNodeInfo();
+            if(root==null)return "";
+            pending.add(root);
+            int visited=0;
+            while(!pending.isEmpty() && visited++<400 && content.length()<10000){
+                AccessibilityNodeInfo node=pending.removeFirst();
+                CharSequence words=node.getText();
+                if(words!=null){
+                    String txt=words.toString().trim();
+                    if(!txt.isEmpty()&&txt.length()<3000&&seen.add(txt))
+                        content.append(txt).append('\n');
+                }
+                int count=Math.min(node.getChildCount(),60);
+                for(int i=0;i<count && pending.size()<400;i++){
+                    AccessibilityNodeInfo child=node.getChild(i);
+                    if(child!=null)pending.add(child);
+                }
+            }
+        }catch(Exception ignored){return "";}
+        return content.toString().trim();
     }
     private void showReader(){
         startPage.setVisibility(View.GONE);
