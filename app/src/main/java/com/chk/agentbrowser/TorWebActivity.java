@@ -27,7 +27,8 @@ public final class TorWebActivity extends Activity {
     private ScrollView startPage, translatedPage;
     private ProgressBar loading;
     private boolean lightweight;
-    private TextView lightweightButton;
+    private TextView lightweightButton, autoFrenchButton;
+    private boolean autoFrench, resumeFrenchAfterInstall;
     private static final String AHMIA="http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/";
     private static final String DDG="http://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/";
     boolean resumed;
@@ -50,10 +51,21 @@ public final class TorWebActivity extends Activity {
         LinearLayout translationRow=new LinearLayout(this);
         translationRow.setOrientation(LinearLayout.HORIZONTAL);
         translationRow.setPadding(0,dp(6),0,dp(5));
-        TextView translate=control("FR  Traduire cette page");translate.setOnClickListener(v->translatePage());
+        TextView translate=control("Traduire FR");translate.setOnClickListener(v->translatePage());
         translationRow.addView(translate,new LinearLayout.LayoutParams(0,dp(43),1));
+        autoFrench=getPreferences(MODE_PRIVATE).getBoolean("automatic_french",false);
+        autoFrenchButton=control(autoFrench?"FR auto ON":"FR auto OFF");
+        autoFrenchButton.setOnClickListener(v->{
+            autoFrench=!autoFrench;
+            getPreferences(MODE_PRIVATE).edit().putBoolean("automatic_french",autoFrench).apply();
+            autoFrenchButton.setText(autoFrench?"FR auto ON":"FR auto OFF");
+            if(autoFrench&&web!=null&&web.getUrl()!=null&&web.getUrl().startsWith("http"))translatePage();
+        });
+        LinearLayout.LayoutParams autoParams=new LinearLayout.LayoutParams(dp(107),dp(43));
+        autoParams.leftMargin=dp(5);
+        translationRow.addView(autoFrenchButton,autoParams);
         TextView homeButton=control("Accueil");homeButton.setOnClickListener(v->showHome());
-        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(dp(100),dp(43));hp.leftMargin=dp(7);
+        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(dp(70),dp(43));hp.leftMargin=dp(7);
         translationRow.addView(homeButton,hp);root.addView(translationRow);
 
         LinearLayout bar=new LinearLayout(this);bar.setOrientation(LinearLayout.HORIZONTAL);
@@ -179,6 +191,14 @@ public final class TorWebActivity extends Activity {
             @Override public void onPageFinished(WebView view,String url){
                 runtime.pageFinished(url,view.getTitle());address.setText(url);
                 pageInfo.setText("Page : "+(view.getTitle()==null?url:view.getTitle()));
+                if(autoFrench&&url!=null&&url.startsWith("http")){
+                    final String loadedUrl=url;
+                    runtime.main.postDelayed(()->{
+                        if(!isFinishing()&&!isDestroyed()&&web!=null
+                            &&autoFrench&&loadedUrl.equals(web.getUrl())
+                            &&web.getVisibility()==View.VISIBLE)translatePage();
+                    },350);
+                }
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){
                 if(request.isForMainFrame()){runtime.pageFailed("TOR_PAGE_NETWORK_ERROR: "+error.getErrorCode());pageInfo.setText("Échec réseau Tor : "+error.getDescription());}
@@ -251,6 +271,7 @@ public final class TorWebActivity extends Activity {
     void showBrowserForNavigation(){translationToken++;startPage.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);translatedPage.setVisibility(View.GONE);}
 
     private void installFrenchModel(){
+        resumeFrenchAfterInstall=true;
         // Download public language models in CHK's main process, not in :tor.
         startActivity(new android.content.Intent(this,TorEntryActivity.class).putExtra("download_translate",true));
     }
@@ -345,7 +366,14 @@ public final class TorWebActivity extends Activity {
             if(!op.equals("cancel_navigation")){showBrowser();pageInfo.setText("Navigation via Tor…");loading.setVisibility(View.VISIBLE);loading.setProgress(5);}
             JSONObject args=runtime.uiArgs(op);if(url!=null)args.put("url",url);
             runtime.command(args,(ok,value)->{
-                if(!ok){pageInfo.setText("Navigation interrompue : "+value.optString("error","site indisponible"));loading.setVisibility(View.GONE);Toast.makeText(this,value.optString("error","Navigation non confirmée"),Toast.LENGTH_LONG).show();}
+                if(!ok){
+                    String reason=value.optString("error","site indisponible");
+                    if("TOR_NAVIGATION_REPLACED".equals(reason))return;
+                    if("TOR_HISTORY_BOUNDARY".equals(reason))reason="Aucune page précédente ou suivante.";
+                    pageInfo.setText("Navigation Tor : "+reason);
+                    loading.setVisibility(View.GONE);
+                    Toast.makeText(this,reason,Toast.LENGTH_LONG).show();
+                }
                 else if(op.equals("cancel_navigation")){loading.setVisibility(View.GONE);pageInfo.setText("Chargement arrêté.");}
             });
         }catch(Exception e){loading.setVisibility(View.GONE);pageInfo.setText(e.getMessage());Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}
@@ -366,7 +394,17 @@ public final class TorWebActivity extends Activity {
         }catch(Exception ignored){}
         runtime.main.postDelayed(this,1500);
     }};
-    @Override protected void onResume(){super.onResume();resumed=true;if(runtime!=null)runtime.main.post(tick);}
+    @Override protected void onResume(){
+        super.onResume();resumed=true;
+        if(runtime!=null)runtime.main.post(tick);
+        if(resumeFrenchAfterInstall){
+            resumeFrenchAfterInstall=false;
+            TorFrenchTranslator.isReady(this,(ready,detail)->runOnUiThread(()->{
+                if(ready&&!isFinishing()&&web!=null&&web.getUrl()!=null&&web.getUrl().startsWith("http"))translatePage();
+                else if(!ready)pageInfo.setText("Installation du français non terminée. Vous pouvez réessayer.");
+            }));
+        }
+    }
     @Override protected void onPause(){resumed=false;if(runtime!=null)runtime.main.removeCallbacks(tick);super.onPause();}
     @Override protected void onDestroy(){if(runtime!=null)runtime.detach(this);if(web!=null){web.stopLoading();web.destroy();web=null;}super.onDestroy();}
     /**
