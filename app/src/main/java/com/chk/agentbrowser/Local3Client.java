@@ -234,7 +234,10 @@ public final class Local3Client {
         JSONArray compatible=new JSONArray(),all=capabilities();
         for(int i=0;i<all.length();i++){
             JSONObject entry=all.getJSONObject(i);String name=entry.getString("name");
-            if(!name.equals("browser_download_file")&&!name.equals("browser_click_when_enabled"))compatible.put(entry);
+            if(!name.equals("browser_download_file")&&!name.equals("browser_click_when_enabled")
+                &&!name.equals("notes_folders")&&!name.equals("notes_folder_save")
+                &&!name.equals("notes_folder_delete")&&!name.equals("notes_move"))
+                compatible.put(entry);
         }
         return compatible;
     }
