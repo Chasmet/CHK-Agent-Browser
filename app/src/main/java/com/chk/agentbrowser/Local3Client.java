@@ -200,7 +200,7 @@ public final class Local3Client {
             "files_downloads","files_preview","files_detect_format","files_capabilities",
             "files_archive_list","files_archive_read","files_media_inspect",
             "document_read","document_page","media_info","media_frame","media_codecs",
-            "workspace_status","notes_list","notes_read","video_editor_capabilities",
+            "workspace_status","notes_list","notes_read","notes_folders","video_editor_capabilities",
             "video_editor_queue_status","video_editor_status","video_editor_wait",
             "video_editor_project_read","video_editor_verify_output","publication_list",
             "publication_status"
@@ -215,6 +215,7 @@ public final class Local3Client {
             "files_transfer_commit","files_transfer_abort","files_task",
             "files_batch","files_convert","files_extract_archive","document_create",
             "notes_save","notes_trash","notes_restore","notes_export",
+            "notes_folder_save","notes_folder_delete","notes_move",
             "video_editor_project_create","video_editor_project_update",
             "video_editor_render","publication_prepare","publication_cancel",
             "keyboard","desktop"
