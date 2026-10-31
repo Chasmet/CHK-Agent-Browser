@@ -10,13 +10,14 @@ import android.widget.Spinner;
 import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.util.function.Consumer;
+
 
 /** Folder controls shared by Notes home and the note editor. No filesystem changes. */
 public final class NotesFolderDialogs {
     private static final String[] COLORS={"#3B82F6","#9B6DE3","#22B98B","#F59E50","#E66A9B","#64748B"};
     private static final String[] NAMES={"Bleu","Violet","Vert","Orange","Rose","Ardoise"};
     private NotesFolderDialogs(){}
+    public interface Choice{void picked(String folderId);}
 
     public static void edit(Activity a,JSONObject existing,Runnable onSaved){
         final String oldId=existing==null?"":existing.optString("id","");
@@ -65,7 +66,7 @@ public final class NotesFolderDialogs {
             }).show();
     }
 
-    public static void choose(Activity a,String selected,Consumer<String> onChosen){
+    public static void choose(Activity a,String selected,Choice onChosen){
         WorkspaceCommands.IO.execute(()->{
             try{
                 JSONArray folders=new WorkspaceStore(a).noteFolders();
@@ -81,7 +82,7 @@ public final class NotesFolderDialogs {
                 WorkspaceCommands.UI.post(()->{
                     if(a.isFinishing()||a.isDestroyed())return;
                     new AgentDialog.Builder(a).setTitle("Choisir un dossier")
-                        .setItems(labels,(d,index)->onChosen.accept(ids[index]))
+                        .setItems(labels,(d,index)->onChosen.picked(ids[index]))
                         .setNegativeButton("Annuler",null).show();
                 });
             }catch(Exception e){WorkspaceCommands.UI.post(()->Toast.makeText(a,"Dossiers indisponibles",Toast.LENGTH_SHORT).show());}
