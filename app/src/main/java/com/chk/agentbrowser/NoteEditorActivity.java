@@ -10,8 +10,8 @@ import org.json.JSONObject;
 public final class NoteEditorActivity extends Activity {
     private EditText title,body;
     private Switch pinned;
-    private TextView status,sourceView;
-    private String id="",source="";
+    private TextView status,sourceView,folderView;
+    private String id="",source="",folderId="";
     private int revision;
     private SaveState lastSave;
     private static final class SaveState {
@@ -25,14 +25,15 @@ public final class NoteEditorActivity extends Activity {
     private final android.os.Handler handler=new android.os.Handler();
     private final Runnable autosave=()->save();
     @Override public void onCreate(Bundle saved){super.onCreate(saved);setContentView(R.layout.activity_note_editor);
-        title=findViewById(R.id.note_title);body=findViewById(R.id.note_body);pinned=findViewById(R.id.note_pinned);status=findViewById(R.id.note_status);sourceView=findViewById(R.id.note_source);
+        title=findViewById(R.id.note_title);body=findViewById(R.id.note_body);pinned=findViewById(R.id.note_pinned);status=findViewById(R.id.note_status);sourceView=findViewById(R.id.note_source);folderView=findViewById(R.id.note_folder);
+        folderView.setOnClickListener(v->NotesFolderDialogs.choose(this,folderId,chosen->{folderId=chosen;showFolder();changed();}));
         findViewById(R.id.note_back).setOnClickListener(v->onBackPressed());findViewById(R.id.note_menu).setOnClickListener(v->menu());
         findViewById(R.id.note_checklist).setOnClickListener(v->{int pos=Math.max(0,body.getSelectionStart());body.getText().insert(pos,(pos>0?"\n":"")+"[ ] ");body.requestFocus();});
         TextWatcher watcher=new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int a){}public void onTextChanged(CharSequence s,int st,int b,int c){changed();}public void afterTextChanged(Editable e){}};
         title.addTextChangedListener(watcher);body.addTextChangedListener(watcher);pinned.setOnCheckedChangeListener((b,c)->changed());
         id=saved==null?getIntent().getStringExtra("id"):saved.getString("id","");if(id==null)id="";
-        if(saved!=null){source=saved.getString("source","");revision=saved.getInt("revision");title.setText(saved.getString("title",""));body.setText(saved.getString("body",""));pinned.setChecked(saved.getBoolean("pinned"));loading=false;dirty=saved.getBoolean("dirty",true);showSource();if(dirty)handler.post(autosave);}
-        else if(id.isEmpty()){title.setText(getIntent().getStringExtra("title"));body.setText(getIntent().getStringExtra("body"));source=getIntent().getStringExtra("source");if(source==null)source="";loading=false;dirty=true;showSource();handler.post(autosave);}
+        if(saved!=null){source=saved.getString("source","");folderId=saved.getString("folder_id","");revision=saved.getInt("revision");title.setText(saved.getString("title",""));body.setText(saved.getString("body",""));pinned.setChecked(saved.getBoolean("pinned"));loading=false;dirty=saved.getBoolean("dirty",true);showSource();showFolder();if(dirty)handler.post(autosave);}
+        else if(id.isEmpty()){folderId=getIntent().getStringExtra("folder_id");if(folderId==null)folderId="";title.setText(getIntent().getStringExtra("title"));body.setText(getIntent().getStringExtra("body"));source=getIntent().getStringExtra("source");if(source==null)source="";loading=false;dirty=true;showSource();showFolder();handler.post(autosave);}
         else load();
         Object retained=getLastNonConfigurationInstance();
         if(retained instanceof SaveState){
@@ -40,11 +41,32 @@ public final class NoteEditorActivity extends Activity {
             if(lastSave.complete)finishSave(lastSave);
         }
     }
-    private void load(){loading=true;title.setEnabled(false);body.setEnabled(false);pinned.setEnabled(false);String readId=id;WorkspaceCommands.IO.execute(()->{try{JSONObject n=new WorkspaceStore(this).note(readId);if(n.getBoolean("deleted"))throw new Exception("Cette note est dans la corbeille");WorkspaceCommands.UI.post(()->{if(isFinishing()||isDestroyed())return;try{id=n.getString("id");revision=n.getInt("revision");source=n.getString("source_url");title.setText(n.getString("title"));body.setText(n.getString("body"));pinned.setChecked(n.getBoolean("pinned"));loading=false;dirty=false;conflict=false;title.setEnabled(true);body.setEnabled(true);pinned.setEnabled(true);status.setText("Enregistrée sur ce téléphone");showSource();}catch(Exception e){status.setText(e.getMessage());}});}catch(Exception e){WorkspaceCommands.UI.post(()->{status.setText(e.getMessage());loading=false;});}});}
+    private void load(){loading=true;title.setEnabled(false);body.setEnabled(false);pinned.setEnabled(false);String readId=id;WorkspaceCommands.IO.execute(()->{try{JSONObject n=new WorkspaceStore(this).note(readId);if(n.getBoolean("deleted"))throw new Exception("Cette note est dans la corbeille");WorkspaceCommands.UI.post(()->{if(isFinishing()||isDestroyed())return;try{id=n.getString("id");revision=n.getInt("revision");source=n.getString("source_url");folderId=n.optString("folder_id","");title.setText(n.getString("title"));body.setText(n.getString("body"));pinned.setChecked(n.getBoolean("pinned"));loading=false;dirty=false;conflict=false;title.setEnabled(true);body.setEnabled(true);pinned.setEnabled(true);status.setText("Enregistrée sur ce téléphone");showSource();showFolder();}catch(Exception e){status.setText(e.getMessage());}});}catch(Exception e){WorkspaceCommands.UI.post(()->{status.setText(e.getMessage());loading=false;});}});}
     private void showSource(){sourceView.setVisibility(source.isEmpty()?android.view.View.GONE:android.view.View.VISIBLE);sourceView.setText("↗ "+source);sourceView.setOnClickListener(v->{if(source.startsWith("https://"))startActivity(new Intent(this,MainActivity.class).putExtra("open_url",source));});}
+    private void showFolder(){
+        final String requested=folderId;
+        if(requested.isEmpty()){folderView.setText("📁 Sans dossier · Modifier");return;}
+        folderView.setText("📁 Dossier · Modifier");
+        WorkspaceCommands.IO.execute(()->{
+            String label="📁 Dossier · Modifier";
+            try{
+                org.json.JSONArray folders=new WorkspaceStore(getApplicationContext()).noteFolders();
+                for(int i=0;i<folders.length();i++){
+                    JSONObject f=folders.getJSONObject(i);
+                    if(requested.equals(f.getString("id"))){
+                        label=f.getString("emoji")+" "+f.getString("name")+" · Modifier";break;
+                    }
+                }
+            }catch(Exception ignored){}
+            final String result=label;
+            WorkspaceCommands.UI.post(()->{
+                if(!isFinishing()&&!isDestroyed()&&requested.equals(folderId))folderView.setText(result);
+            });
+        });
+    }
     private void changed(){if(loading)return;dirty=true;status.setText(conflict?"Conflit : conserve une copie depuis le menu":"Modifications en cours…");handler.removeCallbacks(autosave);handler.postDelayed(autosave,650);}
     private void save(){handler.removeCallbacks(autosave);if(loading||saving||conflict||!dirty){if(leaveWhenSaved&&!dirty&&!saving&&!conflict)finish();return;}
-        String saveId=id,t=title.getText().toString(),b=body.getText().toString(),url=source;boolean pin=pinned.isChecked();int expected=revision;
+        String saveId=id,t=title.getText().toString(),b=body.getText().toString(),url=source;boolean pin=pinned.isChecked();int expected=revision;String saveFolder=folderId;
         if(saveId.isEmpty()&&t.trim().isEmpty()&&b.trim().isEmpty()&&url.isEmpty()&&!pin){
             dirty=false;status.setText("Nouvelle note");if(leaveWhenSaved)finish();return;
         }
@@ -52,7 +74,7 @@ public final class NoteEditorActivity extends Activity {
         SaveState task=new SaveState();task.owner=this;lastSave=task;
         android.content.Context app=getApplicationContext();
         WorkspaceCommands.IO.execute(()->{
-            try{JSONObject n=new WorkspaceStore(app).saveNote(saveId,t,b,url,pin,expected);task.id=n.getString("id");task.revision=n.getInt("revision");}
+            try{JSONObject n=new WorkspaceStore(app).saveNote(saveId,t,b,url,pin,expected,saveFolder);task.id=n.getString("id");task.revision=n.getInt("revision");}
             catch(Exception e){task.error=e.getMessage()==null?"Enregistrement impossible":e.getMessage();}
             WorkspaceCommands.UI.post(()->{task.complete=true;if(task.owner!=null)task.owner.finishSave(task);});
         });
@@ -65,11 +87,11 @@ public final class NoteEditorActivity extends Activity {
         if(dirty)save();else if(leaveWhenSaved)finish();
     }
     private void failed(String message){saving=false;dirty=true;conflict=true;leaveWhenSaved=false;status.setText(message);if(!isFinishing()&&!isDestroyed())new AgentDialog.Builder(this).setTitle("Modifications conservées dans l’éditeur").setMessage(message).setPositiveButton("Conserver une copie",(d,i)->copyDraft()).setNegativeButton("Continuer à lire",null).show();}
-    private void copyDraft(){if(saving)return;id="";revision=0;conflict=false;dirty=true;title.setText((title.getText()+" (copie)").substring(0,Math.min(120,title.length()+8)));save();}
+    private void copyDraft(){if(saving)return;id="";revision=0;folderId="";showFolder();conflict=false;dirty=true;title.setText((title.getText()+" (copie)").substring(0,Math.min(120,title.length()+8)));save();}
     private void menu(){new AgentDialog.Builder(this).setTitle("Ma note").setItems(new String[]{"Enregistrer","Partager le texte","Exporter en Markdown dans Fichiers","Conserver une copie","Recharger depuis le téléphone"},(d,i)->{switch(i){case 0:save();break;case 1:startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,title.getText()+"\n\n"+body.getText()+"\n"+source),"Partager la note"));break;case 2:export();break;case 3:copyDraft();break;case 4:if(saving){Toast.makeText(this,"Enregistrement en cours",Toast.LENGTH_SHORT).show();break;}new AgentDialog.Builder(this).setTitle("Recharger la note ?").setMessage("Le texte de l’éditeur sera remplacé par la dernière version enregistrée.").setNegativeButton("Annuler",null).setPositiveButton("Recharger",(dialog,w)->{handler.removeCallbacks(autosave);if(!id.isEmpty())load();}).show();break;}}).setNegativeButton("Fermer",null).show();}
     private void export(){EditText name=new EditText(this);name.setSingleLine(true);name.setText("Ma-note.md");new AgentDialog.Builder(this).setTitle("Nom du fichier Markdown").setView(name).setPositiveButton("Exporter",(d,i)->{String path=name.getText().toString(),text="# "+title.getText()+"\n\n"+body.getText()+"\n\n"+source;WorkspaceCommands.IO.execute(()->{String result;try{new WorkspaceStore(this).writeText(path,text,false);result="Note exportée dans Fichiers";}catch(Exception e){result=e.getMessage();}String m=result;WorkspaceCommands.UI.post(()->Toast.makeText(this,m,Toast.LENGTH_LONG).show());});}).setNegativeButton("Annuler",null).show();}
     @Override public void onBackPressed(){if(conflict){new AgentDialog.Builder(this).setTitle("Conserver tes modifications").setMessage("La note a changé pendant l’édition.").setPositiveButton("Enregistrer une copie et fermer",(d,i)->{leaveWhenSaved=true;copyDraft();}).setNegativeButton("Continuer l’édition",null).show();return;}leaveWhenSaved=true;save();}
     @Override protected void onPause(){save();super.onPause();}
-    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putString("id",id);out.putString("title",title.getText().toString());out.putString("body",body.getText().toString());out.putString("source",source);out.putInt("revision",revision);out.putBoolean("pinned",pinned.isChecked());out.putBoolean("dirty",dirty||saving);}
+    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putString("id",id);out.putString("title",title.getText().toString());out.putString("body",body.getText().toString());out.putString("source",source);out.putString("folder_id",folderId);out.putInt("revision",revision);out.putBoolean("pinned",pinned.isChecked());out.putBoolean("dirty",dirty||saving);}
     @Override protected void onDestroy(){if(lastSave!=null&&lastSave.owner==this)lastSave.owner=null;handler.removeCallbacksAndMessages(null);super.onDestroy();}
 }

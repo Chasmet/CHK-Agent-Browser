@@ -169,9 +169,17 @@ public final class WorkspaceCommands {
                 case "files_trash":result=new JSONObject().put("trash_id",s.trash(path));break;
                 case "files_trash_list":result=s.trashList();break;
                 case "files_restore":s.restore(args.getString("id"));result=new JSONObject().put("restored",true);break;
-                case "notes_list":result=s.notes(args.optString("query",""),args.optBoolean("deleted",false),args.optInt("offset",0));break;
+                case "notes_list":result=s.notesFiltered(args.optString("query",""),args.optBoolean("deleted",false),
+                    args.has("folder_id")?args.optString("folder_id"):null,args.optBoolean("pinned_only",false),args.optInt("offset",0));break;
+                case "notes_folders":result=s.noteFolders();break;
+                case "notes_folder_save":result=s.saveNoteFolder(args.optString("id",""),args.getString("name"),
+                    args.optString("emoji","📁"),args.optString("color","#C97821"),
+                    args.has("parent_id")?args.optString("parent_id"):null);break;
+                case "notes_folder_delete":s.deleteNoteFolder(args.getString("id"));
+                    result=new JSONObject().put("deleted",true).put("notes_preserved",true);break;
+                case "notes_move":result=s.moveNote(args.getString("id"),args.getString("folder_id"),args.getInt("revision"));break;
                 case "notes_read":result=s.note(args.getString("id"));break;
-                case "notes_save":result=s.saveNote(args.optString("id",""),args.getString("title"),args.getString("body"),args.optString("source_url",""),args.optBoolean("pinned",false),args.optInt("revision",0));break;
+                case "notes_save":result=s.saveNote(args.optString("id",""),args.getString("title"),args.getString("body"),args.optString("source_url",""),args.optBoolean("pinned",false),args.optInt("revision",0),args.has("folder_id")?args.optString("folder_id"):null);break;
                 case "notes_trash":s.deleteNote(args.getString("id"),true,args.getInt("revision"));result=new JSONObject().put("trashed",true);break;
                 case "notes_restore":s.deleteNote(args.getString("id"),false,args.getInt("revision"));result=new JSONObject().put("restored",true);break;
                 case "notes_export":JSONObject n=s.note(args.getString("id"));result=s.writeText(path,"# "+n.getString("title")+"\n\n"+n.getString("body")+"\n\n"+n.getString("source_url"),false);break;

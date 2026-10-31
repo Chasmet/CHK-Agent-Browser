@@ -80,9 +80,13 @@ final class WorkspaceCapabilities {
         add(all,"video_editor_wait","Attend un export existant, maximum 120 s ; completed indique la fin, vérifier ensuite valid via verify_output.","timeout_ms:integer?");
         add(all,"video_editor_verify_output","Vérification MP4 locale, durée, pistes, images noires ; contrôler valid=true.");
         add(all,"video_editor_cancel","Arrête l’export natif.");
-        add(all,"notes_list","Recherche des notes privées.","query:string?","deleted:boolean?","offset:integer?");
+        add(all,"notes_list","Recherche des notes privées, éventuellement dans un dossier.","query:string?","deleted:boolean?","offset:integer?","folder_id:string?","pinned_only:boolean?");
+        add(all,"notes_folders","Liste les dossiers de notes avec couleurs, emojis et compteurs.");
+        add(all,"notes_folder_save","Crée ou modifie un dossier sans modifier les notes.","id:string?","name:string","emoji:string?","color:string?","parent_id:string?");
+        add(all,"notes_folder_delete","Supprime uniquement le dossier : ses notes restent sans dossier.","id:string");
+        add(all,"notes_move","Déplace une note avec contrôle de révision, sans supprimer le contenu.","id:string","folder_id:string","revision:integer");
         add(all,"notes_read","Lit une note et sa révision.","id:string");
-        add(all,"notes_save","Sauve une note avec contrôle de révision.","title:string","body:string","id:string?","revision:integer?","source_url:string?","pinned:boolean?");
+        add(all,"notes_save","Sauve une note avec contrôle de révision.","title:string","body:string","id:string?","revision:integer?","source_url:string?","pinned:boolean?","folder_id:string?");
         add(all,"workspace_status","États Android et version du protocole ; fichiers privés et autorisations externes séparés.");
         String query=args.optString("query","").toLowerCase(Locale.ROOT);List<JSONObject> selected=new ArrayList<>();for(JSONObject item:all)if(item.getString("action").contains(query))selected.add(item);
         int offset=args.optInt("offset",0);if(offset<0||offset>selected.size())throw new Exception("Pagination du catalogue invalide.");JSONArray page=new JSONArray();for(int i=offset;i<Math.min(offset+8,selected.size());i++)page.put(selected.get(i));

@@ -102,11 +102,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TOR_VALIDATED=$(gh run list --workflow tor-connectivity.yml --commit "$GITHUB_SHA" --limit 30 --json conclusion --jq '[.[] | select(.conclusion=="success")] | length')
-          if test "${TOR_VALIDATED:-0}" -lt 1; then
-            echo "Aucun test Tor réel réussi pour ce commit ; Release bloquée."
-            exit 1
-          fi
+          # The Tor job starts on the same main commit, in parallel with Android tests.
+          # Do not publish until the same SHA is validated, never accept a previous release proof.
+          for ATTEMPT in $(seq 1 60); do
+            TOR_VALIDATED=$(gh run list --workflow tor-connectivity.yml --commit "$GITHUB_SHA" --limit 30 --json conclusion --jq '[.[] | select(.conclusion=="success")] | length')
+            if test "${TOR_VALIDATED:-0}" -ge 1; then
+              echo "Tor validé pour $GITHUB_SHA"
+              exit 0
+            fi
+            TOR_FAILED=$(gh run list --workflow tor-connectivity.yml --commit "$GITHUB_SHA" --limit 30 --json conclusion --jq '[.[] | select(.conclusion=="failure" or .conclusion=="cancelled")] | length')
+            if test "${TOR_FAILED:-0}" -ge 1; then
+              echo "Test Tor refusé sur ce commit ; aucune Release."
+              exit 1
+            fi
+            sleep 20
+          done
+          echo "Validation Tor non confirmée sur ce commit ; aucune Release."
+          exit 1
       - name: Charger signature persistante via GitHub OIDC et Render existant
         if: github.ref == 'refs/heads/main'
         run: python3 signing/prepare_ci.py

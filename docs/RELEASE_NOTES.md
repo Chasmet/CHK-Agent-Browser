@@ -1,3 +1,15 @@
+## Notes 2.0 — interface chaleureuse et dossiers imbriqués (31 octobre 2026)
+
+- Nouvel espace Notes brun nuit et ambre : cartes de notes plus lisibles, actions accessibles par « ⋮ », dossiers colorés avec emojis.
+- Hiérarchie libre de dossiers et sous-dossiers, fil d’Ariane et création depuis le dossier courant.
+- Déplacement des notes entre dossiers, épinglage, recherche, affichage des notes récentes, « Sans dossier » et corbeille.
+- Modifier le nom/la couleur/l’emoji ou déplacer un dossier. Une tentative de le déplacer dans un descendant est refusée.
+- Supprimer un dossier ne détruit **aucune note ni sous-dossier** : tous ses éléments directs sont replacés dans le parent.
+- Migration SQLite additive de l’espace privé, ancienne API de notes maintenue et conflits de révision toujours protégés.
+- MCP Local 3 : gestion des dossiers via le canal Android existant, sans modification du PC Universal Control 1.0.4.
+- Mise à jour signée avec la clé de l’application déjà installée, distribuée via GitHub Releases et détectée dans CHK.
+- Le visuel de présentation comporte des miniatures, pièces jointes et étiquettes : ces éléments ne sont pas encore un nouveau stockage de médias intégré aux Notes. L’accès aux fichiers CHK et les exports Markdown existants restent disponibles.
+
 ## Tor intégré — traducteur français et navigation plus fluide (30 octobre 2026)
 
 - Bouton FR toujours visible dans Tor et panneau de lecture traduit à l'intérieur du navigateur. L'original reste accessible immédiatement.
