@@ -669,18 +669,33 @@ public final class WorkspacePanel {
         LinearLayout.LayoutParams margin=new LinearLayout.LayoutParams(-1,-2);
         margin.setMargins(MobileUi.dp(a,1),MobileUi.dp(a,4),MobileUi.dp(a,1),MobileUi.dp(a,8));
         list.addView(card,margin);
+        LinearLayout titleRow=new LinearLayout(a);
+        titleRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        card.addView(titleRow,new LinearLayout.LayoutParams(-1,-2));
         TextView t=label((n.optBoolean("pinned")?"★  ":"▤  ")+name,17);
-        t.setMaxLines(2);t.setTypeface(null,android.graphics.Typeface.BOLD);card.addView(t);
+        t.setTextColor(0xffffebd3);t.setMaxLines(2);
+        t.setPadding(MobileUi.dp(a,3),MobileUi.dp(a,2),MobileUi.dp(a,3),MobileUi.dp(a,2));
+        t.setTypeface(null,android.graphics.Typeface.BOLD);
+        titleRow.addView(t,new LinearLayout.LayoutParams(0,-2,1));
+        TextView dots=label("⋮",23);dots.setTextColor(0xffe5ba85);
+        dots.setContentDescription("Options de la note");
+        dots.setGravity(android.view.Gravity.CENTER);
+        dots.setPadding(0,0,0,0);
+        titleRow.addView(dots,new LinearLayout.LayoutParams(MobileUi.dp(a,44),MobileUi.dp(a,44)));
+        dots.setOnClickListener(v->showNoteMenu(n));
         String excerpt=n.optString("preview","").replace('\n',' ').trim();
         if(!excerpt.isEmpty()){
             TextView snippet=MobileUi.text(a,excerpt,13,muted());
-            snippet.setMaxLines(2);snippet.setPadding(0,MobileUi.dp(a,6),0,0);card.addView(snippet);
+            snippet.setMaxLines(2);snippet.setTextColor(0xffd0bca6);snippet.setPadding(MobileUi.dp(a,3),MobileUi.dp(a,5),MobileUi.dp(a,3),0);card.addView(snippet);
         }
         TextView date=MobileUi.text(a,android.text.format.DateFormat.format("dd MMM · HH:mm",n.getLong("updated")).toString(),12,muted());
         date.setPadding(0,MobileUi.dp(a,10),0,0);date.setTextColor(0xffc0a68a);card.addView(date);
         card.setOnClickListener(v->openNote(id));
-        card.setOnLongClickListener(v->{
-            String pin=n.optBoolean("pinned")?"Désépingler":"Épingler";
+        card.setOnLongClickListener(v->{showNoteMenu(n);return true;});
+    }
+    private void showNoteMenu(JSONObject n){
+        String id=n.optString("id"),name=n.optString("title");
+        String pin=n.optBoolean("pinned")?"Désépingler":"Épingler";
             new AgentDialog.Builder(a).setTitle(name)
                 .setItems(new String[]{"Ouvrir","Déplacer dans un dossier",pin,"Mettre à la corbeille"},(d,i)->{
                     if(i==0)openNote(id);
@@ -696,8 +711,7 @@ public final class WorkspacePanel {
                         new WorkspaceStore(a).deleteNote(id,true,n.getInt("revision"));
                         return "Note dans la corbeille";
                     }));
-                }).show();return true;
-        });
+                }).show();
     }
     private void openNote(String id){
         Intent intent=new Intent(a,NoteEditorActivity.class).putExtra("id",id);
