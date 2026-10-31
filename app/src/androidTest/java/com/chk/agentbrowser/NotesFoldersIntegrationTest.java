@@ -63,4 +63,54 @@ public class NotesFoldersIntegrationTest {
         assertEquals(1,s.notes(marker,false,0).length());
         assertEquals(folder.getString("id"),s.note(note.getString("id")).getString("folder_id"));
     }
+    @Test public void nestedFoldersCanBeCreatedAndNeverFormCycles() throws Exception {
+        WorkspaceStore s=store();
+        String prefix="Nested-"+UUID.randomUUID();
+        JSONObject root=s.saveNoteFolder("",prefix,"🗂️","#C97821","");
+        JSONObject child=s.saveNoteFolder("",prefix+"-Clips","🎬","#AF5734",root.getString("id"));
+        JSONObject grandChild=s.saveNoteFolder("",prefix+"-Shorts","📹","#B54239",child.getString("id"));
+        assertEquals("",root.getString("parent_id"));
+        assertEquals(root.getString("id"),child.getString("parent_id"));
+        assertEquals(child.getString("id"),grandChild.getString("parent_id"));
+        try {
+            s.saveNoteFolder(root.getString("id"),prefix,"🗂️","#C97821",grandChild.getString("id"));
+            fail("A folder cannot be moved under a descendant");
+        }catch(IOException expected){}
+        try {
+            s.saveNoteFolder(child.getString("id"),prefix+"-Clips","🎬","#AF5734",child.getString("id"));
+            fail("A folder cannot be its own parent");
+        }catch(IOException expected){}
+        JSONArray all=s.noteFolders();
+        assertTrue(NotesFolderDialogs.path(all,grandChild.getString("id")).contains("Shorts"));
+        JSONObject note=s.saveNote("",prefix+"-note","La scène est conservée","",true,0,grandChild.getString("id"));
+        assertEquals(grandChild.getString("id"),note.getString("folder_id"));
+        s.deleteNoteFolder(child.getString("id"));
+        all=s.noteFolders();
+        JSONObject reparented=null;
+        for(int j=0;j<all.length();j++)
+            if(grandChild.getString("id").equals(all.getJSONObject(j).getString("id")))
+                reparented=all.getJSONObject(j);
+        assertNotNull(reparented);
+        assertEquals(root.getString("id"),reparented.getString("parent_id"));
+        assertEquals("La scène est conservée",s.note(note.getString("id")).getString("body"));
+        s.deleteNoteFolder(grandChild.getString("id"));
+        JSONObject relocated=s.note(note.getString("id"));
+        assertEquals(root.getString("id"),relocated.getString("folder_id"));
+        assertTrue(relocated.getInt("revision")>note.getInt("revision"));
+        s.deleteNoteFolder(root.getString("id"));
+        assertEquals("",s.note(note.getString("id")).getString("folder_id"));
+    }
+
+    @Test public void upgradingMcpListDoesNotChangeOriginalNoteContract() throws Exception {
+        WorkspaceStore s=store();
+        String marker="MCP-backcompat-"+UUID.randomUUID();
+        JSONObject original=s.saveNote("",marker,"Ancien corps","",false,0);
+        JSONObject directory=s.saveNoteFolder("",marker+" dir","📁","#C97821","");
+        JSONObject moved=s.moveNote(original.getString("id"),directory.getString("id"),original.getInt("revision"));
+        assertEquals(1,s.notes(marker,false,0).length());
+        assertEquals(1,s.notesFiltered(marker,false,directory.getString("id"),false,0).length());
+        JSONObject revised=s.saveNote(original.getString("id"),marker,"Corps modifié","",false,moved.getInt("revision"));
+        assertEquals(directory.getString("id"),revised.getString("folder_id"));
+    }
+
 }
