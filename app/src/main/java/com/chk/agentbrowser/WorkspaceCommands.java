@@ -173,7 +173,8 @@ public final class WorkspaceCommands {
                     args.has("folder_id")?args.optString("folder_id"):null,args.optBoolean("pinned_only",false),args.optInt("offset",0));break;
                 case "notes_folders":result=s.noteFolders();break;
                 case "notes_folder_save":result=s.saveNoteFolder(args.optString("id",""),args.getString("name"),
-                    args.optString("emoji","📁"),args.optString("color","#3B82F6"));break;
+                    args.optString("emoji","📁"),args.optString("color","#C97821"),
+                    args.has("parent_id")?args.optString("parent_id"):null);break;
                 case "notes_folder_delete":s.deleteNoteFolder(args.getString("id"));
                     result=new JSONObject().put("deleted",true).put("notes_preserved",true);break;
                 case "notes_move":result=s.moveNote(args.getString("id"),args.getString("folder_id"),args.getInt("revision"));break;
