@@ -27,17 +27,20 @@ public final class WorkspaceStore {
     private static final class Database extends SQLiteOpenHelper{
         private static Database instance;
         static synchronized Database get(Context app){if(instance==null)instance=new Database(app);return instance;}
-        Database(Context c){super(c,"workspace.db",null,2);}
+        Database(Context c){super(c,"workspace.db",null,3);}
         @Override public void onCreate(SQLiteDatabase d){
             d.execSQL("CREATE TABLE notes (id TEXT PRIMARY KEY,title TEXT NOT NULL,body TEXT NOT NULL,source_url TEXT NOT NULL,pinned INTEGER NOT NULL DEFAULT 0,updated INTEGER NOT NULL,revision INTEGER NOT NULL,deleted INTEGER NOT NULL DEFAULT 0,folder_id TEXT NOT NULL DEFAULT '')");
             d.execSQL("CREATE TABLE trash (id TEXT PRIMARY KEY,path TEXT NOT NULL,updated INTEGER NOT NULL)");
-            d.execSQL("CREATE TABLE note_folders (id TEXT PRIMARY KEY,name TEXT NOT NULL,emoji TEXT NOT NULL,color TEXT NOT NULL,updated INTEGER NOT NULL)");
+            d.execSQL("CREATE TABLE note_folders (id TEXT PRIMARY KEY,name TEXT NOT NULL,emoji TEXT NOT NULL,color TEXT NOT NULL,updated INTEGER NOT NULL,parent_id TEXT NOT NULL DEFAULT '')");
         }
         @Override public void onUpgrade(SQLiteDatabase d,int old,int next){
             // Only additive migrations: old notes and trash are never rebuilt.
             if(old<2){
                 d.execSQL("ALTER TABLE notes ADD COLUMN folder_id TEXT NOT NULL DEFAULT ''");
                 d.execSQL("CREATE TABLE IF NOT EXISTS note_folders (id TEXT PRIMARY KEY,name TEXT NOT NULL,emoji TEXT NOT NULL,color TEXT NOT NULL,updated INTEGER NOT NULL)");
+            }
+            if(old<3){
+                d.execSQL("ALTER TABLE note_folders ADD COLUMN parent_id TEXT NOT NULL DEFAULT ''");
             }
         }
     }
@@ -208,12 +211,12 @@ public final class WorkspaceStore {
     }
     public JSONArray noteFolders()throws Exception{
         JSONArray rows=new JSONArray();
-        try(Cursor c=db.rawQuery("SELECT f.id,f.name,f.emoji,f.color,f.updated,"+
+        try(Cursor c=db.rawQuery("SELECT f.id,f.name,f.emoji,f.color,f.updated,f.parent_id,"+
                 "(SELECT COUNT(*) FROM notes n WHERE n.folder_id=f.id AND n.deleted=0) AS note_count "+
                 "FROM note_folders f ORDER BY f.name COLLATE NOCASE ASC",null)){
             while(c.moveToNext())rows.put(new JSONObject().put("id",str(c,"id"))
                 .put("name",str(c,"name")).put("emoji",str(c,"emoji"))
-                .put("color",str(c,"color"))
+                .put("color",str(c,"color")).put("parent_id",str(c,"parent_id"))
                 .put("updated",c.getLong(c.getColumnIndexOrThrow("updated")))
                 .put("note_count",c.getInt(c.getColumnIndexOrThrow("note_count"))));
         }
@@ -224,29 +227,65 @@ public final class WorkspaceStore {
             return c.moveToFirst();
         }
     }
+    /** Old callers can change a folder's color/name without moving it. */
     public JSONObject saveNoteFolder(String id,String name,String emoji,String color)throws Exception{
+        return saveNoteFolder(id,name,emoji,color,null);
+    }
+    /** null parent preserves hierarchy on edit; empty parent moves to the root. */
+    public JSONObject saveNoteFolder(String id,String name,String emoji,String color,String parentId)throws Exception{
         name=name==null?"":name.trim();emoji=emoji==null?"":emoji.trim();
         if(name.isEmpty()||name.length()>60||emoji.isEmpty()||emoji.length()>12)
             throw new IOException("Nom (1–60) et emoji (1–12) obligatoires");
         if(color==null||!color.matches("#[A-Fa-f0-9]{6}"))
             throw new IOException("Couleur hexadécimale invalide");
+        if(id==null)id="";
+        String destination=parentId;
+        if(destination==null)destination=id.isEmpty()?"":folderParent(id);
+        if(destination==null)throw new IOException("Dossier introuvable");
+        if(!destination.isEmpty()&&!folderExists(destination))
+            throw new IOException("Dossier parent introuvable");
+        if(!id.isEmpty()){
+            if(id.equals(destination))throw new IOException("Un dossier ne peut pas être son propre parent");
+            String walker=destination;
+            HashSet<String> seen=new HashSet<>();
+            while(!walker.isEmpty()){
+                if(walker.equals(id)||!seen.add(walker)||seen.size()>200)
+                    throw new IOException("Déplacement impossible : boucle entre dossiers");
+                String next=folderParent(walker);
+                if(next==null)throw new IOException("Hiérarchie de dossiers invalide");
+                walker=next;
+            }
+        }
         ContentValues v=new ContentValues();v.put("name",name);v.put("emoji",emoji);
-        v.put("color",color);v.put("updated",System.currentTimeMillis());
-        if(id==null||id.isEmpty()){
+        v.put("color",color);v.put("parent_id",destination);
+        v.put("updated",System.currentTimeMillis());
+        if(id.isEmpty()){
             id=UUID.randomUUID().toString();v.put("id",id);
             db.insertOrThrow("note_folders",null,v);
         }else if(db.update("note_folders",v,"id=?",new String[]{id})!=1)
             throw new IOException("Dossier introuvable");
-        return new JSONObject().put("id",id).put("name",name).put("emoji",emoji).put("color",color);
+        return new JSONObject().put("id",id).put("name",name).put("emoji",emoji)
+            .put("color",color).put("parent_id",destination);
     }
-    /** Deleting a folder only unfiles notes; never deletes their content. */
+    /** Missing id returns null, root has an empty parent id. */
+    private String folderParent(String id){
+        try(Cursor c=db.rawQuery("SELECT parent_id FROM note_folders WHERE id=? LIMIT 1",new String[]{id})){
+            return c.moveToFirst()?c.getString(0):null;
+        }
+    }
+    /** No hard deletion of notes or child folders: reparent both transactionally. */
     public void deleteNoteFolder(String id)throws Exception{
         if(id==null||id.isEmpty())throw new IOException("Dossier invalide");
         db.beginTransaction();
         try{
+            String parent=folderParent(id);
+            if(parent==null)throw new IOException("Dossier introuvable");
+            ContentValues children=new ContentValues();children.put("parent_id",parent);
+            db.update("note_folders",children,"parent_id=?",new String[]{id});
+            db.execSQL("UPDATE notes SET folder_id=?, revision=revision+1 WHERE folder_id=?",
+                new Object[]{parent,id});
             if(db.delete("note_folders","id=?",new String[]{id})!=1)
                 throw new IOException("Dossier introuvable");
-            db.execSQL("UPDATE notes SET folder_id='', revision=revision+1 WHERE folder_id=?",new Object[]{id});
             db.setTransactionSuccessful();
         }finally{db.endTransaction();}
     }
