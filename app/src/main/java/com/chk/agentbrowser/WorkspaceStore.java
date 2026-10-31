@@ -27,12 +27,19 @@ public final class WorkspaceStore {
     private static final class Database extends SQLiteOpenHelper{
         private static Database instance;
         static synchronized Database get(Context app){if(instance==null)instance=new Database(app);return instance;}
-        Database(Context c){super(c,"workspace.db",null,1);}
+        Database(Context c){super(c,"workspace.db",null,2);}
         @Override public void onCreate(SQLiteDatabase d){
-            d.execSQL("CREATE TABLE notes (id TEXT PRIMARY KEY,title TEXT NOT NULL,body TEXT NOT NULL,source_url TEXT NOT NULL,pinned INTEGER NOT NULL DEFAULT 0,updated INTEGER NOT NULL,revision INTEGER NOT NULL,deleted INTEGER NOT NULL DEFAULT 0)");
+            d.execSQL("CREATE TABLE notes (id TEXT PRIMARY KEY,title TEXT NOT NULL,body TEXT NOT NULL,source_url TEXT NOT NULL,pinned INTEGER NOT NULL DEFAULT 0,updated INTEGER NOT NULL,revision INTEGER NOT NULL,deleted INTEGER NOT NULL DEFAULT 0,folder_id TEXT NOT NULL DEFAULT '')");
             d.execSQL("CREATE TABLE trash (id TEXT PRIMARY KEY,path TEXT NOT NULL,updated INTEGER NOT NULL)");
+            d.execSQL("CREATE TABLE note_folders (id TEXT PRIMARY KEY,name TEXT NOT NULL,emoji TEXT NOT NULL,color TEXT NOT NULL,updated INTEGER NOT NULL)");
         }
-        @Override public void onUpgrade(SQLiteDatabase d,int old,int next){}
+        @Override public void onUpgrade(SQLiteDatabase d,int old,int next){
+            // Only additive migrations: old notes and trash are never rebuilt.
+            if(old<2){
+                d.execSQL("ALTER TABLE notes ADD COLUMN folder_id TEXT NOT NULL DEFAULT ''");
+                d.execSQL("CREATE TABLE IF NOT EXISTS note_folders (id TEXT PRIMARY KEY,name TEXT NOT NULL,emoji TEXT NOT NULL,color TEXT NOT NULL,updated INTEGER NOT NULL)");
+            }
+        }
     }
     public File file(String path)throws IOException{return WorkspacePaths.resolve(root,path,false);}
     public Uri uri(String path)throws IOException{
@@ -137,26 +144,127 @@ public final class WorkspaceStore {
         android.graphics.BitmapFactory.Options opts=new android.graphics.BitmapFactory.Options();opts.inSampleSize=1;while(bounds.outWidth/opts.inSampleSize>720||bounds.outHeight/opts.inSampleSize>960)opts.inSampleSize*=2;
         android.graphics.Bitmap b=android.graphics.BitmapFactory.decodeFile(f.getPath(),opts);if(b==null)throw new IOException("Image inaccessible");byte[] bytes=null;try{for(int quality=75;quality>=15;quality-=15){ByteArrayOutputStream out=new ByteArrayOutputStream();b.compress(android.graphics.Bitmap.CompressFormat.JPEG,quality,out);bytes=out.toByteArray();if(bytes.length<=150000)break;}}finally{b.recycle();}if(bytes==null||bytes.length>150000)throw new IOException("Aperçu trop volumineux");return new JSONObject().put("path",path).put("jpeg_base64",android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP));
     }
+    /** Original public API preserved for existing MCP callers and Android tests. */
     public JSONArray notes(String query,boolean deleted,int offset)throws Exception{
-        String q="%"+(query==null?"":query)+"%";JSONArray rows=new JSONArray();
-        try(Cursor c=db.query("notes",new String[]{"id","title","source_url","pinned","updated","revision"},"deleted=? AND (title LIKE ? OR body LIKE ?)",new String[]{deleted?"1":"0",q,q},null,null,"pinned DESC, updated DESC",Math.max(0,offset)+",50")){
-            while(c.moveToNext())rows.put(noteRow(c,false));}return rows;
+        return notesFiltered(query,deleted,null,false,offset);
     }
-    public JSONObject note(String id)throws Exception{try(Cursor c=db.query("notes",null,"id=?",new String[]{id},null,null,null)){if(!c.moveToFirst())throw new IOException("Note introuvable");return noteRow(c,true);}}
+    /** folderId null=all, empty=unfiled, UUID=folder. */
+    public JSONArray notesFiltered(String query,boolean deleted,String folderId,boolean pinnedOnly,int offset)throws Exception{
+        String q="%"+(query==null?"":query)+"%";
+        String where="deleted=? AND (title LIKE ? OR body LIKE ?)";
+        ArrayList<String> values=new ArrayList<>(Arrays.asList(deleted?"1":"0",q,q));
+        if(folderId!=null){where+=" AND folder_id=?";values.add(folderId);}
+        if(pinnedOnly)where+=" AND pinned=1";
+        JSONArray rows=new JSONArray();
+        try(Cursor c=db.query("notes",
+                new String[]{"id","title","source_url","pinned","updated","revision","folder_id","substr(body,1,160) AS preview"},
+                where,values.toArray(new String[0]),null,null,"pinned DESC, updated DESC",Math.max(0,offset)+",50")){
+            while(c.moveToNext())rows.put(noteRow(c,false));
+        }
+        return rows;
+    }
+    public JSONObject note(String id)throws Exception{
+        try(Cursor c=db.query("notes",null,"id=?",new String[]{id},null,null,null)){
+            if(!c.moveToFirst())throw new IOException("Note introuvable");
+            return noteRow(c,true);
+        }
+    }
     private JSONObject noteRow(Cursor c,boolean full)throws Exception{
-        JSONObject o=new JSONObject().put("id",str(c,"id")).put("title",str(c,"title")).put("source_url",str(c,"source_url")).put("pinned",c.getInt(c.getColumnIndexOrThrow("pinned"))==1).put("updated",c.getLong(c.getColumnIndexOrThrow("updated"))).put("revision",c.getInt(c.getColumnIndexOrThrow("revision")));
-        if(full)o.put("body",str(c,"body")).put("deleted",c.getInt(c.getColumnIndexOrThrow("deleted"))==1);return o;
+        JSONObject o=new JSONObject().put("id",str(c,"id")).put("title",str(c,"title"))
+            .put("source_url",str(c,"source_url"))
+            .put("pinned",c.getInt(c.getColumnIndexOrThrow("pinned"))==1)
+            .put("updated",c.getLong(c.getColumnIndexOrThrow("updated")))
+            .put("revision",c.getInt(c.getColumnIndexOrThrow("revision")))
+            .put("folder_id",str(c,"folder_id"));
+        int preview=c.getColumnIndex("preview");
+        if(preview>=0)o.put("preview",c.getString(preview));
+        if(full)o.put("body",str(c,"body")).put("deleted",c.getInt(c.getColumnIndexOrThrow("deleted"))==1);
+        return o;
     }
+    /** Old callers never alter the assigned folder. */
     public JSONObject saveNote(String id,String title,String body,String source,boolean pinned,int revision)throws Exception{
-        if(title.length()>120||body.length()>12000||source.length()>2000)throw new IOException("Note trop longue (titre 120, texte 12 000 caractères)");
-        ContentValues v=new ContentValues();v.put("title",title.trim().isEmpty()?"Sans titre":title.trim());v.put("body",body);v.put("source_url",source);v.put("pinned",pinned?1:0);v.put("updated",System.currentTimeMillis());
-        if(id.isEmpty()){id=UUID.randomUUID().toString();v.put("id",id);v.put("revision",1);db.insertOrThrow("notes",null,v);}
-        else {v.put("revision",revision+1);if(db.update("notes",v,"id=? AND revision=? AND deleted=0",new String[]{id,String.valueOf(revision)})!=1)throw new IOException("La note a changé ailleurs. Recharge-la ou conserve une copie");}
+        return saveNote(id,title,body,source,pinned,revision,null);
+    }
+    public JSONObject saveNote(String id,String title,String body,String source,boolean pinned,int revision,String folderId)throws Exception{
+        if(title.length()>120||body.length()>12000||source.length()>2000)
+            throw new IOException("Note trop longue (titre 120, texte 12 000 caractères)");
+        if(folderId!=null&&!folderId.isEmpty()&&!folderExists(folderId))
+            throw new IOException("Dossier de notes introuvable");
+        ContentValues v=new ContentValues();
+        v.put("title",title.trim().isEmpty()?"Sans titre":title.trim());
+        v.put("body",body);v.put("source_url",source);v.put("pinned",pinned?1:0);
+        v.put("updated",System.currentTimeMillis());
+        if(folderId!=null)v.put("folder_id",folderId);
+        if(id.isEmpty()){
+            id=UUID.randomUUID().toString();v.put("id",id);v.put("revision",1);
+            db.insertOrThrow("notes",null,v);
+        }else{
+            v.put("revision",revision+1);
+            if(db.update("notes",v,"id=? AND revision=? AND deleted=0",
+                    new String[]{id,String.valueOf(revision)})!=1)
+                throw new IOException("La note a changé ailleurs. Recharge-la ou conserve une copie");
+        }
         return note(id);
     }
+    public JSONArray noteFolders()throws Exception{
+        JSONArray rows=new JSONArray();
+        try(Cursor c=db.rawQuery("SELECT f.id,f.name,f.emoji,f.color,f.updated,"+
+                "(SELECT COUNT(*) FROM notes n WHERE n.folder_id=f.id AND n.deleted=0) AS note_count "+
+                "FROM note_folders f ORDER BY f.name COLLATE NOCASE ASC",null)){
+            while(c.moveToNext())rows.put(new JSONObject().put("id",str(c,"id"))
+                .put("name",str(c,"name")).put("emoji",str(c,"emoji"))
+                .put("color",str(c,"color"))
+                .put("updated",c.getLong(c.getColumnIndexOrThrow("updated")))
+                .put("note_count",c.getInt(c.getColumnIndexOrThrow("note_count"))));
+        }
+        return rows;
+    }
+    private boolean folderExists(String id){
+        try(Cursor c=db.rawQuery("SELECT 1 FROM note_folders WHERE id=? LIMIT 1",new String[]{id})){
+            return c.moveToFirst();
+        }
+    }
+    public JSONObject saveNoteFolder(String id,String name,String emoji,String color)throws Exception{
+        name=name==null?"":name.trim();emoji=emoji==null?"":emoji.trim();
+        if(name.isEmpty()||name.length()>60||emoji.isEmpty()||emoji.length()>12)
+            throw new IOException("Nom (1–60) et emoji (1–12) obligatoires");
+        if(color==null||!color.matches("#[A-Fa-f0-9]{6}"))
+            throw new IOException("Couleur hexadécimale invalide");
+        ContentValues v=new ContentValues();v.put("name",name);v.put("emoji",emoji);
+        v.put("color",color);v.put("updated",System.currentTimeMillis());
+        if(id==null||id.isEmpty()){
+            id=UUID.randomUUID().toString();v.put("id",id);
+            db.insertOrThrow("note_folders",null,v);
+        }else if(db.update("note_folders",v,"id=?",new String[]{id})!=1)
+            throw new IOException("Dossier introuvable");
+        return new JSONObject().put("id",id).put("name",name).put("emoji",emoji).put("color",color);
+    }
+    /** Deleting a folder only unfiles notes; never deletes their content. */
+    public void deleteNoteFolder(String id)throws Exception{
+        if(id==null||id.isEmpty())throw new IOException("Dossier invalide");
+        db.beginTransaction();
+        try{
+            if(db.delete("note_folders","id=?",new String[]{id})!=1)
+                throw new IOException("Dossier introuvable");
+            db.execSQL("UPDATE notes SET folder_id='', revision=revision+1 WHERE folder_id=?",new Object[]{id});
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
+    public JSONObject moveNote(String noteId,String folderId,int expectedRevision)throws Exception{
+        if(folderId==null)throw new IOException("Dossier requis");
+        if(!folderId.isEmpty()&&!folderExists(folderId))throw new IOException("Dossier introuvable");
+        ContentValues values=new ContentValues();values.put("folder_id",folderId);
+        values.put("revision",expectedRevision+1);values.put("updated",System.currentTimeMillis());
+        if(db.update("notes",values,"id=? AND revision=? AND deleted=0",
+                new String[]{noteId,String.valueOf(expectedRevision)})!=1)
+            throw new IOException("Note modifiée ailleurs : recharge-la avant de déplacer");
+        return note(noteId);
+    }
     public void deleteNote(String id,boolean deleted,int revision)throws IOException{
-        ContentValues v=new ContentValues();v.put("deleted",deleted?1:0);v.put("revision",revision+1);v.put("updated",System.currentTimeMillis());
-        if(db.update("notes",v,"id=? AND revision=?",new String[]{id,String.valueOf(revision)})!=1)throw new IOException("Note modifiée ailleurs : recharge-la");
+        ContentValues v=new ContentValues();v.put("deleted",deleted?1:0);
+        v.put("revision",revision+1);v.put("updated",System.currentTimeMillis());
+        if(db.update("notes",v,"id=? AND revision=?",new String[]{id,String.valueOf(revision)})!=1)
+            throw new IOException("Note modifiée ailleurs : recharge-la");
     }
     private static String str(Cursor c,String col){return c.getString(c.getColumnIndexOrThrow(col));}
 }
