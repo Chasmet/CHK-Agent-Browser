@@ -82,7 +82,7 @@ final class WorkspaceCapabilities {
         add(all,"video_editor_cancel","Arrête l’export natif.");
         add(all,"notes_list","Recherche des notes privées, éventuellement dans un dossier.","query:string?","deleted:boolean?","offset:integer?","folder_id:string?","pinned_only:boolean?");
         add(all,"notes_folders","Liste les dossiers de notes avec couleurs, emojis et compteurs.");
-        add(all,"notes_folder_save","Crée ou modifie un dossier sans modifier les notes.","id:string?","name:string","emoji:string?","color:string?");
+        add(all,"notes_folder_save","Crée ou modifie un dossier sans modifier les notes.","id:string?","name:string","emoji:string?","color:string?","parent_id:string?");
         add(all,"notes_folder_delete","Supprime uniquement le dossier : ses notes restent sans dossier.","id:string");
         add(all,"notes_move","Déplace une note avec contrôle de révision, sans supprimer le contenu.","id:string","folder_id:string","revision:integer");
         add(all,"notes_read","Lit une note et sa révision.","id:string");
