@@ -44,7 +44,25 @@ public final class NoteEditorActivity extends Activity {
     private void load(){loading=true;title.setEnabled(false);body.setEnabled(false);pinned.setEnabled(false);String readId=id;WorkspaceCommands.IO.execute(()->{try{JSONObject n=new WorkspaceStore(this).note(readId);if(n.getBoolean("deleted"))throw new Exception("Cette note est dans la corbeille");WorkspaceCommands.UI.post(()->{if(isFinishing()||isDestroyed())return;try{id=n.getString("id");revision=n.getInt("revision");source=n.getString("source_url");folderId=n.optString("folder_id","");title.setText(n.getString("title"));body.setText(n.getString("body"));pinned.setChecked(n.getBoolean("pinned"));loading=false;dirty=false;conflict=false;title.setEnabled(true);body.setEnabled(true);pinned.setEnabled(true);status.setText("Enregistrée sur ce téléphone");showSource();showFolder();}catch(Exception e){status.setText(e.getMessage());}});}catch(Exception e){WorkspaceCommands.UI.post(()->{status.setText(e.getMessage());loading=false;});}});}
     private void showSource(){sourceView.setVisibility(source.isEmpty()?android.view.View.GONE:android.view.View.VISIBLE);sourceView.setText("↗ "+source);sourceView.setOnClickListener(v->{if(source.startsWith("https://"))startActivity(new Intent(this,MainActivity.class).putExtra("open_url",source));});}
     private void showFolder(){
-        folderView.setText(folderId.isEmpty()?"📁 Sans dossier":"📁 Dossier sélectionné · Modifier");
+        final String requested=folderId;
+        if(requested.isEmpty()){folderView.setText("📁 Sans dossier · Modifier");return;}
+        folderView.setText("📁 Dossier · Modifier");
+        WorkspaceCommands.IO.execute(()->{
+            String label="📁 Dossier · Modifier";
+            try{
+                org.json.JSONArray folders=new WorkspaceStore(getApplicationContext()).noteFolders();
+                for(int i=0;i<folders.length();i++){
+                    JSONObject f=folders.getJSONObject(i);
+                    if(requested.equals(f.getString("id"))){
+                        label=f.getString("emoji")+" "+f.getString("name")+" · Modifier";break;
+                    }
+                }
+            }catch(Exception ignored){}
+            final String result=label;
+            WorkspaceCommands.UI.post(()->{
+                if(!isFinishing()&&!isDestroyed()&&requested.equals(folderId))folderView.setText(result);
+            });
+        });
     }
     private void changed(){if(loading)return;dirty=true;status.setText(conflict?"Conflit : conserve une copie depuis le menu":"Modifications en cours…");handler.removeCallbacks(autosave);handler.postDelayed(autosave,650);}
     private void save(){handler.removeCallbacks(autosave);if(loading||saving||conflict||!dirty){if(leaveWhenSaved&&!dirty&&!saving&&!conflict)finish();return;}
