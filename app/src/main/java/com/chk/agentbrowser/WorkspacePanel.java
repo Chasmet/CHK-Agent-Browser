@@ -82,14 +82,14 @@ public final class WorkspacePanel {
         if(audioBar!=null){audioBar.destroy();audioBar=null;}
         floatingButton=null;floatingParams=null;selectionToolbar=null;
         space=value;offset=space.equals("files")?filesOffset:notesOffset;generation++;selected.clear();selectMode=false;host.removeAllViews();
-        FrameLayout frame=new FrameLayout(a);frame.setBackgroundColor(space.equals("files")?0xfffafbff:0xff202124);host.addView(frame,new FrameLayout.LayoutParams(-1,-1));
+        FrameLayout frame=new FrameLayout(a);frame.setBackgroundColor(space.equals("files")?0xfffafbff:0xff17120f);host.addView(frame,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout root=MobileUi.column(a);frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
-        LinearLayout toolbar=new LinearLayout(a);toolbar.setGravity(android.view.Gravity.CENTER_VERTICAL);toolbar.setBackgroundColor(space.equals("files")?0xfffafbff:0xff202124);root.addView(toolbar,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,56)));
+        LinearLayout toolbar=new LinearLayout(a);toolbar.setGravity(android.view.Gravity.CENTER_VERTICAL);toolbar.setBackgroundColor(space.equals("files")?0xfffafbff:0xff17120f);root.addView(toolbar,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,56)));
         TextView menu=UiIcons.button(a,"", "menu",ink());toolbar.addView(menu,new LinearLayout.LayoutParams(MobileUi.dp(a,48),-1));menu.setContentDescription("Réglages et espaces");menu.setOnClickListener(v->new AgentDialog.Builder(a).setTitle("CHK").setItems(new String[]{"Réglages","Corbeille","Téléchargements"},(d,n)->{if(n==0)a.startActivity(new Intent(a,SettingsActivity.class));else if(n==1)trash();else downloads();}).show());
         location=MobileUi.text(a,space.equals("files")?"Mes fichiers":"Mes notes",18,ink());location.setSingleLine(true);location.setPadding(0,0,0,0);toolbar.addView(location,new LinearLayout.LayoutParams(0,-2,1));
         TextView find=UiIcons.button(a,"","search",ink());find.setContentDescription("Rechercher");toolbar.addView(find,new LinearLayout.LayoutParams(MobileUi.dp(a,48),-1));
         TextView more=UiIcons.button(a,"","sort",ink());more.setContentDescription("Options et tri");toolbar.addView(more,new LinearLayout.LayoutParams(MobileUi.dp(a,48),-1));more.setOnClickListener(v->options());
-        search=new EditText(a);search.setTag("workspace_search");search.setSingleLine(true);search.setTextColor(ink());search.setHintTextColor(muted());search.setBackgroundColor(space.equals("files")?0xffedf0f5:0xff30333b);search.setTextSize(16);search.setPadding(MobileUi.dp(a,16),0,MobileUi.dp(a,16),0);search.setText(space.equals("files")?filesQuery:notesQuery);search.setVisibility((space.equals("files")?filesSearch:notesSearch)?View.VISIBLE:View.GONE);root.addView(search,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,52)));
+        search=new EditText(a);search.setTag("workspace_search");search.setSingleLine(true);search.setTextColor(ink());search.setHintTextColor(muted());search.setBackgroundColor(space.equals("files")?0xffedf0f5:0xff32261e);search.setTextSize(16);search.setPadding(MobileUi.dp(a,16),0,MobileUi.dp(a,16),0);search.setText(space.equals("files")?filesQuery:notesQuery);search.setVisibility((space.equals("files")?filesSearch:notesSearch)?View.VISIBLE:View.GONE);root.addView(search,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,52)));
         find.setOnClickListener(v->{search.setVisibility(search.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE);if(search.getVisibility()==View.VISIBLE){search.requestFocus();((android.view.inputmethod.InputMethodManager)a.getSystemService(Activity.INPUT_METHOD_SERVICE)).showSoftInput(search,0);}else{search.setText("");((android.view.inputmethod.InputMethodManager)a.getSystemService(Activity.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(search.getWindowToken(),0);}});
         search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int aft){}public void onTextChanged(CharSequence s,int st,int before,int count){handler.removeCallbacks(filter);handler.postDelayed(filter,180);}public void afterTextChanged(Editable e){}});
         FrameLayout contentHost=new FrameLayout(a);
@@ -153,7 +153,7 @@ public final class WorkspacePanel {
         fileFooter.setPadding(MobileUi.dp(a,10),0,MobileUi.dp(a,10),MobileUi.dp(a,75));
         fileLayout.addView(fileFooter,new LinearLayout.LayoutParams(-1,-2));
         TextView add=MobileUi.action(a,space.equals("files")?"＋  Créer / Importer":"＋  Nouvelle note");
-        add.setTextColor(0xffffffff);add.setBackground(MobileUi.bg(a,0xff087cf0));add.setElevation(MobileUi.dp(a,4));
+        add.setTextColor(0xffffffff);add.setBackground(MobileUi.bg(a,space.equals("notes")?0xffc47824:0xff087cf0));add.setElevation(MobileUi.dp(a,4));
         FrameLayout.LayoutParams floating=new FrameLayout.LayoutParams(-2,MobileUi.dp(a,50),android.view.Gravity.BOTTOM|android.view.Gravity.END);
         floating.setMargins(0,0,MobileUi.dp(a,14),MobileUi.dp(a,14));
         floatingButton=add;floatingParams=floating;
@@ -554,77 +554,110 @@ public final class WorkspacePanel {
         });
     }
     private void notesHome(JSONArray folders,boolean showFolders)throws Exception{
-        LinearLayout filters=new LinearLayout(a);filters.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        HorizontalScrollView horizontal=new HorizontalScrollView(a);
-        horizontal.setHorizontalScrollBarEnabled(false);horizontal.addView(filters);
-        list.addView(horizontal,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,53)));
-        notesFilter(filters,"Toutes",notesFolder.equals("*")&&!notesPinned,"*",false);
-        notesFilter(filters,"Sans dossier",notesFolder.isEmpty()&&!notesPinned,"",false);
-        notesFilter(filters,"★ Épinglées",notesPinned,"*",true);
-        if(!notesFolder.equals("*")&&!notesFolder.isEmpty()){
-            JSONObject current=null;
-            for(int i=0;i<folders.length();i++)if(notesFolder.equals(folders.getJSONObject(i).getString("id"))){current=folders.getJSONObject(i);break;}
-            if(current==null){notesFolder="*";notesPinned=false;offset=0;refresh();return;}
-            final JSONObject selectedFolder=current;
-            location.setText(current.getString("emoji")+" "+current.getString("name"));
-            TextView title=label("‹  Tous les dossiers                       ⋮",16);
-            title.setPadding(MobileUi.dp(a,8),MobileUi.dp(a,14),0,MobileUi.dp(a,14));
-            list.addView(title);
-            title.setOnClickListener(v->{notesFolder="*";notesPinned=false;offset=0;refresh();});
-            title.setOnLongClickListener(v->{folderActions(selectedFolder);return true;});
-        }else location.setText(notesPinned?"Notes épinglées":"Mes notes");
-        if(!showFolders||!notesFolder.equals("*")||notesPinned)return;
-        LinearLayout top=new LinearLayout(a);top.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        top.setPadding(MobileUi.dp(a,7),MobileUi.dp(a,14),MobileUi.dp(a,7),MobileUi.dp(a,9));
-        TextView heading=label("Mes dossiers",18);heading.setTypeface(null,android.graphics.Typeface.BOLD);
-        top.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
-        TextView add=action("＋ Dossier");add.setTextColor(0xff77d7ff);top.addView(add);
-        add.setOnClickListener(v->NotesFolderDialogs.edit(a,null,this::refresh));
-        list.addView(top);
-        if(folders.length()>0){
-            HorizontalScrollView folderScroll=new HorizontalScrollView(a);
-            folderScroll.setHorizontalScrollBarEnabled(false);
-            LinearLayout folderStrip=new LinearLayout(a);folderScroll.addView(folderStrip);
-            list.addView(folderScroll,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,102)));
-            for(int i=0;i<folders.length();i++){
-                JSONObject folder=folders.getJSONObject(i);
-                String key=folder.getString("id");
-                TextView card=label(folder.getString("emoji")+"\n"+folder.getString("name")+
-                    " · "+folder.optInt("note_count"),13);
-                card.setTextColor(0xffffffff);card.setMaxLines(3);
-                card.setGravity(android.view.Gravity.CENTER);
-                card.setBackground(MobileUi.bg(a,android.graphics.Color.parseColor(folder.getString("color"))));
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(MobileUi.dp(a,139),MobileUi.dp(a,86));
-                lp.setMargins(MobileUi.dp(a,4),0,MobileUi.dp(a,7),0);folderStrip.addView(card,lp);
-                card.setOnClickListener(v->{notesFolder=key;notesPinned=false;offset=0;refresh();});
-                card.setOnLongClickListener(v->{folderActions(folder);return true;});
-            }
+        final boolean root=notesFolder.equals("*"),unfiled=notesFolder.isEmpty();
+        location.setText(notesPinned?"★ Favoris":root?"Mes notes":unfiled?"Sans dossier":"Mes notes");
+        // Warm compact filter row. The list and search remain native Android controls.
+        LinearLayout strip=new LinearLayout(a);strip.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        HorizontalScrollView scroll=new HorizontalScrollView(a);scroll.setHorizontalScrollBarEnabled(false);
+        scroll.addView(strip);list.addView(scroll,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,56)));
+        notesFilter(strip,"Dossiers",root&&!notesPinned,"*",false);
+        notesFilter(strip,"★ Favoris",notesPinned,"*",true);
+        notesFilter(strip,"Sans dossier",unfiled&&!notesPinned,"",false);
+        if(!root&&!unfiled&&!notesPinned){
+            JSONObject current=findNoteFolder(folders,notesFolder);
+            if(current==null){notesFolder="*";offset=0;refresh();return;}
+            location.setText(current.optString("emoji")+" "+current.optString("name"));
+            LinearLayout bread=new LinearLayout(a);bread.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            TextView back=label("‹  Accueil",14);back.setTextColor(0xffe8bc7e);bread.addView(back);
+            back.setOnClickListener(v->{notesFolder="*";offset=0;refresh();});
+            TextView path=label(" › "+NotesFolderDialogs.path(folders,notesFolder),13);
+            path.setMaxLines(2);path.setTextColor(0xffe4d7c7);
+            bread.addView(path,new LinearLayout.LayoutParams(0,-2,1));
+            list.addView(bread);
         }
-        TextView recent=label("Mes notes",18);recent.setTypeface(null,android.graphics.Typeface.BOLD);
-        recent.setPadding(MobileUi.dp(a,7),MobileUi.dp(a,18),0,MobileUi.dp(a,10));
+        if(!showFolders||notesPinned||unfiled)return;
+        LinearLayout top=new LinearLayout(a);top.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView heading=label(root?"Mes dossiers":"Sous-dossiers",18);
+        heading.setTypeface(null,android.graphics.Typeface.BOLD);
+        heading.setTextColor(0xfff6e2c8);
+        top.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        TextView add=action(root?"＋ Dossier":"＋ Sous-dossier");add.setTextColor(0xffefbd7b);
+        add.setBackground(MobileUi.bg(a,0xff39281a));top.addView(add);
+        String parent=root?"":notesFolder;
+        add.setOnClickListener(v->NotesFolderDialogs.edit(a,null,parent,this::refresh));
+        list.addView(top,new LinearLayout.LayoutParams(-1,MobileUi.dp(a,56)));
+        // Show only direct children; descendants are reached by opening a folder.
+        LinearLayout gridLine=null;int cell=0;
+        for(int i=0;i<folders.length();i++){
+            JSONObject folder=folders.getJSONObject(i);
+            if(!parent.equals(folder.optString("parent_id","")))continue;
+            if(cell%3==0){gridLine=new LinearLayout(a);list.addView(gridLine,new LinearLayout.LayoutParams(-1,-2));}
+            final String folderId=folder.getString("id");
+            int children=0;
+            for(int j=0;j<folders.length();j++)if(folderId.equals(folders.getJSONObject(j).optString("parent_id","")))children++;
+            String suffix=children==0?"":(" · "+children+" sous-d.");
+            TextView card=label(folder.optString("emoji","📁")+"\n"+folder.optString("name")+"\n"+
+                folder.optInt("note_count")+" notes"+suffix,13);
+            card.setTextColor(0xffffffff);card.setMaxLines(4);
+            card.setGravity(android.view.Gravity.CENTER);card.setPadding(MobileUi.dp(a,7),MobileUi.dp(a,8),MobileUi.dp(a,7),MobileUi.dp(a,8));
+            android.graphics.drawable.GradientDrawable warm=MobileUi.bg(a,android.graphics.Color.parseColor(folder.optString("color","#9F6427")));
+            warm.setStroke(MobileUi.dp(a,1),0x668c765c);card.setBackground(warm);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,MobileUi.dp(a,118),1);
+            lp.setMargins(MobileUi.dp(a,3),MobileUi.dp(a,5),MobileUi.dp(a,3),MobileUi.dp(a,6));
+            gridLine.addView(card,lp);
+            card.setOnClickListener(v->{notesFolder=folderId;notesPinned=false;offset=0;search.setText("");refresh();});
+            card.setOnLongClickListener(v->{folderActions(folder);return true;});
+            cell++;
+        }
+        // Keep the last line aligned in a three-column grid without stretching remaining tiles.
+        if(cell%3!=0&&gridLine!=null){
+            for(int i=cell%3;i<3;i++)gridLine.addView(new android.view.View(a),
+                new LinearLayout.LayoutParams(0,MobileUi.dp(a,1),1));
+        }
+        TextView recent=label(root?"Notes récentes":"Notes dans ce dossier",17);
+        recent.setTextColor(0xffeec08b);
+        recent.setTypeface(null,android.graphics.Typeface.BOLD);
         list.addView(recent);
+    }
+    private JSONObject findNoteFolder(JSONArray folders,String folderId){
+        for(int i=0;i<folders.length();i++){
+            JSONObject folder=folders.optJSONObject(i);
+            if(folder!=null&&folderId.equals(folder.optString("id")))return folder;
+        }
+        return null;
     }
     private void notesFilter(LinearLayout row,String name,boolean active,String folderId,boolean pin){
         TextView item=action(name);
-        item.setTextSize(13);item.setTextColor(active?0xffffffff:0xffc5d2e5);
-        item.setBackground(MobileUi.bg(a,active?0xff087cf0:0xff26364e));
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,MobileUi.dp(a,40));
-        lp.setMargins(MobileUi.dp(a,3),MobileUi.dp(a,4),MobileUi.dp(a,5),MobileUi.dp(a,2));
+        item.setTextSize(13);
+        item.setTextColor(active?0xffffffff:0xffdfc9ac);
+        item.setBackground(MobileUi.bg(a,active?0xff97571c:0xff30251e));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,MobileUi.dp(a,42));
+        lp.setMargins(MobileUi.dp(a,3),MobileUi.dp(a,5),MobileUi.dp(a,5),MobileUi.dp(a,4));
         row.addView(item,lp);
         item.setOnClickListener(v->{notesFolder=folderId;notesPinned=pin;offset=0;refresh();});
     }
     private void folderActions(JSONObject folder){
+        String id=folder.optString("id");
         new AgentDialog.Builder(a).setTitle(folder.optString("emoji")+" "+folder.optString("name"))
-            .setItems(new String[]{"Ouvrir","Changer le nom, l’emoji et la couleur","Supprimer le dossier (garder les notes)"},(d,i)->{
-                if(i==0){notesFolder=folder.optString("id");notesPinned=false;offset=0;refresh();}
-                else if(i==1)NotesFolderDialogs.edit(a,folder,this::refresh);
+            .setItems(new String[]{"Ouvrir","Créer un sous-dossier","Nom, couleur et emoji",
+                "Déplacer le dossier","Supprimer (notes et sous-dossiers conservés)"},(d,i)->{
+                if(i==0){notesFolder=id;notesPinned=false;offset=0;refresh();}
+                else if(i==1)NotesFolderDialogs.edit(a,null,id,this::refresh);
+                else if(i==2)NotesFolderDialogs.edit(a,folder,this::refresh);
+                else if(i==3)NotesFolderDialogs.choose(a,folder.optString("parent_id",""),chosen->
+                    work(()->{
+                        WorkspaceStore store=new WorkspaceStore(a);
+                        store.saveNoteFolder(id,folder.getString("name"),folder.getString("emoji"),
+                            folder.getString("color"),chosen);
+                        return "Dossier déplacé";
+                    }));
                 else new AgentDialog.Builder(a).setTitle("Supprimer ce dossier ?")
-                    .setMessage("Les notes ne seront pas supprimées : elles passeront dans Sans dossier.")
+                    .setMessage("Les notes et les sous-dossiers seront déplacés dans le dossier parent. Aucun contenu ne sera effacé.")
                     .setNegativeButton("Annuler",null)
                     .setPositiveButton("Supprimer le dossier",(dialog,w)->work(()->{
-                        new WorkspaceStore(a).deleteNoteFolder(folder.getString("id"));
+                        new WorkspaceStore(a).deleteNoteFolder(id);
                         notesFolder="*";notesPinned=false;
-                        return "Dossier supprimé, notes conservées";
+                        return "Dossier retiré ; notes et sous-dossiers conservés";
                     })).show();
             }).show();
     }
@@ -632,7 +665,7 @@ public final class WorkspacePanel {
         final String id=n.getString("id"),name=n.getString("title");
         LinearLayout card=MobileUi.column(a);
         card.setPadding(MobileUi.dp(a,17),MobileUi.dp(a,14),MobileUi.dp(a,15),MobileUi.dp(a,14));
-        card.setBackground(MobileUi.bg(a,0xff192b42));
+        card.setBackground(MobileUi.bg(a,0xff2c211b));
         LinearLayout.LayoutParams margin=new LinearLayout.LayoutParams(-1,-2);
         margin.setMargins(MobileUi.dp(a,1),MobileUi.dp(a,4),MobileUi.dp(a,1),MobileUi.dp(a,8));
         list.addView(card,margin);
@@ -644,7 +677,7 @@ public final class WorkspacePanel {
             snippet.setMaxLines(2);snippet.setPadding(0,MobileUi.dp(a,6),0,0);card.addView(snippet);
         }
         TextView date=MobileUi.text(a,android.text.format.DateFormat.format("dd MMM · HH:mm",n.getLong("updated")).toString(),12,muted());
-        date.setPadding(0,MobileUi.dp(a,10),0,0);card.addView(date);
+        date.setPadding(0,MobileUi.dp(a,10),0,0);date.setTextColor(0xffc0a68a);card.addView(date);
         card.setOnClickListener(v->openNote(id));
         card.setOnLongClickListener(v->{
             String pin=n.optBoolean("pinned")?"Désépingler":"Épingler";
