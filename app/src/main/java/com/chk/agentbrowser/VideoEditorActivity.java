@@ -21,6 +21,7 @@ import java.util.*;
 @androidx.annotation.OptIn(markerClass={androidx.media3.common.util.UnstableApi.class,androidx.media3.common.util.ExperimentalApi.class})
 public final class VideoEditorActivity extends Activity {
     private final VideoEditorEngine engine=VideoEditorEngine.get();
+    private StudioExportFlow studioExportFlow;
     private final Handler ui=new Handler(Looper.getMainLooper());
     private final ArrayDeque<String> undo=new ArrayDeque<>(),redo=new ArrayDeque<>();
     private JSONObject project;
@@ -74,6 +75,7 @@ public final class VideoEditorActivity extends Activity {
         }
         long now=android.os.SystemClock.elapsedRealtime();if(!saving&&!importing&&project!=null&&now-lastProjectCheck>2500){lastProjectCheck=now;engine.command(VideoEditorActivity.this,"video_editor_project_read",new JSONObject(),(ok,value)->ui.post(()->{if(!alive||saving||importing||scrubbing||!ok)return;try{JSONObject fresh=new JSONObject(value);if(fresh.optInt("revision")!=revision){project=fresh;revision=fresh.optInt("revision");undo.clear();redo.clear();draw();preview();}}catch(Exception ignored){}}));}
         if(renderPreview!=null&&renderPreview.busy()){status.setVisibility(View.VISIBLE);status.setText("Aperçu rendu · "+renderPreview.progress()+" % · toucher pour annuler");ui.postDelayed(this,400);return;}
+        if(studioExportFlow!=null)studioExportFlow.refresh();
         JSONObject s=engine.status();String state=s.optString("state");boolean currentOutput=project!=null&&project.optString("output").equals(s.optString("output"));
         if(!state.equals(lastExportState)){lastExportState=state;exportStateAt=android.os.SystemClock.elapsedRealtime();}
         status.setVisibility(subtitleJob!=null||importing||state.equals("running")||state.equals("preparing")||(currentOutput&&(state.equals("failed")||state.equals("completed"))&&android.os.SystemClock.elapsedRealtime()-exportStateAt<6000)?View.VISIBLE:View.GONE);
@@ -89,6 +91,9 @@ public final class VideoEditorActivity extends Activity {
         title=MobileUi.text(this,"Studio ▾",13,MobileUi.TEXT);title.setPadding(dp(3),0,dp(3),0);title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));title.setOnClickListener(v->projectMenu());
         quality=chip("720p ▾");quality.setTextSize(12);quality.setBackground(MobileUi.bg(this,0xff292b30));header.addView(quality,new LinearLayout.LayoutParams(dp(64),dp(40)));quality.setOnClickListener(v->qualityMenu());
         TextView export=chip("Exporter");export.setTag("export_project");export.setTextSize(13);export.setTextColor(0xff061a18);export.setTypeface(null,android.graphics.Typeface.BOLD);export.setBackground(MobileUi.bg(this,0xff20d4d3));LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(dp(84),dp(40));ep.leftMargin=dp(6);header.addView(export,ep);export.setOnClickListener(v->export());
+        studioExportFlow=new StudioExportFlow(this,engine,root,savedProject->{
+            project=savedProject;revision=savedProject.optInt("revision",revision);draw();
+        });
         FrameLayout canvas=new FrameLayout(this);previewCanvas=canvas;canvas.setBackgroundColor(0xff000000);root.addView(canvas,new LinearLayout.LayoutParams(-1,0,1));viewer=(androidx.media3.ui.PlayerView)getLayoutInflater().inflate(R.layout.studio_player,canvas,false);canvas.addView(viewer,new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER));
         canvas.addOnLayoutChangeListener((v,left,top,right,bottom,oldLeft,oldTop,oldRight,oldBottom)->applyPreviewFrame());
         TextView empty=MobileUi.text(this,"＋\nAjouter une vidéo",17,MobileUi.MUTED);empty.setGravity(Gravity.CENTER);empty.setTag("empty");canvas.addView(empty,new FrameLayout.LayoutParams(-1,-1));empty.setOnClickListener(v->addMenu("video"));
@@ -767,17 +772,8 @@ public final class VideoEditorActivity extends Activity {
 
     private void export(){
         if(renderPreview!=null&&renderPreview.busy()){toast("Termine ou annule l’aperçu rendu");return;}
-        if(project==null||saving||importing){toast("Attends la fin de l’importation ou de la sauvegarde");return;}if(clips().length()==0){toast("Ajoute une vidéo avant d’exporter");return;}
-        String snapshot=project.toString();WorkspaceCommands.IO.execute(()->{try{JSONObject p=new JSONObject(snapshot);boolean exists=new WorkspaceStore(this).file(p.getString("output")).exists();ui.post(()->{if(!alive)return;String message=clips().length()+" plans · "+time(total())+"\n"+project.optInt("resolution",720)+"p · "+project.optString("aspect_ratio","source").replace("source","Original")+"\n"+name(project.optString("output"));
-            if(exists)new AgentDialog.Builder(this).setTitle("Exporter · "+time(total()))
-                .setMessage(message+"\n\nUn MP4 existe déjà. Choisis l'action voulue.")
-                .setItems(new String[]{"Lire le MP4 existant","Enregistrer sur le téléphone",
-                    "Partager le MP4"},(d,n)->openExportFile(project.optString("output"),n))
-                .setNeutralButton("Remplacer",(d,n)->startExport(true,false))
-                .setPositiveButton("Nouvelle copie",(d,n)->startExport(false,true))
-                .setNegativeButton("Annuler",null).show();
-            else new AgentDialog.Builder(this).setTitle("Exporter le projet complet").setMessage(message).setNegativeButton("Annuler",null).setPositiveButton("Exporter",(d,n)->startExport(false,false)).show();
-        });}catch(Exception e){ui.post(()->toast(e.getMessage()));}});
+        if(project==null||saving||importing){toast("Attends la fin de l’importation ou de la sauvegarde");return;}
+        if(studioExportFlow!=null)studioExportFlow.open(project,revision);
     }
     private void startExport(boolean replace,boolean copy){
         if(saving||importing)return;saving=true;pausePreview();
@@ -976,6 +972,7 @@ public final class VideoEditorActivity extends Activity {
                     }}
                     remember();JSONObject c=new JSONObject().put("path",path).put("start_ms",0).put("duration_ms",duration);if(kind.equals("video"))clips().put(c);else{if(parallelImport||StudioAudio.enabled(project)){StudioAudio.attach(project,c);audio().put(c);selected=clips().length()-1;save();return;}long remaining=total();for(int i=0;i<audio().length();i++)remaining-=audio().getJSONObject(i).optLong("duration_ms");if(remaining<500){toast("Ajoute une vidéo ou raccourcis l’audio précédent");return;}c.put("duration_ms",Math.min(duration,remaining));JSONArray a=audio();a.put(c);project.put("audio",a);}selected=clips().length()-1;save();}catch(Exception e){toast(e.getMessage());}});}catch(Exception e){ui.post(()->toast(e.getMessage()));}});}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
+        if(studioExportFlow!=null&&studioExportFlow.onActivityResult(request,result,data))return;
         if(request==811&&result==RESULT_OK&&data!=null&&data.getData()!=null){android.net.Uri target=data.getData();String path=exportCopyPath;WorkspaceCommands.IO.execute(()->{try(java.io.InputStream in=new java.io.FileInputStream(new WorkspaceStore(this).file(path));java.io.OutputStream out=getContentResolver().openOutputStream(target,"w")){if(out==null)throw new java.io.IOException("Destination indisponible");byte[] buffer=new byte[65536];int count;while((count=in.read(buffer))!=-1)out.write(buffer,0,count);ui.post(()->toast("Montage complet enregistré sur le téléphone"));}catch(Exception e){ui.post(()->toast(e.getMessage()));}});return;}
         if(request!=810||result!=RESULT_OK||data==null||project==null)return;String kind=importKind;int selectedCount=data.getClipData()==null?1:data.getClipData().getItemCount();if(selectedCount>100||kind.equals("video")&&clips().length()+selectedCount>100){toast("Le montage accepte 100 plans maximum. Aucun média ajouté.");return;}ArrayList<android.net.Uri> uris=new ArrayList<>();if(data.getClipData()!=null)for(int i=0;i<Math.min(100,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)uris.add(data.getData());if(uris.isEmpty())return;importing=true;status.setText("Importation de "+uris.size()+" média(s)…");
         WorkspaceCommands.IO.execute(()->{JSONArray batch=new JSONArray();ArrayList<String> errors=new ArrayList<>();for(android.net.Uri uri:uris)try{String filename="Media-"+System.nanoTime();try(Cursor cursor=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(cursor!=null&&cursor.moveToFirst())filename=cursor.getString(0);}WorkspaceStore store=new WorkspaceStore(this);if(store.file(filename).exists())filename=System.currentTimeMillis()+"-"+filename;store.importUri(uri,filename);
@@ -1002,7 +999,7 @@ public final class VideoEditorActivity extends Activity {
         });
     }
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("export_copy_path",exportCopyPath);if(timeline!=null){state.putLong("studio_position",timeline.playhead());state.putFloat("studio_zoom",timeline.zoomLevel());}state.putInt("studio_selected",selected);state.putInt("studio_audio",selectedAudio);state.putString("studio_tool_page",toolPage);}
-    @Override protected void onResume(){super.onResume();resumed=true;ui.removeCallbacks(ticker);ui.post(ticker);}
+    @Override protected void onResume(){super.onResume();resumed=true;ui.removeCallbacks(ticker);ui.post(ticker);if(studioExportFlow!=null)studioExportFlow.onResume();}
     @Override public void onBackPressed(){
         if(fullscreenDialog!=null){fullscreenDialog.dismiss();return;}
         if(saving){closeAfterSave=true;toast("Fin de la sauvegarde avant fermeture…");return;}
@@ -1010,6 +1007,6 @@ public final class VideoEditorActivity extends Activity {
         super.onBackPressed();
     }
     @Override protected void onPause(){resumed=false;ui.removeCallbacks(ticker);pausePreview();super.onPause();}
-    @Override protected void onDestroy(){if(subtitleJob!=null)subtitleJob.set(true);if(renderPreview!=null)renderPreview.cancel();if(studioPicker!=null)studioPicker.cancel();alive=false;previewGeneration++;ui.removeCallbacksAndMessages(null);if(fullscreenDialog!=null)fullscreenDialog.dismiss();if(player!=null)player.release();if(audioPlayer!=null)audioPlayer.release();super.onDestroy();}
+    @Override protected void onDestroy(){if(studioExportFlow!=null)studioExportFlow.dispose();if(subtitleJob!=null)subtitleJob.set(true);if(renderPreview!=null)renderPreview.cancel();if(studioPicker!=null)studioPicker.cancel();alive=false;previewGeneration++;ui.removeCallbacksAndMessages(null);if(fullscreenDialog!=null)fullscreenDialog.dismiss();if(player!=null)player.release();if(audioPlayer!=null)audioPlayer.release();super.onDestroy();}
     private static final class JSONObjectSafe extends JSONObject{JSONObjectSafe(String key,Object value){try{put(key,value);}catch(Exception ignored){}}JSONObjectSafe withRevision(int revision){try{put("expected_revision",revision);}catch(Exception ignored){}return this;}}
 }
