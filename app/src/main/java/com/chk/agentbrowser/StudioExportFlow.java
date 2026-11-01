@@ -95,7 +95,8 @@ final class StudioExportFlow {
             &&output.equals(state.optString("output"))){refresh();details();return;}
         if(project.optJSONArray("clips")==null||project.optJSONArray("clips").length()==0){message("Ajoute des vidéos au montage.");return;}
         final String name=fileName(project.optString("output","CHK_Studio.mp4"));
-        new AgentDialog.Builder(activity).setTitle("Exporter le montage")
+        AgentDialog.Builder dialog=new AgentDialog.Builder(activity);
+        dialog.setTitle("Exporter le montage")
             .setMessage("Choisis la destination avant de lancer le rendu.\n"
                 +project.optJSONArray("clips").length()+" plans · "+project.optInt("resolution",720)+"p\n"
                 +"Le pourcentage restera visible dans Studio et la notification Android.")
@@ -109,7 +110,16 @@ final class StudioExportFlow {
                 else if(choice==1)prepare(project,revision,project.optString("output",""),"phone");
                 else if(choice==2)prepare(project,revision,project.optString("output",""),"downloads");
                 else prepare(project,revision,project.optString("output",""),"chk");
-            }).setNegativeButton("Annuler",null).show();
+            }).setNegativeButton("Annuler",null);
+        try{
+            String previous=project.optString("output","");
+            if(!previous.isEmpty()&&new WorkspaceStore(activity).file(previous).isFile()){
+                // Keep existing Studio's Replace / New copy actions for old MP4s.
+                dialog.setNeutralButton("Remplacer",(d,n)->render(project,revision,previous,"chk",true))
+                    .setPositiveButton("Nouvelle copie",(d,n)->render(project,revision,copyName(previous),"chk",false));
+            }
+        }catch(Exception ignored){}
+        dialog.show();
     }
     private String initialFolder(JSONObject project){
         String path=project.optString("output","");
