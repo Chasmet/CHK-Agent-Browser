@@ -44,7 +44,7 @@ final class StudioExportFlow {
     private final ProgressBar progress;
     private String output="", destination="chk";
     private JSONObject savedProject;
-    private boolean verifying=false,handled=false,copying=false,disposed=false;
+    private boolean verifying=false,handled=false,copying=false,disposed=false,exportStarted=false;
     private String lastState="";
     private String finalMessage="";
 
@@ -67,6 +67,7 @@ final class StudioExportFlow {
         output=prefs.getString("output","");
         destination=prefs.getString("destination","chk");
         if(!output.isEmpty()){
+            exportStarted=true;
             label.setText("Export à vérifier");
             detail.setText(output);
             panel.setVisibility(View.VISIBLE);
@@ -133,7 +134,7 @@ final class StudioExportFlow {
             if(!dir.isDirectory()){message("Dossier CHK introuvable : "+folder);return;}
             File[] entries=dir.listFiles(File::isDirectory);
             if(entries==null)entries=new File[0];
-            Arrays.sort(entries,Comparator.comparing(File::getName,String.CASE_INSENSITIVE_ORDER));
+            Arrays.sort(entries,(left,right)->left.getName().compareToIgnoreCase(right.getName()));
             ArrayList<String> choices=new ArrayList<>();
             choices.add("✓ Exporter dans "+(folder.isEmpty()?"Accueil CHK":folder));
             choices.add("↑ Dossier parent");
@@ -188,7 +189,7 @@ final class StudioExportFlow {
         if(disposed)return;
         try{
             JSONObject snapshot=new JSONObject(project.toString()).put("output",chosen);
-            destination=where;output=chosen;handled=false;verifying=false;copying=false;finalMessage="";
+            destination=where;output=chosen;handled=false;verifying=false;copying=false;exportStarted=false;finalMessage="";
             savedProject=snapshot;
             persist();
             show("Préparation de l’export · 0 %",chosen,0);
@@ -206,6 +207,7 @@ final class StudioExportFlow {
                             (started,message)->main.post(()->{
                                 if(disposed)return;
                                 if(!started){failure(message);return;}
+                                exportStarted=true;
                                 show("Export MP4 en cours · 0 %",chosen,0);
                                 refresh();
                             }));
@@ -214,7 +216,7 @@ final class StudioExportFlow {
         }catch(Exception ex){failure(ex.getMessage());}
     }
     void refresh(){
-        if(disposed||copying||output.isEmpty()||handled)return;
+        if(disposed||copying||output.isEmpty()||handled||!exportStarted)return;
         JSONObject state=engine.status();
         if(!output.equals(state.optString("output","")))return;
         String current=state.optString("state","");
@@ -291,6 +293,7 @@ final class StudioExportFlow {
         copyToPhone(data.getData(),false);
         return true;
     }
+    @androidx.annotation.RequiresApi(29)
     private void saveToDownloads(){
         try{
             ContentValues values=new ContentValues();
