@@ -54,7 +54,7 @@ final class StudioExportFlow {
         panel=new LinearLayout(activity);panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(12),dp(9),dp(12),dp(10));
         panel.setBackgroundColor(0xff182831);panel.setVisibility(View.GONE);
-        label=new TextView(activity);label.setTextSize(15);label.setTypeface(null,1);
+        label=new TextView(activity);label.setTextSize(15);label.setTypeface(null,android.graphics.Typeface.BOLD);
         label.setTextColor(0xfff0ffff);label.setText("Export MP4");
         detail=new TextView(activity);detail.setTextSize(12);detail.setTextColor(0xffc1dae0);
         detail.setPadding(0,dp(4),0,dp(7));
