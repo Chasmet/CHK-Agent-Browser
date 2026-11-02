@@ -818,7 +818,25 @@ public final class VideoEditorActivity extends Activity {
     private void export(){
         if(renderPreview!=null&&renderPreview.busy()){toast("Termine ou annule l’aperçu rendu");return;}
         if(project==null||saving||importing){toast("Attends la fin de l’importation ou de la sauvegarde");return;}
-        if(studioExportFlow!=null)studioExportFlow.open(project,revision);
+        if(studioExportFlow==null)return;
+        // A previously exported MP4 must remain accessible even after
+        // reopening Studio, when the engine's in-memory status is idle.
+        try{
+            String path=project.optString("output","");
+            java.io.File existing=path.isEmpty()?null:new WorkspaceStore(this).file(path);
+            if(existing!=null&&existing.isFile()&&existing.length()>=1000){
+                new AgentDialog.Builder(this).setTitle("MP4 déjà disponible")
+                    .setItems(new String[]{
+                        "Lire, enregistrer ou partager le MP4 existant",
+                        "Lancer un nouveau rendu du montage"
+                    },(d,choice)->{
+                        if(choice==0)outputMenu();
+                        else studioExportFlow.open(project,revision);
+                    }).setNegativeButton("Fermer",null).show();
+                return;
+            }
+        }catch(Exception error){android.util.Log.w("ChkStudio","Vérification MP4 existant impossible",error);}
+        studioExportFlow.open(project,revision);
     }
     private void startExport(boolean replace,boolean copy){
         if(saving||importing)return;saving=true;pausePreview();
@@ -858,8 +876,11 @@ public final class VideoEditorActivity extends Activity {
                     engine.command(this,"video_editor_cancel",new JSONObject(),(ok,res)->{})).show();
             return;
         }
-        String output=state.equals("completed")?engine.status().optString("output")
-            :project==null?"":project.optString("output");
+        // Never open an unrelated last export if a different project is loaded.
+        String currentProjectOutput=project==null?"":project.optString("output");
+        String engineOutput=engine.status().optString("output","");
+        String output=state.equals("completed")&&engineOutput.equals(currentProjectOutput)
+            ?engineOutput:currentProjectOutput;
         if(output.isEmpty())return;
         new AgentDialog.Builder(this).setTitle("Montage MP4")
             .setItems(new String[]{"Lire","Enregistrer sur le téléphone","Partager",
