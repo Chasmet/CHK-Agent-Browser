@@ -78,8 +78,14 @@ public final class VideoEditorActivity extends Activity {
         if(studioExportFlow!=null)studioExportFlow.refresh();
         JSONObject s=engine.status();String state=s.optString("state");boolean currentOutput=project!=null&&project.optString("output").equals(s.optString("output"));
         if(!state.equals(lastExportState)){lastExportState=state;exportStateAt=android.os.SystemClock.elapsedRealtime();}
-        status.setVisibility(subtitleJob!=null||importing||state.equals("running")||state.equals("preparing")||(currentOutput&&(state.equals("failed")||state.equals("completed"))&&android.os.SystemClock.elapsedRealtime()-exportStateAt<6000)?View.VISIBLE:View.GONE);
-        status.setText(subtitleJob!=null?subtitleProgress:importing?"Importation des médias…":"running".equals(state)?"Export MP4 · "+s.optInt("progress_percent")+" %":"preparing".equals(state)?"Préparation du rendu…":"completed".equals(state)?"Export terminé · toucher pour lire / partager":"failed".equals(state)?"Export impossible : "+s.optString("error"):"Montage local · sauvegarde automatique");
+        // Keep the finished-export action available after the initial notification:
+        // previously it vanished after six seconds, hiding Save / Share / Downloads.
+        boolean finished=currentOutput&&"completed".equals(state);
+        boolean recentFailure=currentOutput&&"failed".equals(state)
+            &&android.os.SystemClock.elapsedRealtime()-exportStateAt<6000;
+        status.setVisibility(subtitleJob!=null||importing||state.equals("running")
+            ||state.equals("preparing")||finished||recentFailure?View.VISIBLE:View.GONE);
+        status.setText(subtitleJob!=null?subtitleProgress:importing?"Importation des médias…":"running".equals(state)?"Export MP4 · "+s.optInt("progress_percent")+" %":"preparing".equals(state)?"Préparation du rendu…":finished?"MP4 terminé · toucher pour enregistrer / partager":"failed".equals(state)?"Export impossible : "+s.optString("error"):"Montage local · sauvegarde automatique");
         ui.postDelayed(this,player!=null&&player.isPlaying()?33:600);
     }};
     @Override public void onCreate(Bundle state){super.onCreate(state);alive=true;if(state!=null){exportCopyPath=state.getString("export_copy_path","");editSeek=state.getLong("studio_position",0);selected=state.getInt("studio_selected",0);selectedAudio=state.getInt("studio_audio",-1);toolPage=state.getString("studio_tool_page","Accueil");restoredZoom=state.getFloat("studio_zoom",1);}
