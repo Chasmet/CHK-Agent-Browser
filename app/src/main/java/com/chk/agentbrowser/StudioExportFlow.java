@@ -38,6 +38,17 @@ final class StudioExportFlow {
     private final VideoEditorEngine engine;
     private final Updated updated;
     private final Handler main=new Handler(Looper.getMainLooper());
+    // Independently monitor the native export even when the preview ticker is
+    // paused or another Studio overlay is visible.
+    private final Runnable exportMonitor=new Runnable(){
+        @Override public void run(){
+            if(disposed||handled||!exportStarted)return;
+            refresh();
+            if(!disposed&&!handled&&exportStarted)main.postDelayed(this,900);
+        }
+    };
+    private void startMonitoring(){main.removeCallbacks(exportMonitor);main.post(exportMonitor);}
+
     private final SharedPreferences prefs;
     private final LinearLayout panel;
     private final TextView label,detail;
@@ -71,6 +82,7 @@ final class StudioExportFlow {
             label.setText("Export à vérifier");
             detail.setText(output);
             panel.setVisibility(View.VISIBLE);
+            startMonitoring();
         }
     }
     private int dp(int n){return MobileUi.dp(activity,n);}
@@ -83,7 +95,7 @@ final class StudioExportFlow {
     private String cleanError(String error){
         if(error==null||error.trim().isEmpty())return "Échec inconnu du moteur vidéo.";
         if(error.contains("Images MP4 non vérifiables"))
-            return "Les images du MP4 ne passent pas la vérification. Aucun export final n’a été enregistré.";
+            return error+" Vérifie les plans indiqués. Le projet est conservé." ;
         if(error.contains("Codec")||error.contains("decoder")||error.contains("MediaCodec"))
             return "Le décodeur vidéo Android a échoué. Vérifie les codecs ou réessaie avec des médias compatibles.";
         return error.length()>260?error.substring(0,260):error;
@@ -219,6 +231,7 @@ final class StudioExportFlow {
                                 if(disposed)return;
                                 if(!started){failure(message);return;}
                                 exportStarted=true;
+                                startMonitoring();
                                 show("Export MP4 en cours · 0 %",chosen,0);
                                 refresh();
                             }));
@@ -414,6 +427,6 @@ final class StudioExportFlow {
                     }));
             }).show();
     }
-    void onResume(){refresh();}
-    void dispose(){disposed=true;}
+    void onResume(){refresh();if(exportStarted&&!handled)startMonitoring();}
+    void dispose(){disposed=true;main.removeCallbacks(exportMonitor);}
 }
