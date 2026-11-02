@@ -236,7 +236,16 @@ final class StudioExportFlow {
         int percent=Math.max(0,Math.min(99,state.optInt("progress_percent",0)));
         if(current.equals("preparing"))show("Export MP4 · préparation",output,-1);
         else if(current.equals("running")){
-            show(percent>=99?"Export · 99 % · vérification en cours":"Export MP4 · "+percent+" %",
+            if(percent>=99){
+                int total=state.optInt("verification_total_cuts",0);
+                int checked=state.optInt("verification_completed_cuts",0);
+                String phase=state.optString("verification_stage","");
+                String label=total>0
+                    ?("sources".equals(phase)?"Analyse des sources":"Vérification des images")
+                        +" · "+Math.min(checked,total)+"/"+total+" plans"
+                    :"Finalisation du MP4 · 99 %";
+                show(label,fileName(output)+" · "+destinationName(),99);
+            }else show("Export MP4 · "+percent+" %",
                 fileName(output)+" · "+destinationName(),percent);
         }else if(current.equals("failed")){
             failure(state.optString("error","Le rendu a échoué."));
