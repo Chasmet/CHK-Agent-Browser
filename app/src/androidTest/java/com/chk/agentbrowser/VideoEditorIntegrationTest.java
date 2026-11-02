@@ -78,6 +78,33 @@ public final class VideoEditorIntegrationTest {
         for(int row=120;row<240;row+=2)for(int col=0;col<240;col+=2){int p=frame.getPixel(col,row);if(android.graphics.Color.red(p)>170&&android.graphics.Color.green(p)>170&&android.graphics.Color.blue(p)>170)count++;}frame.recycle();return count;
     }
     @Test public void testMutedSpeedExportDoesNotDeadlock()throws Exception{String output="muted-speed-"+UUID.randomUUID()+".mp4";invoke("video_editor_project_save",new JSONObject().put("project",project(output).put("mute_original",true)));invoke("video_editor_export",new JSONObject());awaitExport();JSONObject verified=invoke("video_editor_verify_output",new JSONObject());assertTrue(verified.toString(),verified.getBoolean("valid"));assertFalse(verified.getBoolean("has_audio"));assertEquals(1500,verified.getLong("expected_duration_ms"));store.file(output).delete();}
+    @Test public void testTwentyThreeRepeatedVideoCutsRemainFrameVerifiable()throws Exception {
+        // Regression: a 23-cut Grok clip previously reached 99% and failed
+        // with "Images MP4 non vérifiables" despite a completed Media3 encode.
+        // Source and output decoder sessions must never overlap during QA.
+        String output="many-cuts-"+UUID.randomUUID()+".mp4";
+        JSONArray cuts=new JSONArray();
+        for(int i=0;i<23;i++)
+            cuts.put(new JSONObject().put("path",source)
+                .put("start_ms",0).put("duration_ms",500).put("filter","aucun"));
+        JSONObject p=project(output).put("clips",cuts).put("audio",new JSONArray())
+            .put("mute_original",true).put("resolution",480).put("fps",24);
+        try{
+            invoke("video_editor_project_save",new JSONObject().put("project",p));
+            invoke("video_editor_export",new JSONObject());
+            awaitExport();
+            JSONObject verified=invoke("video_editor_verify_output",new JSONObject());
+            assertTrue(verified.toString(),verified.optBoolean("valid",false));
+            assertEquals(23,verified.getInt("verified_video_segments"));
+            assertEquals(0,verified.getInt("unverified_video_segments"));
+            assertEquals(0,verified.getJSONArray("black_video_segments").length());
+            assertEquals(11500L,verified.getLong("expected_duration_ms"));
+            assertTrue(store.file(output).isFile()&&store.file(output).length()>1000);
+        }finally{
+            invoke("video_editor_cancel",new JSONObject());
+            store.file(output).delete();
+        }
+    }
     @Test public void testCompleteSevenClipPortraitExportAndReplacement()throws Exception{
         String output="complete-"+UUID.randomUUID()+".mp4";JSONObject p=project(output).put("aspect_ratio","9:16");JSONArray clips=new JSONArray();for(int i=0;i<7;i++)clips.put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",3000).put("fade_ms",180).put("filter",i%2==0?"froid":"cinema").put("text",i==0?"Projet complet":""));JSONArray tracks=new JSONArray();for(int i=0;i<7;i++)tracks.put(new JSONObject().put("path",source).put("start_ms",0).put("duration_ms",3000));p.put("clips",clips).put("audio",tracks).put("mute_original",true);invoke("video_editor_project_save",new JSONObject().put("project",p));
         try(FileOutputStream old=new FileOutputStream(store.file(output))){old.write("Old completed video must survive a rejected export".getBytes("UTF-8"));}long oldSize=store.file(output).length();CountDownLatch rejected=new CountDownLatch(1);AtomicBoolean accepted=new AtomicBoolean(true);VideoEditorEngine.get().command(context,"video_editor_export",new JSONObject(),(ok,res)->{accepted.set(ok);rejected.countDown();});assertTrue(rejected.await(30,TimeUnit.SECONDS));assertFalse(accepted.get());assertEquals(oldSize,store.file(output).length());

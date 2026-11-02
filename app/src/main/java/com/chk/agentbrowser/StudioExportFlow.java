@@ -83,7 +83,9 @@ final class StudioExportFlow {
     private String cleanError(String error){
         if(error==null||error.trim().isEmpty())return "Échec inconnu du moteur vidéo.";
         if(error.contains("Images MP4 non vérifiables"))
-            return "Les images du MP4 ne passent pas la vérification. Aucun export final n’a été enregistré.";
+            return "Le MP4 est encodé, mais sa vérification a échoué : "
+                +error.substring(error.indexOf("Images MP4 non vérifiables"))
+                +" L’ancien fichier est conservé ; aucun nouvel export final n’a été validé.";
         if(error.contains("Codec")||error.contains("decoder")||error.contains("MediaCodec"))
             return "Le décodeur vidéo Android a échoué. Vérifie les codecs ou réessaie avec des médias compatibles.";
         return error.length()>260?error.substring(0,260):error;
@@ -234,7 +236,16 @@ final class StudioExportFlow {
         int percent=Math.max(0,Math.min(99,state.optInt("progress_percent",0)));
         if(current.equals("preparing"))show("Export MP4 · préparation",output,-1);
         else if(current.equals("running")){
-            show(percent>=99?"Export · 99 % · vérification en cours":"Export MP4 · "+percent+" %",
+            if(percent>=99){
+                int total=state.optInt("verification_total_cuts",0);
+                int checked=state.optInt("verification_completed_cuts",0);
+                String phase=state.optString("verification_stage","");
+                String label=total>0
+                    ?("sources".equals(phase)?"Analyse des sources":"Vérification des images")
+                        +" · "+Math.min(checked,total)+"/"+total+" plans"
+                    :"Finalisation du MP4 · 99 %";
+                show(label,fileName(output)+" · "+destinationName(),99);
+            }else show("Export MP4 · "+percent+" %",
                 fileName(output)+" · "+destinationName(),percent);
         }else if(current.equals("failed")){
             failure(state.optString("error","Le rendu a échoué."));
