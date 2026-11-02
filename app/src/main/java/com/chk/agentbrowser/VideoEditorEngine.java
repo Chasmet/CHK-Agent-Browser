@@ -55,6 +55,8 @@ public final class VideoEditorEngine {
     private static final VideoEditorEngine INSTANCE=new VideoEditorEngine();
     private volatile String state="idle", error="",lastOutput="";
     private volatile int percent;
+    private volatile int verificationCompletedCuts,verificationTotalCuts;
+    private volatile String verificationStage="";
     private Transformer transformer;
     private final Object exportLock=new Object();
     private volatile long exportGeneration;
@@ -160,6 +162,9 @@ public final class VideoEditorEngine {
         JSONObject o=new JSONObject();
         try{o.put("state",state).put("progress_percent",percent)
            .put("error",error).put("output",lastOutput)
+           .put("verification_stage",verificationStage)
+           .put("verification_completed_cuts",verificationCompletedCuts)
+           .put("verification_total_cuts",verificationTotalCuts)
            .put("background_protected",VideoExportService.active()||(app!=null&&AgentClient.get(app).isEnabled())).put("editing_local",true).put("engine","androidx.media3.transformer");
            if("running".equals(state)&&transformer!=null&&Looper.myLooper()==Looper.getMainLooper()){
                ProgressHolder h=new ProgressHolder();
@@ -276,6 +281,7 @@ public final class VideoEditorEngine {
         // the output. An unreadable source sample is diagnostic, not a reason
         // to delete an otherwise healthy MP4.
         for(int i=0;i<n;i++){
+            if("running".equals(state)){verificationStage="sources";verificationTotalCuts=n;verificationCompletedCuts=i+1;}
             JSONObject clip=clips.getJSONObject(i);
             long duration=Math.max(1,clip.optLong("duration_ms",10000));
             double speed=clip.optDouble("speed",1);
@@ -319,6 +325,7 @@ public final class VideoEditorEngine {
         MediaMetadataRetriever output=null;
         try{
             for(int i=0;i<n;i++){
+                if("running".equals(state)){verificationStage="frames";verificationTotalCuts=n;verificationCompletedCuts=i+1;}
                 // Recycle the retriever periodically: long 1080p timelines on
                 // Qualcomm can become unreadable after many sequential seeks.
                 if(output==null||i%5==0){
@@ -752,7 +759,7 @@ public final class VideoEditorEngine {
             if(destination.exists()&&!replace)throw new IllegalArgumentException("Une vidéo porte déjà ce nom. Choisis Remplacer ou Nouvelle copie dans Studio.");
             // Render beside the destination and preserve the previous completed file on failure.
             File partial=new File(destination.getParentFile(),".render-"+java.util.UUID.randomUUID()+".mp4");
-            app=context;activeOutput=partial;finalOutput=destination;lastOutput=output;error="";percent=0;state="running";
+            app=context;activeOutput=partial;finalOutput=destination;lastOutput=output;error="";percent=0;verificationStage="";verificationCompletedCuts=0;verificationTotalCuts=0;state="running";
             // Encode portrait frames physically upright (1080x1920), not landscape
             // H.264 with a 90-degree display matrix. The previous default confused
             // clients that inspect raw track dimensions instead of rotation tags.
