@@ -166,7 +166,7 @@ public final class VideoEditorActivity extends Activity {
         HorizontalScrollView strip=new HorizontalScrollView(this);contextStrip=strip;strip.setHorizontalScrollBarEnabled(false);root.addView(strip,new LinearLayout.LayoutParams(-1,dp(62)));tools=new LinearLayout(this);strip.addView(tools);
         HorizontalScrollView navigation=new HorizontalScrollView(this);mainNavigation=navigation;navigation.setHorizontalScrollBarEnabled(false);root.addView(navigation,new LinearLayout.LayoutParams(-1,dp(62)));
         mainTools=new LinearLayout(this);navigation.addView(mainTools);
-        mainTool(mainTools,"Éditer","scissors",()->showToolPage("Éditer"));mainTool(mainTools,"Audio","audio",()->showToolPage("Audio"));mainTool(mainTools,"Texte","text",()->showToolPage("Texte"));mainTool(mainTools,"Effets","effects",()->showToolPage("Effets"));mainTool(mainTools,"Calques","layers",()->showToolPage("Calques"));mainTool(mainTools,"Format","crop",()->ratioMenu());mainTool(mainTools,"Exports","queue",()->exportQueue());mainTool(mainTools,"Analyse","layers",()->showToolPage("Analyse"));
+        mainTool(mainTools,"Éditer","scissors",()->showToolPage("Éditer"));mainTool(mainTools,"Audio","audio",()->showToolPage("Audio"));mainTool(mainTools,"Texte","text",()->showToolPage("Texte"));mainTool(mainTools,"Effets","effects",()->showToolPage("Effets"));mainTool(mainTools,"Calques","layers",()->showToolPage("Calques"));mainTool(mainTools,"Format","crop",()->ratioMenu());mainTool(mainTools,"Exporter","queue",()->export());mainTool(mainTools,"Historique","queue",()->exportQueue());mainTool(mainTools,"Analyse","layers",()->showToolPage("Analyse"));
         updateSelectionTools();
         status=MobileUi.text(this,"Montage local",11,MobileUi.MUTED);status.setPadding(dp(10),dp(2),dp(10),dp(2));status.setMaxLines(2);FrameLayout.LayoutParams statusLayout=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);canvas.addView(status,statusLayout);status.setBackgroundColor(0xdd15202d);status.setOnClickListener(v->{if(renderPreview!=null&&renderPreview.busy()){renderPreview.cancel();previewHint.setVisibility(View.GONE);status.setVisibility(View.GONE);}else if(subtitleJob!=null){subtitleJob.set(true);subtitleJob=null;toast("Analyse des sous-titres arrêtée.");}else outputMenu();});scope.setOnClickListener(v->{if(selectedAudio>=0)trim(true,selectedAudio);else editMenu();});
         engine.command(this,"video_editor_project_read",new JSONObject(),(ok,res)->runOnUiThread(()->{try{if(ok){project=new JSONObject(res);revision=project.optInt("revision",0);draw();preview();String launch=getIntent().getStringExtra("add_path");String jsonPath=getIntent().getStringExtra("project_path");if(jsonPath!=null)addFile("project",jsonPath);else if(launch!=null)addFile("video",launch);}else toast(res);}catch(Exception e){toast(e.getMessage());}}));ui.post(ticker);
@@ -767,7 +767,46 @@ public final class VideoEditorActivity extends Activity {
     private void ratioMenu(){if(project==null)return;String[] ratios={"source","9:16","16:9","1:1","4:3","3:4","4:5","2:1","2.35:1","custom"};new AgentDialog.Builder(this).setTitle("Format du montage").setItems(new String[]{"Original","9:16 · Téléphone","16:9 · Paysage","1:1 · Carré","4:3","3:4","4:5","2:1","2,35:1 · Cinéma","Ratio personnalisé"},(d,n)->{if(n==9)prompt("Largeur:hauteur","9:16",r->setRatio(r));else setRatio(ratios[n]);}).show();}
     private void setRatio(String ratio){new AgentDialog.Builder(this).setTitle("Adapter l’image").setItems(new String[]{"Tout conserver (bandes noires)","Remplir (recadrage centré)"},(d,n)->{try{remember();project.put("aspect_ratio",ratio).put("aspect_mode",n==0?"fit":"crop");save();}catch(Exception ignored){}}).show();}
     private void photoAnimation(){if(!editable())return;new AgentDialog.Builder(this).setTitle("Mouvement du plan").setItems(new String[]{"Fixe","Zoom lent","Dézoom lent","Panoramique gauche → droite"},(d,n)->{try{remember();JSONObject c=clip();c.put("zoom",n==2?1.18:1).put("zoom_end",n==1?1.18:n==3?1.18:1).put("pan_x",n==3?-.08:0).put("pan_x_end",n==3?.08:0);save();}catch(Exception ex){toast(ex.getMessage());}}).show();}
-    private void exportQueue(){if(saving||importing||project==null)return;engine.command(this,"video_editor_queue_status",new JSONObject(),(ok,value)->ui.post(()->{if(!alive)return;try{if(!ok){toast(value);return;}JSONObject q=new JSONObject(value);JSONArray jobs=q.getJSONArray("jobs");StringBuilder body=new StringBuilder();for(int i=0;i<jobs.length();i++){JSONObject j=jobs.getJSONObject(i);body.append(j.optString("name")).append(" · ").append(j.optString("state")).append("\n");}if(jobs.length()==0)body.append("Aucun export en attente");new AgentDialog.Builder(this).setTitle("File des exports").setMessage(body.toString()).setPositiveButton("Actualiser",(d,n)->exportQueue()).setNegativeButton(q.optBoolean("paused")?"Reprendre":"Pause",(d,n)->engine.command(this,q.optBoolean("paused")?"video_editor_queue_resume":"video_editor_queue_pause",new JSONObject(),(success,result)->{})).setNeutralButton("Ajouter ce projet",(d,n)->{try{engine.command(this,"video_editor_queue_add",new JSONObject().put("request_id",java.util.UUID.randomUUID().toString()).put("projects",new JSONArray().put(new JSONObject().put("project",new JSONObject(project.toString())))),(success,result)->ui.post(()->{if(!success)toast(result);else exportQueue();}));}catch(Exception ex){toast(ex.getMessage());}}).show();}catch(Exception ex){toast(ex.getMessage());}}));}
+    private void exportQueue(){
+        if(saving||importing||project==null)return;
+        engine.command(this,"video_editor_queue_status",new JSONObject(),(ok,value)->ui.post(()->{
+            if(!alive)return;
+            try{
+                if(!ok){toast(value);return;}
+                JSONObject q=new JSONObject(value);
+                JSONArray jobs=q.optJSONArray("jobs");
+                if(jobs==null)jobs=new JSONArray();
+                int running=0,failed=0,finished=0;
+                for(int i=0;i<jobs.length();i++){
+                    String state=jobs.getJSONObject(i).optString("state","");
+                    if("failed".equals(state))failed++;
+                    else if("completed".equals(state))finished++;
+                    else if("running".equals(state)||"preparing".equals(state))running++;
+                }
+                StringBuilder body=new StringBuilder();
+                body.append("En cours : ").append(running).append(" · Terminés : ")
+                    .append(finished).append(" · Échecs : ").append(failed).append("\n\n");
+                int count=0;
+                for(int i=jobs.length()-1;i>=0&&count<6;i--,count++){
+                    JSONObject j=jobs.getJSONObject(i);
+                    body.append("• ").append(j.optString("name","Sans titre"))
+                        .append(" — ").append(j.optString("state","inconnu")).append("\n");
+                }
+                if(jobs.length()>6)body.append("… ").append(jobs.length()-6)
+                    .append(" exports plus anciens masqués");
+                if(jobs.length()==0)body.append("Aucun export dans l'historique.");
+                body.append("\n\nPour exporter le clip affiché, touche « Exporter » (en haut ou dans la barre du bas).");
+                final boolean paused=q.optBoolean("paused");
+                new AgentDialog.Builder(this)
+                    .setTitle("Historique des exports")
+                    .setMessage(body.toString())
+                    .setPositiveButton("Exporter ce clip",(d,n)->export())
+                    .setNegativeButton("Fermer",null)
+                    .setNeutralButton("Actualiser",(d,n)->exportQueue())
+                    .show();
+            }catch(Exception ex){toast(ex.getMessage());}
+        }));
+    }
     private void qualityMenu(){if(project==null||saving)return;new AgentDialog.Builder(this).setTitle("Qualité vidéo").setItems(new String[]{"Résolution · "+project.optInt("resolution",720)+"p","Cadence · "+project.optInt("fps",30)+" images/s"},(d,choice)->{if(choice==0)new AgentDialog.Builder(this).setTitle("Résolution").setSingleChoiceItems(new String[]{"480p · Léger","720p · Standard","1080p · Haute définition"},project.optInt("resolution",720)==480?0:project.optInt("resolution",720)==720?1:2,(dialog,n)->{put(project,"resolution",new int[]{480,720,1080}[n]);dialog.dismiss();}).show();else new AgentDialog.Builder(this).setTitle("Images par seconde").setSingleChoiceItems(new String[]{"24 fps · Cinéma","30 fps · Standard","60 fps · Fluide, selon le téléphone"},project.optInt("fps",30)==24?0:project.optInt("fps",30)==30?1:2,(dialog,n)->{put(project,"fps",new int[]{24,30,60}[n]);dialog.dismiss();}).show();}).setNegativeButton("Fermer",null).show();}
 
     private void export(){
