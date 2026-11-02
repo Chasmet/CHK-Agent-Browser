@@ -319,4 +319,17 @@ public final class VideoEditorIntegrationTest {
         android.graphics.Bitmap image=output.get();if(surface.get()!=null){android.view.SurfaceView view=surface.get();AtomicInteger copied=new AtomicInteger(-1);android.graphics.Bitmap frame=android.graphics.Bitmap.createBitmap(view.getWidth(),view.getHeight(),android.graphics.Bitmap.Config.ARGB_8888);for(int attempt=0;attempt<40;attempt++){CountDownLatch frameReady=new CountDownLatch(1);getInstrumentation().runOnMainSync(()->android.view.PixelCopy.request(view,frame,result->{copied.set(result);frameReady.countDown();},new android.os.Handler(android.os.Looper.getMainLooper())));assertTrue(frameReady.await(15,TimeUnit.SECONDS));if(copied.get()==android.view.PixelCopy.SUCCESS)break;Thread.sleep(300);}assertEquals("Actual video surface must be readable",android.view.PixelCopy.SUCCESS,copied.get());int lit=0;for(int y=0;y<frame.getHeight();y+=4)for(int x=0;x<frame.getWidth();x+=4){int color=frame.getPixel(x,y);if(android.graphics.Color.red(color)+android.graphics.Color.green(color)+android.graphics.Color.blue(color)>70)lit++;}assertTrue("Composition preview must display video pixels",lit>20);int[] location=new int[2];getInstrumentation().runOnMainSync(()->view.getLocationInWindow(location));new android.graphics.Canvas(image).drawBitmap(frame,location[0],location[1],null);frame.recycle();}
         try(OutputStream out=new FileOutputStream(new File(context.getCacheDir(),"qa-"+name+".png"))){image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}image.recycle();
     }
+    @Test public void testFrameVerificationReturnsSampleAtCutMidpoint()throws Exception{
+        android.media.MediaMetadataRetriever retriever=new android.media.MediaMetadataRetriever();
+        try{
+            retriever.setDataSource(store.file(source).getAbsolutePath());
+            for(long atUs:new long[]{250000L,1000000L,1900000L}){
+                android.graphics.Bitmap bitmap=VideoEditorEngine.verificationFrame(retriever,atUs);
+                assertNotNull("Rendered frame should be decodable at "+atUs,bitmap);
+                try{assertTrue(bitmap.getWidth()>0);assertTrue(bitmap.getHeight()>0);}
+                finally{bitmap.recycle();}
+            }
+        }finally{retriever.release();}
+    }
+
 }
