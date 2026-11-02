@@ -83,7 +83,9 @@ final class StudioExportFlow {
     private String cleanError(String error){
         if(error==null||error.trim().isEmpty())return "Échec inconnu du moteur vidéo.";
         if(error.contains("Images MP4 non vérifiables"))
-            return "Les images du MP4 ne passent pas la vérification. Aucun export final n’a été enregistré.";
+            return "Le MP4 est encodé, mais sa vérification a échoué : "
+                +error.substring(error.indexOf("Images MP4 non vérifiables"))
+                +" L’ancien fichier est conservé ; aucun nouvel export final n’a été validé.";
         if(error.contains("Codec")||error.contains("decoder")||error.contains("MediaCodec"))
             return "Le décodeur vidéo Android a échoué. Vérifie les codecs ou réessaie avec des médias compatibles.";
         return error.length()>260?error.substring(0,260):error;
