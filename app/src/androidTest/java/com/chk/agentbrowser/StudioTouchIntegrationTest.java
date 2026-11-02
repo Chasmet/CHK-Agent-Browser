@@ -156,4 +156,30 @@ public final class StudioTouchIntegrationTest {
         assertEquals(state.toString(),"completed",state.getString("state"));JSONObject proof=invoke("video_editor_verify_output",new JSONObject());assertTrue(proof.toString(),proof.getBoolean("valid"));assertTrue(proof.getBoolean("has_audio"));
         double source=rms(video),rendered=rms(p.getString("output"));assertTrue("Source must contain sound",source>.001);assertTrue("Actual MP4 amplitude must be attenuated: "+rendered/source,rendered/source>.12&&rendered/source<.40);
     }
+    @Test public void testExportDestinationsAreActuallyVisibleOnScreen()throws Exception {
+        launch();
+        call("export",new Class<?>[0]);
+        boolean found=false;
+        long until=SystemClock.elapsedRealtime()+12000;
+        while(SystemClock.elapsedRealtime()<until){
+            android.view.accessibility.AccessibilityNodeInfo root=
+                inst.getUiAutomation().getRootInActiveWindow();
+            if(root!=null){
+                boolean chk=!root.findAccessibilityNodeInfosByText("Dossier de l'application CHK").isEmpty();
+                boolean phone=!root.findAccessibilityNodeInfosByText("Téléphone — choisir le dossier Android").isEmpty();
+                boolean downloads=!root.findAccessibilityNodeInfosByText("Téléchargements / CHK Studio").isEmpty();
+                if(chk&&phone&&downloads){
+                    found=true;
+                    java.util.List<android.view.accessibility.AccessibilityNodeInfo> cancel=
+                        root.findAccessibilityNodeInfosByText("Annuler");
+                    if(!cancel.isEmpty())cancel.get(0).performAction(
+                        android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK);
+                    break;
+                }
+            }
+            Thread.sleep(100);
+        }
+        assertTrue("Exporter must visibly list CHK folder, phone picker and Downloads (not only Annuler)",found);
+    }
+
 }
