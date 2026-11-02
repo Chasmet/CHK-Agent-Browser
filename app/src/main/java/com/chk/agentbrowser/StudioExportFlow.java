@@ -96,15 +96,16 @@ final class StudioExportFlow {
         if(project.optJSONArray("clips")==null||project.optJSONArray("clips").length()==0){message("Ajoute des vidéos au montage.");return;}
         final String name=fileName(project.optString("output","CHK_Studio.mp4"));
         AgentDialog.Builder dialog=new AgentDialog.Builder(activity);
-        dialog.setTitle("Exporter le montage")
-            .setMessage("Choisis la destination avant de lancer le rendu.\n"
-                +project.optJSONArray("clips").length()+" plans · "+project.optInt("resolution",720)+"p\n"
-                +"Le pourcentage restera visible dans Studio et la notification Android.")
+        // Android AlertDialog cannot show its message and list at the same time:
+        // setMessage() takes priority over setItems(), leaving only "Annuler".
+        // Put the context in the title and use a real visible choice list.
+        dialog.setTitle("Exporter · "+project.optJSONArray("clips").length()+" plans · "
+                +project.optInt("resolution",720)+"p")
             .setItems(new String[]{
-                "Dossier CHK — choisir un emplacement",
-                "Téléphone — choisir le dossier après le rendu",
-                "Téléphone — Téléchargements / CHK Studio",
-                "Dossier CHK actuel : "+name
+                "📁 Dossier de l'application CHK — choisir",
+                "📱 Téléphone — choisir le dossier Android",
+                "⬇ Téléphone — Téléchargements / CHK Studio",
+                "✓ Dossier CHK actuel : "+name
             },(d,choice)->{
                 if(choice==0)browseChk(project,revision,initialFolder(project));
                 else if(choice==1)prepare(project,revision,project.optString("output",""),"phone");
