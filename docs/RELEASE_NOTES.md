@@ -1,5 +1,6 @@
 ## CHK Studio — copier un clip déjà exporté vers Android (2 novembre 2026)
 
+- Le panneau « MP4 terminé » reste visible et cliquable après la fin du rendu (il disparaissait auparavant après six secondes), ce qui laisse accessibles Lire, Partager et les deux modes d'enregistrement.
 - Après un rendu MP4 déjà terminé et vérifié, le menu « Montage MP4 » propose « Téléchargements Android — copier sans réencoder ». Évite un second passage par le décodeur vidéo du téléphone, utile sur les projets longs et les médias Grok hétérogènes.
 - Le fichier d'origine est vérifié (durée, pistes, échantillons vidéo) avant la copie ; la copie Android est contrôlée par SHA-256 et devient visible dans `Téléchargements/CHK Studio`.
 - Aucun changement aux cuts, pistes audio, montages enregistrés, codecs utilisés pour les nouveaux rendus, autorisations Local 3 ou au serveur PC CHK Universal Control 1.0.4.
