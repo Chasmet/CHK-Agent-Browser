@@ -245,16 +245,33 @@ public final class VideoEditorEngine {
             return result.put("reason","Métadonnées MP4 illisibles : "+ex.getClass().getSimpleName());
         }finally{retriever.release();}
     }
-    /** Inspect actual decoded MP4 frames in the middle of every clip.
-     * Metadata-only validation previously approved exports with 50 s of black.
-     * Seek exact clip midpoints, not just nearest keyframes (which coincide with fades).\n     * Compare against the corresponding source so an intentionally dark scene
-     * is not automatically rejected. This protects the final existing MP4. */
+    /** Retrieve a small frame. The exact-frame seek is tried first; on devices
+     * where the hardware codec refuses random access, retry a nearby keyframe.
+     * Android documents that OPTION_CLOSEST has much higher seek cost. */
+    static android.graphics.Bitmap verificationFrame(MediaMetadataRetriever retriever,long us){
+        for(int option:new int[]{MediaMetadataRetriever.OPTION_CLOSEST,
+                                   MediaMetadataRetriever.OPTION_CLOSEST_SYNC}){
+            try{
+                android.graphics.Bitmap bitmap=android.os.Build.VERSION.SDK_INT>=27?
+                    retriever.getScaledFrameAtTime(us,option,64,64):
+                    retriever.getFrameAtTime(us,option);
+                if(bitmap!=null)return bitmap;
+            }catch(RuntimeException ex){
+                android.util.Log.w("ChkVideoExport","Seek frame fallback "+option,ex);
+            }
+        }
+        return null;
+    }
+    /** Check real frames of each rendered cut. A flaky source thumbnail alone
+     * must not invalidate a well-lit decoded MP4 frame. Missing output frames
+     * and suspiciously black output are still rejected. */
     private JSONObject inspectRenderedClips(Context context,File render,JSONObject project)throws Exception{
         JSONArray clips=project.optJSONArray("clips");
-        JSONArray black=new JSONArray(),samples=new JSONArray();
+        JSONArray black=new JSONArray(),samples=new JSONArray(),unverifiedCuts=new JSONArray();
         int checked=0,unverifiable=0;
         if(clips==null||clips.length()==0)return new JSONObject()
             .put("verified_video_segments",0).put("unverified_video_segments",0)
+            .put("unverified_video_cuts",unverifiedCuts)
             .put("black_video_segments",black).put("frame_samples",samples);
         MediaMetadataRetriever output=new MediaMetadataRetriever();
         long timelineMs=0;
@@ -268,48 +285,68 @@ public final class VideoEditorEngine {
                 long realDuration=Math.round(duration/speed);
                 long at=timelineMs+realDuration/2;
                 timelineMs+=realDuration;
-                MediaMetadataRetriever source=new MediaMetadataRetriever();
+                // Avoid exhausting device codecs across long (20+ cut) edits.
+                if(i>0&&i%5==0){
+                    output.release();output=new MediaMetadataRetriever();
+                    output.setDataSource(render.getAbsolutePath());
+                }
                 android.graphics.Bitmap rendered=null,original=null;
                 try{
                     File input=store.file(clip.getString("path"));
-                    boolean image=StudioImages.isImage(input);
-                    if(!image)source.setDataSource(input.getAbsolutePath());
-                    long srcAt=(clip.optLong("start_ms",0)+duration/2)*1000;
-                    if(android.os.Build.VERSION.SDK_INT>=27){
-                        rendered=output.getScaledFrameAtTime(at*1000,
-                            MediaMetadataRetriever.OPTION_CLOSEST,64,64);
-                        original=image?StudioImages.thumbnail(input,64):source.getScaledFrameAtTime(srcAt,
-                            MediaMetadataRetriever.OPTION_CLOSEST,64,64);
-                    }else{
-                        rendered=output.getFrameAtTime(at*1000,MediaMetadataRetriever.OPTION_CLOSEST);
-                        original=image?StudioImages.thumbnail(input,64):source.getFrameAtTime(srcAt,MediaMetadataRetriever.OPTION_CLOSEST);
+                    rendered=verificationFrame(output,at*1000);
+                    if(rendered==null){
+                        unverifiable++;unverifiedCuts.put(i+1);
+                        samples.put(new JSONObject().put("cut",i+1).put("status","render_frame_unavailable"));
+                        continue;
                     }
-                    if(rendered==null||original==null){unverifiable++;continue;}
-                    checked++;
-                    float sourceBrightness=sampleBrightness(original);
-                    if(clip.has("crop")){
-                        JSONObject crop=StudioCrop.read(clip);int x=Math.min(original.getWidth()-1,(int)(crop.getDouble("x")*original.getWidth())),y=Math.min(original.getHeight()-1,(int)(crop.getDouble("y")*original.getHeight()));
-                        int w=Math.max(1,Math.min(original.getWidth()-x,(int)Math.round(crop.getDouble("width")*original.getWidth()))),h=Math.max(1,Math.min(original.getHeight()-y,(int)Math.round(crop.getDouble("height")*original.getHeight())));
-                        android.graphics.Bitmap region=android.graphics.Bitmap.createBitmap(original,x,y,w,h);sourceBrightness=sampleBrightness(region);if(region!=original)region.recycle();
+                    boolean image=StudioImages.isImage(input);
+                    try{
+                        if(image)original=StudioImages.thumbnail(input,64);
+                        else{
+                            MediaMetadataRetriever source=new MediaMetadataRetriever();
+                            try{
+                                source.setDataSource(input.getAbsolutePath());
+                                long srcAt=(clip.optLong("start_ms",0)+duration/2)*1000;
+                                original=verificationFrame(source,srcAt);
+                            }finally{source.release();}
+                        }
+                    }catch(Exception ex){
+                        android.util.Log.w("ChkVideoExport","Source thumbnail unavailable in cut "+(i+1),ex);
                     }
                     float renderedBrightness=sampleBrightness(rendered);
-                    samples.put(new JSONObject().put("cut",i+1)
+                    float sourceBrightness=original==null?-1:sampleBrightness(original);
+                    if(original!=null&&clip.has("crop")){
+                        JSONObject crop=StudioCrop.read(clip);
+                        int x=Math.min(original.getWidth()-1,(int)(crop.getDouble("x")*original.getWidth()));
+                        int y=Math.min(original.getHeight()-1,(int)(crop.getDouble("y")*original.getHeight()));
+                        int w=Math.max(1,Math.min(original.getWidth()-x,(int)Math.round(crop.getDouble("width")*original.getWidth())));
+                        int h=Math.max(1,Math.min(original.getHeight()-y,(int)Math.round(crop.getDouble("height")*original.getHeight())));
+                        android.graphics.Bitmap region=android.graphics.Bitmap.createBitmap(original,x,y,w,h);
+                        sourceBrightness=sampleBrightness(region);
+                        if(region!=original)region.recycle();
+                    }
+                    JSONObject sample=new JSONObject().put("cut",i+1)
                         .put("source_luma",Math.round(sourceBrightness))
-                        .put("export_luma",Math.round(renderedBrightness)));
-                    if(sourceBrightness>24f&&renderedBrightness<4f)
-                        black.put(i+1);
+                        .put("export_luma",Math.round(renderedBrightness));
+                    if(original==null)sample.put("source_thumbnail_available",false);
+                    samples.put(sample);
+                    if(sourceBrightness>24f&&renderedBrightness<4f)black.put(i+1);
+                    else if(original==null&&renderedBrightness<4f){
+                        // Do not guess if an almost-black shot is intentional.
+                        unverifiable++;unverifiedCuts.put(i+1);
+                    }else checked++;
                 }catch(Exception ex){
-                    android.util.Log.w("ChkVideoExport","Image segment "+(i+1)+" non vérifiable",ex);
-                    unverifiable++;
+                    android.util.Log.w("ChkVideoExport","Cut "+(i+1)+" cannot be sampled",ex);
+                    unverifiable++;unverifiedCuts.put(i+1);
                 }finally{
                     if(rendered!=null)rendered.recycle();
                     if(original!=null)original.recycle();
-                    source.release();
                 }
             }
         }finally{output.release();}
         return new JSONObject().put("verified_video_segments",checked)
             .put("unverified_video_segments",unverifiable)
+            .put("unverified_video_cuts",unverifiedCuts)
             .put("black_video_segments",black).put("frame_samples",samples);
     }
     private static float sampleBrightness(android.graphics.Bitmap picture){
@@ -680,7 +717,12 @@ public final class VideoEditorEngine {
             final float requestedAspect=outputAspect(context,project);
             final boolean nativePortrait=requestedAspect>0f&&requestedAspect<1f
                 &&project.optBoolean("native_portrait",true);
-            transformer=new Transformer.Builder(context).setPortraitEncodingEnabled(nativePortrait).setMuxerFactory(new androidx.media3.transformer.InAppMp4Muxer.Factory()).setMaxDelayBetweenMuxerSamplesMs(60000).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
+            transformer=new Transformer.Builder(context)
+                .setAssetLoaderFactory(new androidx.media3.transformer.DefaultAssetLoaderFactory(
+                    context,new androidx.media3.transformer.DefaultDecoderFactory.Builder(context)
+                        .setEnableDecoderFallback(true).build(),
+                    androidx.media3.common.util.Clock.DEFAULT,null))
+                .setPortraitEncodingEnabled(nativePortrait).setMuxerFactory(new androidx.media3.transformer.InAppMp4Muxer.Factory()).setMaxDelayBetweenMuxerSamplesMs(60000).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                .addListener(new Transformer.Listener(){
                  @Override public void onCompleted(Composition c,ExportResult result){
                     if(ticket!=exportGeneration||!"running".equals(state))return;
@@ -707,7 +749,7 @@ public final class VideoEditorEngine {
                             if(Math.abs(renderedInfo.optLong("duration_ms",-1)-expected)>500)throw new IllegalStateException("Durée MP4 incorrecte");
                             if(project.optJSONArray("audio")!=null&&project.getJSONArray("audio").length()>0&&!renderedInfo.optBoolean("has_audio"))throw new IllegalStateException("Piste audio absente du MP4");
                             JSONObject visual=inspectRenderedClips(context,partial,project);
-                            if(visual.optInt("unverified_video_segments")>0)throw new IllegalStateException("Images MP4 non vérifiables");
+                            if(visual.optInt("unverified_video_segments")>0)throw new IllegalStateException("Images MP4 non vérifiables dans les plans "+visual.optJSONArray("unverified_video_cuts")+" ; vérification interrompue, aucun clip final enregistré");
                             if(visual.getJSONArray("black_video_segments").length()>0)
                                 throw new IllegalStateException("Export rejeté : images noires dans les cuts "
                                     +visual.getJSONArray("black_video_segments")
