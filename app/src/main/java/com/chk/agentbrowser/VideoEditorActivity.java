@@ -857,8 +857,17 @@ public final class VideoEditorActivity extends Activity {
         if(output.isEmpty())return;
         new AgentDialog.Builder(this).setTitle("Montage MP4")
             .setItems(new String[]{"Lire","Enregistrer sur le téléphone","Partager",
-                "Vérifier la durée, les pistes et les images"},(d,n)->{
-                if(n<3)openExportFile(output,n);
+                "Vérifier la durée, les pistes et les images",
+                "Téléchargements Android — copier sans réencoder"},(d,n)->{
+                if(n==4){
+                    if(studioExportFlow==null||project==null){toast("Projet Studio indisponible.");return;}
+                    try{
+                        JSONObject snapshot=new JSONObject(project.toString());
+                        snapshot.put("output",output);
+                        studioExportFlow.saveExistingToDownloads(snapshot);
+                    }catch(Exception error){toast("Copie impossible : "+error.getMessage());}
+                }
+                else if(n<3)openExportFile(output,n);
                 else engine.command(this,"video_editor_verify_output",new JSONObject(),
                     (ok,res)->ui.post(()->{
                         if(!alive||!resumed)return;

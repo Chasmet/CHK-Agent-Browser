@@ -1,3 +1,10 @@
+## CHK Studio — copier un clip déjà exporté vers Android (2 novembre 2026)
+
+- Après un rendu MP4 déjà terminé et vérifié, le menu « Montage MP4 » propose « Téléchargements Android — copier sans réencoder ». Évite un second passage par le décodeur vidéo du téléphone, utile sur les projets longs et les médias Grok hétérogènes.
+- Le fichier d'origine est vérifié (durée, pistes, échantillons vidéo) avant la copie ; la copie Android est contrôlée par SHA-256 et devient visible dans `Téléchargements/CHK Studio`.
+- Aucun changement aux cuts, pistes audio, montages enregistrés, codecs utilisés pour les nouveaux rendus, autorisations Local 3 ou au serveur PC CHK Universal Control 1.0.4.
+- Le test final sur le téléphone nécessite l'installation de l'APK signé ; un commit ou une compilation ne constitue pas une mise à jour installée.
+
 ## Notes 2.0 — interface chaleureuse et dossiers imbriqués (31 octobre 2026)
 
 - Nouvel espace Notes brun nuit et ambre : cartes de notes plus lisibles, actions accessibles par « ⋮ », dossiers colorés avec emojis.

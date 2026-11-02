@@ -239,6 +239,51 @@ final class StudioExportFlow {
                 }));
         }catch(Exception ex){failure(ex.getMessage());}
     }
+    /**
+     * Publish a verified, already-rendered MP4 without starting Transformer again.
+     * Useful when a long clip rendered successfully but needs to leave CHK's
+     * private workspace. The original file and montage remain untouched.
+     */
+    void saveExistingToDownloads(JSONObject candidate){
+        if(disposed)return;
+        if(copying){message("Une copie Android est déjà en cours.");return;}
+        if(candidate==null){message("Aucun projet disponible pour vérifier le MP4.");return;}
+        try{
+            final JSONObject snapshot=new JSONObject(candidate.toString());
+            final String existing=snapshot.optString("output","");
+            if(existing.isEmpty())throw new java.io.IOException("Chemin MP4 manquant.");
+            File file=new WorkspaceStore(activity).file(existing);
+            if(!file.isFile()||file.length()<1000)
+                throw new java.io.IOException("MP4 absent du dossier CHK.");
+            String engineState=engine.status().optString("state","");
+            if("running".equals(engineState)||"preparing".equals(engineState))
+                throw new java.io.IOException("Un rendu est en cours. Attends sa fin avant de copier.");
+            show("Vérification du MP4 existant",fileName(existing),-1);
+            engine.command(activity,"video_editor_verify_output",
+                new JSONObject().put("project",snapshot),(ok,raw)->main.post(()->{
+                    if(disposed)return;
+                    try{
+                        if(!ok)throw new java.io.IOException(raw);
+                        JSONObject checked=new JSONObject(raw);
+                        if(!checked.optBoolean("valid",false)
+                            ||!existing.equals(checked.optString("output","")))
+                            throw new java.io.IOException("Le MP4 ne correspond pas au projet vérifié.");
+                        output=existing;
+                        destination="downloads";
+                        handled=true;
+                        verifying=false;
+                        exportStarted=false;
+                        if(Build.VERSION.SDK_INT>=29)saveToDownloads();
+                        else completedRenderingFallback();
+                    }catch(Exception ex){
+                        show("Copie Android non démarrée",ex.getMessage(),0);
+                        message("Copie refusée : "+ex.getMessage()
+                            +"\nLe MP4 reste intact dans CHK.");
+                    }
+                }));
+        }catch(Exception ex){message("Copie impossible : "+ex.getMessage());}
+    }
+
     void refresh(){
         if(disposed||copying||output.isEmpty()||handled||!exportStarted)return;
         JSONObject state=engine.status();
