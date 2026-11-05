@@ -94,6 +94,9 @@ public final class LocalAiController {
                 .put("training", false)
                 .put("model_network_calls_during_inference", false)
                 .put("can_execute_actions", false)
+                .put("playbook_version", LocalAiPlaybook.VERSION)
+                .put("supported_commands", "status, plan, check, quality, ask, install, delete, disable")
+                .put("weights_edited", false)
                 .put("last_error", lastError);
         } catch (Exception ignored) { }
         return info;
@@ -140,8 +143,22 @@ public final class LocalAiController {
             callback.finish(ok, ok ? "Modèle local supprimé." : "Modèle occupé ou suppression impossible.");
             return;
         }
+        if ("plan".equals(op)) {
+            callback.finish(true, LocalAiPlaybook.plan(p.optString("workflow", ""),
+                p.optString("prompt", "")).toString());
+            return;
+        }
+        if ("check".equals(op)) {
+            callback.finish(true, LocalAiPlaybook.verifyReport(p).toString());
+            return;
+        }
+        if ("quality".equals(op)) {
+            callback.finish(true, LocalAiPlaybook.quality(
+                p.optString("prompt", ""), p.optString("answer", "")).toString());
+            return;
+        }
         if (!"ask".equals(op)) {
-            callback.finish(false, "Opération IA inconnue. Utiliser status, install, ask, delete ou disable.");
+            callback.finish(false, "Opération inconnue. Utiliser status, plan, check, quality, ask, install, delete ou disable.");
             return;
         }
         String prompt = p.optString("prompt", "").trim();
@@ -164,13 +181,12 @@ public final class LocalAiController {
             try {
                 if (!enabled()) throw new IllegalStateException("IA locale désactivée.");
                 String instruction = "<|im_start|>system\n"
-                    + "You are a very small local planning helper inside CHK Browser. "
-                    + "You are controlled by the external ChatGPT agent. "
-                    + "Suggest at most three short verifiable steps. "
-                    + "Never claim to have clicked, searched, uploaded or executed anything. "
-                    + "Do not invent CSS selectors, URL contents or task results. "
-                    + "Do not request secrets or bypass authorization. "
-                    + "Reply briefly, preferably in French.\n<|im_end|>\n"
+                    + "You are a tiny offline text assistant. Answer the question; do not repeat it. "
+                    + "Be direct. If unsure say 'Je ne sais pas'. Never claim actions occurred. "
+                    + "No website access. Do not invent dates, selectors, files or results. "
+                    + "Maximum three short sentences.\n<|im_end|>\n"
+                    + "<|im_start|>user\nCombien font 2 + 3 ?<|im_end|>\n"
+                    + "<|im_start|>assistant\n5<|im_end|>\n"
                     + "<|im_start|>user\n" + prompt + "\n<|im_end|>\n"
                     + "<|im_start|>assistant\n";
                 answer = nativeAsk(modelFile().getAbsolutePath(), instruction, tokens, 2);
@@ -187,20 +203,32 @@ public final class LocalAiController {
             final String result = answer;
             UI.post(() -> {
                 if (callback.isActive()) callback.finish(success,
-                    success ? new JSONObjectBuilder(result).toString()
+                    success ? new JSONObjectBuilder(prompt, result).toString()
                         : "IA locale : " + result);
             });
         });
     }
     private static final class JSONObjectBuilder {
-        private final String answer;
-        JSONObjectBuilder(String text) { answer = text; }
+        private final String question, answer;
+        JSONObjectBuilder(String question, String answer) {
+            this.question=question; this.answer=answer;
+        }
         @Override public String toString() {
-            try { return new JSONObject().put("ok", true)
-                .put("source", "local_model_unverified_text")
-                .put("model", MODEL_NAME).put("text", answer)
-                .put("actions_executed", false).toString(); }
-            catch (Exception e) { return "{\"ok\":false}"; }
+            try {
+                JSONObject quality=LocalAiPlaybook.quality(question, answer);
+                String category=LocalAiPlaybook.category("",question);
+                JSONObject value=new JSONObject()
+                    .put("ok",true).put("source","local_model_unverified_text")
+                    .put("model",MODEL_NAME).put("text",answer)
+                    .put("quality",quality)
+                    .put("actions_executed",false);
+                // The deterministic fallback does not claim to be the model output.
+                if (!quality.optBoolean("passed",false))
+                    value.put("fallback_plan",LocalAiPlaybook.plan(category,question));
+                return value.toString();
+            } catch(Exception error) {
+                return "{\"ok\":false,\"actions_executed\":false}";
+            }
         }
     }
     /** Explicit one-time download, streaming + SHA-256 verification; no data uploaded. */
