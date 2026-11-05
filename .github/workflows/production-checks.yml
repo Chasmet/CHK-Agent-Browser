@@ -25,7 +25,7 @@ jobs:
       - name: Real WebView recording and production tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: 34
           target: aosp_atd
           arch: x86_64
           disable-animations: true
