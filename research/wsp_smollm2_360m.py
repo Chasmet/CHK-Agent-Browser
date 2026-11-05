@@ -418,6 +418,110 @@ def head_edit(args):
     print("WSP_ACTUAL_TIED_OUTPUT_WEIGHTS_CHANGED", modified, "rows", changed_rows)
 
 
+
+def late_mlp_edit(args):
+    """One narrow WSP rank-one controller in the final MLP; do not edit tied embeddings.
+    It reads genuine feature activations at the final token, then directly rewrites
+    a small group of existing MLP weights with a conditional evidence direction.
+    """
+    import numpy as np
+    import torch
+    from safetensors.torch import load_file, save_file
+    work, original, candidate = paths(args.work)
+    src = original / "model.safetensors"
+    if digest(src) != SOURCE_SHA256:
+        raise RuntimeError("Unexpected source checkpoint.")
+    if (candidate / "model.safetensors").exists():
+        raise FileExistsError("No overwrite of a trial.")
+    model, tokenizer = load_model(original)
+    positive = [
+        "YouTube status is SCHEDULED for 9 PM. Is the video scheduled? Answer yes or no.",
+        "Your video listing shows Scheduled for Friday. Is scheduling confirmed? Answer yes or no.",
+        "The YouTube studio video has a scheduling timestamp. Is the video scheduled? Answer yes or no.",
+        "TikTok says Scheduled for Sunday at 19:00. Is the video scheduled? Answer yes or no.",
+    ]
+    negative = [
+        "YouTube status is DRAFT without a date. Is the video scheduled? Answer yes or no.",
+        "Your video listing shows Draft with no schedule. Is scheduling confirmed? Answer yes or no.",
+        "The YouTube studio video has no scheduling timestamp. Is the video scheduled? Answer yes or no.",
+        "TikTok says Uploading now, no schedule yet. Is the video scheduled? Answer yes or no.",
+    ]
+    layer_id = 30
+    down = model.model.layers[layer_id].mlp.down_proj
+    samples = []
+    def hook(_m, inputs, _output):
+        samples.append(inputs[0][0, -1].detach().float().cpu().numpy().copy())
+    h = down.register_forward_hook(hook)
+    try:
+        with torch.inference_mode():
+            for prompt in positive+negative:
+                _=model(encode_prompt(tokenizer,prompt),use_cache=False)
+    finally:
+        h.remove()
+    X = np.stack(samples)
+    xp = X[:len(positive)]; xn = X[len(positive):]
+    dp = xp.mean(0)-xn.mean(0)
+    midpoint = .5*(xp.mean(0)+xn.mean(0))
+    dp -= midpoint * (np.dot(dp,midpoint)/max(np.dot(midpoint,midpoint),1e-9))
+    # Sparse feature selection; preserve most of the 2,560-input-column MLP.
+    columns = np.argsort(np.abs(dp))[-48:]
+    d = dp[columns].astype("float64")
+    xm = midpoint[columns].astype("float64")
+    d -= xm*np.dot(d,xm)/max(np.dot(xm,xm),1e-9)
+    d /= max(np.linalg.norm(d),1e-8)
+    projections_pos = xp[:,columns]@d
+    projections_neg = xn[:,columns]@d
+    if projections_pos.mean() <= projections_neg.mean():
+        raise RuntimeError("Evidence feature direction has wrong sign.")
+    yes_ids=tokenizer.encode("Yes",add_special_tokens=False)
+    no_ids=tokenizer.encode("No",add_special_tokens=False)
+    if len(yes_ids)!=1 or len(no_ids)!=1:
+        raise RuntimeError("Yes/No are not single-token on this tokenizer.")
+    unembed = model.model.embed_tokens.weight.detach().float().cpu()
+    v = unembed[yes_ids[0]]-unembed[no_ids[0]]
+    v = (v / torch.linalg.vector_norm(v)).numpy().astype("float64")
+    del model
+    tensors=load_file(str(src),device="cpu")
+    name="model.layers.%d.mlp.down_proj.weight"%layer_id
+    W=tensors[name]
+    before=W[:,columns].float().numpy().astype("float64")
+    # Hand-coded rank-one weight update: positive evidence increases Yes logit
+    # and negative evidence decreases it, only through the selected neurons.
+    direction=np.outer(v,d)
+    adjustment=0.10*direction
+    proposal=before+adjustment
+    relative=float(np.linalg.norm(proposal-before)/max(np.linalg.norm(before),1e-10))
+    if relative > .045:
+        adjustment*=.045/relative
+        proposal=before+adjustment
+    quantized=torch.tensor(proposal,dtype=W.dtype)
+    changed=int(torch.count_nonzero(quantized!=W[:,columns]))
+    fraction=len(columns)*W.shape[0]/sum(t.numel() for t in tensors.values())
+    if changed < 100 or fraction > .00025:
+        raise RuntimeError("WSP MLP edit too small to measure or too extensive.")
+    with torch.no_grad():
+        W[:,columns]=quantized
+    candidate.mkdir(parents=True,exist_ok=True)
+    save_file(tensors,str(candidate/"model.safetensors"),metadata={"format":"pt"})
+    if digest(src)!=SOURCE_SHA256:
+        raise RuntimeError("Original source changed.")
+    report={
+        "method":"evidence_conditional_rank_one_direct_mlp_weight_programming",
+        "tensor":name, "columns":sorted(map(int,columns)),
+        "source_sha256":SOURCE_SHA256,
+        "changed_values":changed,
+        "fraction_of_shard_parameters":fraction,
+        "relative_delta_selected_columns":float(np.linalg.norm(adjustment)/max(np.linalg.norm(before),1e-10)),
+        "probe_positive_mean":float(projections_pos.mean()),
+        "probe_negative_mean":float(projections_neg.mean()),
+        "training_steps":0,"gradients_used":False,
+        "evaluation_passed":False,"activated_in_CHK":False,
+        "output_sha256":digest(candidate/"model.safetensors"),
+    }
+    (candidate/"model.patch.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
+    print("WSP_ACTUAL_INTERNAL_WEIGHTS_CHANGED",changed,"layer",layer_id)
+
+
 def evaluate(args):
     w, _, candidate = paths(args.work)
     if not (candidate / "model.safetensors").is_file():
@@ -468,7 +572,7 @@ def gate(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("operation", choices=("prepare", "probe", "edit", "head_edit", "evaluate", "gate"))
+    parser.add_argument("operation", choices=("prepare", "probe", "edit", "head_edit", "late_mlp_edit", "evaluate", "gate"))
     parser.add_argument("--work", default=".ci-wsp-360m")
     args = parser.parse_args()
     globals()[args.operation](args)
