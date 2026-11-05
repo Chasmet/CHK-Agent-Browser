@@ -132,11 +132,11 @@ final class LocalAiPlaybook {
             String q = normalize(question), a = normalize(answer);
             boolean empty = a.isEmpty();
             boolean echo = q.length()>15 && (a.contains(q) || q.contains(a) && a.length()>=20);
-            String[] chunks = a.split("[\\n.!?;]+");
+            String[] chunks = (answer == null ? "" : answer).split("[\\n.!?;]+");
             Set<String> unique = new HashSet<>();
             int repeats = 0;
             for (String chunk : chunks) {
-                String normalized = normalize(chunk);
+                String normalized = normalize(chunk).replaceFirst("^[0-9]+ ", "");
                 if (normalized.length()>12 && !unique.add(normalized)) repeats++;
             }
             boolean contrad = (a.contains(" not scheduled ") && a.contains(" is scheduled "))
