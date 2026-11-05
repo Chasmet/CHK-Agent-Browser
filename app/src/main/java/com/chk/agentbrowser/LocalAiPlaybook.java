@@ -142,9 +142,20 @@ final class LocalAiPlaybook {
             String padded = " " + a + " ";
             boolean contrad = (padded.contains(" is not scheduled ") && padded.contains(" is scheduled "))
                 || (padded.contains(" est programme ") && padded.contains(" est pas programme "));
-            boolean ok = !empty && !echo && repeats==0 && !contrad;
+            // A short refusal or a genuine "I don't know" is honest but cannot
+            // supply a plan. Return the deterministic, evidence-based fallback.
+            boolean noAnswer = a.equals("je ne sais pas")
+                || a.equals("je ne sais pas vraiment")
+                || a.equals("i do not know")
+                || a.equals("i don t know")
+                || a.equals("unknown")
+                || a.equals("impossible de savoir")
+                || a.equals("je ne peux pas verifier")
+                || a.equals("i cannot verify");
+            boolean ok = !empty && !echo && repeats==0 && !contrad && !noAnswer;
             result.put("passed",ok).put("echo",echo).put("repetitions",repeats)
                 .put("possible_contradiction",contrad)
+                .put("non_answer",noAnswer)
                 .put("unverified",true).put("actions_executed",false);
             if (!ok) result.put("fallback_required",true);
         } catch(Exception ignored){}
