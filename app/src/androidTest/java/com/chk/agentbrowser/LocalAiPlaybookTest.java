@@ -34,6 +34,9 @@ public final class LocalAiPlaybookTest {
             "Comment publier une vidéo dans YouTube?").getBoolean("passed"));
         assertFalse(LocalAiPlaybook.quality("Checklist YouTube",
             "Video is scheduled. Video is not scheduled.").getBoolean("passed"));
+        assertFalse(LocalAiPlaybook.quality("Quelle voix choisir dans Suno ?", "\\"Je ne sais pas.\\"").getBoolean("passed"));
+        assertTrue(LocalAiPlaybook.quality("Quelle voix choisir dans Suno ?", "\\"Je ne sais pas.\\"").getBoolean("non_answer"));
+        assertFalse(LocalAiPlaybook.quality("Which voice?", "I don't know").getBoolean("passed"));
         assertTrue(LocalAiPlaybook.quality("2 plus 3?", "5").getBoolean("passed"));
     }
     @Test public void textualComparisonNeverCertifiesPublishing() throws Exception {
