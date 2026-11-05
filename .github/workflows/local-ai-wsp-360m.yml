@@ -36,9 +36,9 @@ jobs:
         run: python research/wsp_smollm2_360m.py prepare
       - name: Measure actual activations and score unmodified model
         run: python research/wsp_smollm2_360m.py probe
-      - name: WSP direct bilingual evidence-aware edit of tied output weights
+      - name: WSP rank-one edit of late MLP evidence neurons
         run: |
-          python research/wsp_smollm2_360m.py head_edit
+          python research/wsp_smollm2_360m.py late_mlp_edit
       - name: Re-evaluate changed neural weights on unseen prompts
         run: python research/wsp_smollm2_360m.py evaluate
       - name: Verify improvement and no regressions (never deploy unverified)
