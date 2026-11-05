@@ -21,11 +21,13 @@ final class AgentTasks {
             validateAction(step.getString("action"),step.optJSONObject("args"));
             JSONObject verify=step.optJSONObject("verify");if(verify!=null){String action=verify.getString("action");JSONObject args=verify.optJSONObject("args");validateAction(action,args);
                 if(!readOnly(action,args))throw new Exception("Une vérification doit uniquement lire l’état.");
+                if(verify.has("timeout_ms")&&(verify.getLong("timeout_ms")<200||verify.getLong("timeout_ms")>900000))throw new Exception("Délai de vérification entre 200 et 900000 ms requis");
                 if(verify.optJSONObject("expect")==null&&verify.optJSONObject("contains")==null)throw new Exception("Précise le résultat attendu par la vérification.");}
             String action=step.getString("action");
             if(action.equals("desktop")&&Arrays.asList("browser","control").contains(step.getJSONObject("args").optString("tool"))
                 &&!readOnly(action,step.getJSONObject("args"))&&verify==null)throw new Exception("Une écriture navigateur exige une vérification explicite.");
             if(action.equals("desktop")&&step.getJSONObject("args").optString("tool").equals("tor")&&step.getJSONObject("args").optString("operation").equals("open")&&verify==null)throw new Exception("Ouverture Tor : lecture d’état obligatoire après l’envoi.");
+            if(action.equals("desktop")&&step.getJSONObject("args").optString("tool").equals("production")&&!readOnly(action,step.getJSONObject("args"))&&verify==null)throw new Exception("Production : vérification explicite obligatoire après écriture");
             if(action.equals("desktop")&&step.getJSONObject("args").optString("tool").equals("studio")&&!readOnly(action,step.getJSONObject("args"))&&verify==null)throw new Exception("Studio : vérification du projet obligatoire après écriture.");
             if(action.equals("desktop")&&step.getJSONObject("args").optString("tool").equals("pointer")&&verify==null)
                 throw new Exception("Un geste dans une tâche exige une vérification explicite.");
@@ -56,8 +58,9 @@ final class AgentTasks {
                 throw new Exception("Publication : ID, domaine, cible et résultat observable requis.");
         }
         if(action.equals("desktop")){
-            String tool=p.optString("tool");if(!Arrays.asList("vision","pointer","files","browser","control","hearing","studio","tor").contains(tool))throw new Exception("Pas de tâche ou script imbriqué.");
+            String tool=p.optString("tool");if(!Arrays.asList("vision","pointer","files","browser","control","hearing","studio","tor","production").contains(tool))throw new Exception("Pas de tâche ou script imbriqué.");
             if(tool.equals("tor")&&!TorMcp.OPERATIONS.contains(TorMcp.operation(p)))throw new Exception("Tor : opération non autorisée");
+            if(tool.equals("production")&&!ProductionMcp.OPERATIONS.contains(p.optString("operation")))throw new Exception("Opération Production inconnue");
             if(tool.equals("studio")&&!StudioMcp.OPERATIONS.contains(StudioMcp.operation(p)))throw new Exception("Opération Studio MCP inconnue");
             if(tool.equals("hearing")&&!Arrays.asList("status","capabilities","media","analyze","transcribe").contains(p.optString("operation")))throw new Exception("Écoute dans une tâche : utiliser analyse ou transcription, puis écouter séparément les extraits.");
             if(tool.equals("control")&&!Arrays.asList("observe","status","capabilities","act").contains(p.optString("operation")))throw new Exception("Opération de contrôle non autorisée dans une tâche.");
@@ -85,7 +88,7 @@ final class AgentTasks {
                 throw new Exception("Importation : entre 1 et 8 fichiers autorisés sont requis.");
         }
     }
-    private static boolean readOnly(String action,JSONObject p){return action.equals("desktop")&&p.optString("tool").equals("tor")&&TorMcp.readOnly(p)||action.equals("desktop")&&p.optString("tool").equals("studio")&&StudioMcp.readOnly(p)||action.equals("desktop")&&p.optString("tool").equals("hearing")||action.equals("desktop")&&p.optString("tool").equals("control")&&Arrays.asList("observe","status","capabilities").contains(p.optString("operation"))||action.equals("desktop")&&p.optString("tool").equals("browser")&&Arrays.asList("download_status","upload_status","get_form","verify_form","get_page_status","read_pdf").contains(p.optString("operation"))||action.equals("files_external")&&Arrays.asList("external_roots","external_list","external_read_text").contains(p.optString("operation"))||action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_detect_format","files_copy_content","files_search_content","files_media_inspect","files_verify","files_archive_list","files_archive_read","files_database","files_stat","files_hash","document_read","document_page","media_frame","video_editor_capabilities","video_editor_queue_status","video_editor_status","video_editor_wait","video_editor_verify_output","video_editor_project_read","files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","media_analyze_audio","media_audio_capabilities","media_transcribe","workspace_status","tabs","list_tabs","get_page_status","get_form","wait_for_element","read_page","publication_status","publication_list").contains(action);}
+    private static boolean readOnly(String action,JSONObject p){return action.equals("desktop")&&p.optString("tool").equals("production")&&ProductionMcp.readOnly(p)||action.equals("desktop")&&p.optString("tool").equals("tor")&&TorMcp.readOnly(p)||action.equals("desktop")&&p.optString("tool").equals("studio")&&StudioMcp.readOnly(p)||action.equals("desktop")&&p.optString("tool").equals("hearing")||action.equals("desktop")&&p.optString("tool").equals("control")&&Arrays.asList("observe","status","capabilities").contains(p.optString("operation"))||action.equals("desktop")&&p.optString("tool").equals("browser")&&Arrays.asList("download_status","upload_status","get_form","verify_form","get_page_status","read_pdf").contains(p.optString("operation"))||action.equals("files_external")&&Arrays.asList("external_roots","external_list","external_read_text").contains(p.optString("operation"))||action.equals("keyboard")&&p.optString("operation").equals("inspect")||action.equals("desktop")&&(p.optString("tool").equals("vision")||p.optString("tool").equals("files")&&Arrays.asList("stat","status","external_list","external_read_text").contains(p.optString("operation")))||Arrays.asList("files_detect_format","files_copy_content","files_search_content","files_media_inspect","files_verify","files_archive_list","files_archive_read","files_database","files_stat","files_hash","document_read","document_page","media_frame","video_editor_capabilities","video_editor_queue_status","video_editor_status","video_editor_wait","video_editor_verify_output","video_editor_project_read","files_list","files_catalog","files_read_text","notes_list","notes_read","media_info","media_analyze_audio","media_audio_capabilities","media_transcribe","workspace_status","tabs","list_tabs","get_page_status","get_form","wait_for_element","read_page","publication_status","publication_list").contains(action);}
     static JSONObject command(Context c,JSONObject p)throws Exception{
         return command(c,p,false);
     }
@@ -97,7 +100,7 @@ final class AgentTasks {
         if(op.equals("submit")){
             JSONArray steps=p.getJSONArray("steps");validate(steps);String fingerprint=AgentVision.digest(steps.toString());
             if(file.exists()){state=AgentFiles.read(file);if(!state.getString("fingerprint").equals(fingerprint))throw new Exception("Cet identifiant appartient à une autre tâche.");}
-            else{JSONArray rows=new JSONArray();for(int i=0;i<steps.length();i++)rows.put(new JSONObject(steps.getJSONObject(i).toString()).put("state","pending"));state=new JSONObject().put("id",id).put("fingerprint",fingerprint).put("state","ready").put("steps",rows).put("created",System.currentTimeMillis());AgentFiles.save(file,state);}
+            else{JSONArray rows=new JSONArray();for(int i=0;i<steps.length();i++)rows.put(new JSONObject(steps.getJSONObject(i).toString()).put("state","pending"));state=new JSONObject().put("id",id).put("fingerprint",fingerprint).put("state","ready").put("steps",rows).put("created",System.currentTimeMillis()).put("auto_resume",p.optBoolean("auto_resume",false)).put("safe_read_retries",2);AgentFiles.save(file,state);}
             if(state.getString("state").equals("ready"))start(c,file,state,local2,local3);
         }else{
             state=AgentFiles.read(file);
@@ -121,6 +124,38 @@ final class AgentTasks {
         }
         return summary(state,p.optInt("offset",0));
     }
+    static boolean recoverState(JSONObject state)throws Exception {
+        boolean safe=true;
+        JSONArray rows=state.getJSONArray("steps");
+        for(int i=0;i<rows.length();i++){
+            JSONObject row=rows.getJSONObject(i);String status=row.optString("state");
+            if(status.equals("verify_failed")||status.equals("failed")){safe=false;continue;}
+            if(!status.equals("effect_running")&&!status.equals("uncertain"))continue;
+            if(readOnly(row.getString("action"),row.getJSONObject("args")))row.put("state","pending");
+            else if(row.has("verify"))row.put("state","effect_done");
+            else{row.put("state","uncertain");safe=false;}
+        }
+        return safe;
+    }
+    static void recoverLocal3(Context context){
+        Context app=context.getApplicationContext();
+        WorkspaceCommands.IO.execute(()->{
+            if(!Local3Client.get(app).enabled()||!Local3Client.get(app).autonomousAllowed())return;
+            File folder=new File(app.getFilesDir(),"agent_desktop/tasks");File[] files=folder.listFiles();
+            if(files==null)return;
+            for(File file:files){
+                if(!file.getName().endsWith(".json"))continue;
+                try{
+                    JSONObject state=AgentFiles.read(file);String id=state.getString("id"),status=state.optString("state");
+                    if(!state.optBoolean("auto_resume")||!"local3".equals(state.optString("transport"))
+                        ||running.contains(id)||!Arrays.asList("running","paused","ready").contains(status))continue;
+                    validate(state.getJSONArray("steps"));
+                    if(!recoverState(state)){state.put("state","paused").put("error","Reprise arrêtée sur une écriture incertaine ou une vérification échouée");AgentFiles.save(file,state);continue;}
+                    AgentFiles.save(file,state);start(app,file,state,false,true);
+                }catch(Exception error){AgentLog.add(app,"workflow","Reprise à vérifier : "+error.getClass().getSimpleName());}
+            }
+        });
+    }
     private static void start(Context c,File file,JSONObject state,boolean local2,boolean local3)throws Exception{
         if(!(local3?Local3Client.get(c).enabled():local2?Local2Client.get(c).enabled():AgentClient.get(c).isEnabled())||!(local3?Local3Client.get(c).autonomousAllowed():AgentClient.get(c).isAutonomous()))throw new Exception("Active le canal MCP demandé et le mode autonome pour une tâche à étapes.");
         String id=state.getString("id");if(!running.add(id))return;active.put(id,true);state.put("state","running").put("transport",local3?"local3":local2?"local2":"render");AgentFiles.save(file,state);WorkspaceCommands.IO.execute(()->new Runner(c,file,id,local2,local3).next());
@@ -128,7 +163,7 @@ final class AgentTasks {
     private static JSONObject summary(JSONObject state,int offset)throws Exception{
         JSONArray rows=state.getJSONArray("steps"),page=new JSONArray();if(offset<0||offset>rows.length())throw new Exception("Pagination invalide.");int done=0;
         for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);if(row.optString("state").equals("done"))done++;if(i>=offset&&i<offset+10){JSONObject shown=new JSONObject().put("id",row.getString("id")).put("state",row.getString("state"));if(row.has("error"))shown.put("error",row.get("error"));if(row.has("result")){String result=row.get("result").toString();shown.put("result_excerpt",result.length()>900?result.substring(0,900):result).put("result_truncated",result.length()>900);}page.put(shown);}}
-        return new JSONObject().put("ok",!state.optString("state").equals("failed")).put("id",state.getString("id")).put("state",state.getString("state")).put("completed",done).put("total",rows.length()).put("steps",page).put("next_offset",offset+10<rows.length()?offset+10:-1);
+        return new JSONObject().put("auto_resume",state.optBoolean("auto_resume",false)).put("ok",!state.optString("state").equals("failed")).put("id",state.getString("id")).put("state",state.getString("state")).put("completed",done).put("total",rows.length()).put("steps",page).put("next_offset",offset+10<rows.length()?offset+10:-1);
     }
     private static Object at(Object current,String path)throws Exception{
         for(String part:path.split("\\.")){if(current instanceof JSONObject)current=((JSONObject)current).get(part);else if(current instanceof JSONArray)current=((JSONArray)current).get(Integer.parseInt(part));else throw new Exception("Référence de résultat invalide : "+path);}return current;
@@ -175,7 +210,7 @@ final class AgentTasks {
                 AgentClient.ResultCallback callback=new AgentClient.ResultCallback(){public boolean isLocal2(){return local2;}public boolean isLocal3(){return local3;}public boolean isActive(){return !received.get()&&allowed();}public void finish(boolean ok,String text){if(!received.compareAndSet(false,true))return;WorkspaceCommands.IO.execute(()->receipt(stepIndex,verifying,ok,text));}};
                 WorkspaceCommands.UI.post(()->{if(callback.isActive())AgentClient.get(app).executeTaskStep(command,callback);else WorkspaceCommands.IO.execute(this::next);});
                 long timeout=source.optString("action").equals("video_editor_wait")?125000L:verifying?120000L:"upload_file".equals(source.optString("action"))?180000L:
-                    "wait_for_element".equals(source.optString("action"))?35000L:(TransferLimits.longOperation(source.optString("action"))||source.optString("action").equals("video_editor_subtitles_generate"))?900000L:120000L;
+                    "wait_for_element".equals(source.optString("action"))?35000L:(TransferLimits.longOperation(source.optString("action"))||source.optString("action").equals("video_editor_subtitles_generate")||source.optString("action").equals("desktop")&&source.getJSONObject("args").optString("tool").equals("production"))?900000L:120000L;
                 WorkspaceCommands.UI.postDelayed(()->{if(received.compareAndSet(false,true))WorkspaceCommands.IO.execute(()->receipt(stepIndex,verifying,false,"Délai dépassé ("+timeout+" ms) : résultat non confirmé, aucune répétition automatique."));},timeout);
             }catch(Exception e){if(state!=null)stop(state,e.getMessage());else running.remove(id);}
         }
@@ -193,6 +228,19 @@ final class AgentTasks {
                 if(verify&&ok){JSONObject rule=row.getJSONObject("verify"),expect=rule.optJSONObject("expect"),contains=rule.optJSONObject("contains");
                     if(expect!=null){Iterator<String> keys=expect.keys();while(keys.hasNext()){String key=keys.next();Object actual=at(result,key),wanted=resolve(app,expect.get(key),state);if(!String.valueOf(actual).equals(String.valueOf(wanted)))ok=false;}}
                     if(contains!=null){Iterator<String> keys=contains.keys();while(keys.hasNext()){String key=keys.next();if(!String.valueOf(at(result,key)).contains(String.valueOf(resolve(app,contains.get(key),state))))ok=false;}}
+                }
+                if(verify&&!ok&&row.getJSONObject("verify").has("timeout_ms")){
+                    long began=row.optLong("verification_started",System.currentTimeMillis());
+                    row.put("verification_started",began);
+                    if(System.currentTimeMillis()-began<Math.min(900000,row.getJSONObject("verify").optLong("timeout_ms",30000))){
+                        row.put("state","effect_done");AgentFiles.save(file,state);
+                        long delay=Math.max(200,Math.min(5000,row.getJSONObject("verify").optLong("poll_ms",1000)));
+                        WorkspaceCommands.UI.postDelayed(()->WorkspaceCommands.IO.execute(this::next),delay);return;
+                    }
+                }
+                if(!verify&&!ok&&readOnly(row.getString("action"),row.getJSONObject("args"))&&row.optInt("read_attempts")<state.optInt("safe_read_retries",0)){
+                    int attempts=row.optInt("read_attempts")+1;row.put("read_attempts",attempts).put("state","pending");AgentFiles.save(file,state);
+                    WorkspaceCommands.UI.postDelayed(()->WorkspaceCommands.IO.execute(this::next),1000L*attempts);return;
                 }
                 if(ok&&!verify&&result instanceof JSONObject&&((JSONObject)result).optString("state").equals("action_sent")&&!row.has("verify")){
                     row.put("state","uncertain").put("result",result).put("error","Geste envoyé sans postcondition : ajouter une vérification indépendante.");

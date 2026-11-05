@@ -20,6 +20,7 @@ final class PrivateWebCapture {
     interface Result {void ready(Bitmap image);void unavailable(String reason);}
     static void capture(Context app,WebView web,JSONObject info,AgentClient.ResultCallback owner,Result result){
         if(android.os.Build.VERSION.SDK_INT<26){result.unavailable("Rendu privé PixelCopy disponible à partir d’Android 8.");return;}
+        if(BrowserRecording.owns(web)){BrowserRecording.capture(web,info,result);return;}
         new Session(app,web,info,owner,result).start();
     }
     @android.annotation.TargetApi(26)

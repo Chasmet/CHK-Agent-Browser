@@ -1,0 +1,39 @@
+name: Agent production validation
+on:
+  push:
+    branches: [production/agent-20261105]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare Android SDK and compile
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+          ./gradlew --no-daemon assembleDebug lintDebug :app:assembleDebugAndroidTest
+      - name: Enable hardware acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Real WebView recording and production tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: aosp_atd
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.ProductionIntegrationTest,com.chk.agentbrowser.CutShareMetadataTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-validation
+          path: app/build/reports/
+          retention-days: 2

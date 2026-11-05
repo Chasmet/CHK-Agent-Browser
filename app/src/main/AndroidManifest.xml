@@ -2,7 +2,10 @@
     <!-- Only the isolated, API-29-gated Tor component requires Android 10. The main app keeps minSdk 23. -->
     <uses-sdk tools:overrideLibrary="org.torproject.jni" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <queries><package android:name="org.torproject.torbrowser" /></queries>
+    <queries>
+        <package android:name="org.torproject.torbrowser" />
+        <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+    </queries>
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -19,6 +22,9 @@
     <application android:name=".AgentApplication" android:label="CHK Agent Browser" android:icon="@drawable/ic_browser"
         android:theme="@style/AppTheme" android:usesCleartextTraffic="true"
         android:allowBackup="true" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules">
+        <service android:name=".BrowserRecordingService" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Owner-authorized agent recording of its own WebView on a private display, with a visible stop action" />
+        </service>
         <service android:name=".VideoExportService" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-initiated local video composition and MP4 export with cancellable progress" />
         </service>

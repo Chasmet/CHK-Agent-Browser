@@ -11,6 +11,7 @@ final class Local3TaskPolicy {
         if(name.equals("desktop")&&p.optString("tool").equals("tor")&&java.util.Arrays.asList("connect","tor_connect").contains(p.optString("operation")))return 390000L;
         if(name.equals("desktop")&&p.optString("tool").equals("tor"))return 240000L;
         if(name.equals("desktop")&&p.optString("tool").equals("studio")&&java.util.Arrays.asList("audio_mix","audio_analyze","audio_verify","crop_preview").contains(StudioMcp.operation(p)))return 900000L;
+        if(name.equals("desktop")&&p.optString("tool").equals("production")&&Arrays.asList("assemble","verify","asset_add").contains(p.optString("operation")))return 900000L;
         if(TransferLimits.longOperation(name)||name.equals("media_transcribe")||name.equals("video_editor_subtitles_generate")||name.equals("desktop")&&p.optString("tool").equals("hearing")&&p.optString("operation").equals("transcribe"))return 900000L;
         if(name.startsWith("media_")||name.equals("desktop")&&p.optString("tool").equals("hearing"))return 180000L;
         if(name.equals("browser_batch"))return 150000L;
@@ -25,6 +26,10 @@ final class Local3TaskPolicy {
         if(name.equals("desktop")&&p.optString("tool").equals("tor")&&
             Arrays.asList("status","capabilities","tor_status","tor_capabilities").contains(p.optString("operation")))return "read";
         if(name.equals("desktop")&&p.optString("tool").equals("tor"))return TorMcp.operation(p).equals("disconnect")?"tor-stop":"tor";
+        if(name.equals("desktop")&&p.optString("tool").equals("production")){
+            if(ProductionMcp.readOnly(p))return "read";
+            if(p.optString("operation").startsWith("record_"))return "recording";
+        }
         if(name.equals("desktop")&&p.optString("tool").equals("studio")){
             if(Arrays.asList("audio_mix","audio_analyze","audio_verify","crop_preview").contains(StudioMcp.operation(p)))return "audio";
             if(StudioMcp.readOnly(p))return "read";

@@ -137,6 +137,7 @@ public final class Local3Client {
     public void start(){
         if(!enabled()||!paired()||serverUrl().isEmpty()||running)return;
         running=true;nextCapabilitySync=0;sentConsent="";main.post(loop);
+        AgentTasks.recoverLocal3(app);
     }
     public void stop(){
         running=false;generation++;main.removeCallbacks(loop);
@@ -153,6 +154,7 @@ public final class Local3Client {
             .put("agent_control",AgentControl.capabilities())
             .put("agent_hearing",AgentHearing.capabilities()).put("studio_transport","desktop / tool=studio / operation=capabilities").put("tor_transport","desktop / tool=tor / operation=capabilities").put("tor_integrated_min_api",29)
             .put("previews_allowed",AgentClient.get(app).isPreviewAllowed())
+            .put("production_transport","desktop / tool=production / operation=capabilities").put("production_protocol",1)
             .put("capability_sync",capabilityStatus).put("last_action",lastAction)
             .put("last_outcome",lastOutcome).put("result_pending",!p.getString("outbox","").isEmpty());
     }
