@@ -44,6 +44,7 @@ public final class MediaInspection {
         }return new JSONObject().put("codecs",list).put("android_api",android.os.Build.VERSION.SDK_INT).put("export","MP4 H.264/AAC");
     }
     public static Bitmap thumbnail(File file,long timeMs,int maximum)throws Exception{
+        if(StudioImages.isGif(file))return GifPlaybackView.frame(file,timeMs,maximum);
         if(StudioImages.isImage(file))return StudioImages.thumbnail(file,maximum);
         MediaMetadataRetriever r=new MediaMetadataRetriever();Bitmap b=null;
         try{r.setDataSource(file.getPath());
@@ -58,12 +59,14 @@ public final class MediaInspection {
     public static JSONObject frame(Context c,String path,long timeMs)throws Exception{
         if(!AgentClient.get(c).isPreviewAllowed())throw new IOException("Active le partage d’aperçus dans Réglages");
         if(timeMs<0||timeMs>24L*60*60*1000)throw new IOException("Instant vidéo invalide");
-        JSONObject info=info(c,path);if(timeMs>info.optLong("duration_ms",Long.MAX_VALUE))throw new IOException("Instant au-delà du média");
+        JSONObject info=info(c,path);
+        if(!info.optBoolean("animated_gif")&&timeMs>info.optLong("duration_ms",Long.MAX_VALUE))
+            throw new IOException("Instant au-delà du média");
         Bitmap bitmap=thumbnail(new WorkspaceStore(c).file(path),timeMs,640);
         try{ByteArrayOutputStream out=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.JPEG,80,out);
             if(out.size()>150000){out.reset();bitmap.compress(Bitmap.CompressFormat.JPEG,45,out);}
             if(out.size()>150000)throw new IOException("Image trop grande");
-            return new JSONObject().put("path",path).put("requested_time_ms",timeMs).put("frame_selection","nearest_keyframe").put("width",bitmap.getWidth()).put("height",bitmap.getHeight()).put("jpeg_base64",Base64.encodeToString(out.toByteArray(),Base64.NO_WRAP));
+            return new JSONObject().put("path",path).put("requested_time_ms",timeMs).put("frame_selection",info.optBoolean("animated_gif")?"gif_frame_at_requested_time":"nearest_keyframe").put("width",bitmap.getWidth()).put("height",bitmap.getHeight()).put("jpeg_base64",Base64.encodeToString(out.toByteArray(),Base64.NO_WRAP));
         }finally{bitmap.recycle();}
     }
 }
