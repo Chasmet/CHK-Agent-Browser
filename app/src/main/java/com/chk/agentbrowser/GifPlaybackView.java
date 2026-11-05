@@ -119,7 +119,7 @@ final class GifPlaybackView extends ImageView {
                 return;
             }
             post(()->{
-                if(ticket!=generation||getWindowToken()==null)return;
+                if(ticket!=generation)return;
                 setGifDrawable(drawable);
             });
         });
