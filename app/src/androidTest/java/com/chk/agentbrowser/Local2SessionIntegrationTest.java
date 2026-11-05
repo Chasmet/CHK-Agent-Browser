@@ -141,6 +141,40 @@ public final class Local2SessionIntegrationTest {
         instrument.waitForIdleSync();
         instrument.runOnMainSync(()->assertSame(original,current()));
     }
+    @Test public void local3DurableWorkflowKeepsOwnerTabsWhileSettingsIsInFront()throws Exception {
+        SharedPreferences third=app.getSharedPreferences("chk_local3_v1",0);
+        boolean enabled=third.getBoolean("enabled",false),persistent=third.getBoolean("persistent_permissions",true);
+        String server=third.getString("server_url","");
+        String id="local3-owner-"+UUID.randomUUID().toString();
+        try{
+            local.edit().putBoolean("enabled",false).commit();
+            third.edit().putBoolean("enabled",true).putBoolean("persistent_permissions",true).putString("server_url","").commit();
+            openBrowser();WebView original=current();
+            settings=(SettingsActivity)instrument.startActivitySync(new Intent(app,SettingsActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            instrument.waitForIdleSync();
+            JSONArray steps=new JSONArray().put(new JSONObject().put("id","owner-page").put("action","read_page")
+                .put("args",new JSONObject()).put("verify",new JSONObject().put("action","read_page").put("args",new JSONObject())
+                    .put("contains",new JSONObject().put("text","Real shared Android session"))));
+            JSONObject request=new JSONObject().put("operation","submit").put("id",id).put("auto_resume",true).put("steps",steps);
+            AgentTasks.command(app,request,false,true);
+            JSONObject status=null;
+            for(int i=0;i<150;i++){
+                status=AgentTasks.command(app,new JSONObject().put("operation","status").put("id",id),false,true);
+                if(!status.optString("state").equals("running"))break;
+                Thread.sleep(200);
+            }
+            assertNotNull(status);assertEquals(status.toString(),"completed",status.getString("state"));
+            assertTrue(status.getBoolean("auto_resume"));
+            assertTrue(status.getJSONArray("steps").getJSONObject(0).getString("result_excerpt").contains("Real shared Android session"));
+            instrument.runOnMainSync(()->assertSame(original,current()));
+            assertFalse(render.getBoolean("enabled",true));
+        }finally{
+            AgentTasks.requestCancel(id);
+            third.edit().putBoolean("enabled",enabled).putBoolean("persistent_permissions",persistent).putString("server_url",server).commit();
+            instrument.runOnMainSync(()->Local3Client.get(app).stop());
+            AgentFiles.journal(app,"tasks",id).delete();
+        }
+    }
     @Test public void newAndClosedTabsAreTheRealAndroidTabs()throws Exception{
         openBrowser();
         Outcome opening=start("browser_tabs",new JSONObject().put("operation","new").put("url","https://example.com/"));

@@ -25,12 +25,12 @@ jobs:
       - name: Real WebView recording and production tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: 34
           target: aosp_atd
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.ProductionIntegrationTest,com.chk.agentbrowser.CutShareMetadataTest
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.ProductionIntegrationTest,com.chk.agentbrowser.CutShareMetadataTest,com.chk.agentbrowser.Local2SessionIntegrationTest
       - uses: actions/upload-artifact@v4
         if: always()
         with:

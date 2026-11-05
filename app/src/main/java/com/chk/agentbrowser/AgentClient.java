@@ -654,14 +654,14 @@ public final class AgentClient {
                     public boolean isLocal3() { return cb.isLocal3(); }
                     public boolean isActive() { return cb.isActive(); }
                     public void finish(boolean ok, String message) {
-                        CommandHandler browser = cb.isLocal2() ? local2Browser() : activeHandler();
+                        CommandHandler browser = controlBrowser(cb);
                         if(ok && browser != null) browser.workspaceChanged();
                         cb.finish(ok, message);
                     }
                 });
             return;
         }
-        CommandHandler receiver=DesktopCommands.nativeTarget(command)?DesktopCommands.handler(app):KeyboardCommands.nativeTarget(command)?NativeKeyboard.handler(app):cb.isLocal2()?local2Browser():activeHandler();
+        CommandHandler receiver=DesktopCommands.nativeTarget(command)?DesktopCommands.handler(app):KeyboardCommands.nativeTarget(command)?NativeKeyboard.handler(app):controlBrowser(cb);
         if(receiver==null){cb.finish(false,"Aucun écran CHK ou moteur web disponible.");return;}
         receiver.onCommand(command,cb);
     }

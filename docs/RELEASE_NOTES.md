@@ -5,6 +5,7 @@
 - Dossiers de production pour captures, documents, médias, narrations, montages, exports et publications. Copie et empreinte des médias importés.
 - Narration française par le moteur vocal Android installé, choix de voix, débit, hauteur, pauses, WAV et segments horodatés. Les exigences réseau de chaque voix sont exposées. Les silences de bord sont mesurés et retirés du montage quand l'option est active.
 - Création automatique de projets Studio éditables en 1080p, titre, générique, fondus, mouvement optionnel, sous-titres par segments vocaux et baisse de la musique pendant la narration.
+- Les étapes d'un workflow Local 3 conservent les onglets Android du propriétaire lorsque les réglages passent au premier plan, avec Render désactivé.
 - Reprise optionnelle des workflows après redémarrage de Local 3, vérifications asynchrones et reprises bornées des lectures. Les actions d'écriture incertaines sont vérifiées avant continuation.
 - File d'export et contrôle d'images, de durée et de niveaux audio. Préparation de publication liée au MP4 vérifié puis utilisation des outils navigateur existants pour confirmer la programmation sur les plateformes.
 - La capture enregistre l'image de l'onglet, avec une piste audio fournie ensuite par les narrations et médias du montage. Les contenus protégés restent protégés.
