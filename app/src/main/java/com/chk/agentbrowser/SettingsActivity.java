@@ -25,14 +25,14 @@ public final class SettingsActivity extends Activity {
     private static final int NOTIFICATION_PERMISSION_CODE = 735;
     private UpdateManager updates;
     private AgentClient agent;
-    private TextView mcpStatus, status, local2Status, local3Status;
+    private TextView mcpStatus, status, local2Status, local3Status, localAiStatus;
     private Button mcpConnect, mcpCopy, mcpDisable, check, install;
     private boolean askedToInstall, awaitingInstallPermission;
     private long validatedDownloadId=Long.MIN_VALUE;
     private Switch autonomousMode, previewMode;
     private final Handler refresh=new Handler();
     private final Runnable statusTick=new Runnable(){
-        @Override public void run(){showMcp();showDownloadProgress();if(local2Status!=null)local2Status.setText(Local2Client.get(SettingsActivity.this).status()+"\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+"\nNavigateur : "+agent.local2BrowserSummary());if(local3Status!=null)local3Status.setText(Local3Client.get(SettingsActivity.this).diagnostic());refresh.postDelayed(this,2000L);}
+        @Override public void run(){showMcp();showDownloadProgress();if(local2Status!=null)local2Status.setText(Local2Client.get(SettingsActivity.this).status()+"\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+"\nNavigateur : "+agent.local2BrowserSummary());if(local3Status!=null)local3Status.setText(Local3Client.get(SettingsActivity.this).diagnostic());if(localAiStatus!=null)localAiStatus.setText(LocalAiController.get(SettingsActivity.this).statusText());refresh.postDelayed(this,2000L);}
     };
 
     @Override public void onCreate(Bundle state) {
@@ -198,6 +198,67 @@ public final class SettingsActivity extends Activity {
         TextView permissionInfo=new TextView(this);
         permissionInfo.setText("Avec le mode autonome activé, Local 3 peut naviguer, saisir, importer, gérer les fichiers et utiliser Studio sans quota de demandes. Désactive cet interrupteur pour révoquer l’autorisation. L’historique et les résultats réels restent accessibles depuis le serveur.");
         permissionInfo.setPadding(16,8,16,12);group.addView(permissionInfo,localInsert++);
+
+        // Optional private local model: not a new network service.
+        LocalAiController localAi=LocalAiController.get(this);
+        TextView aiHeading=new TextView(this);
+        aiHeading.setText("IA LOCALE · SMOLLM2 135M");
+        aiHeading.setTextSize(18);aiHeading.setPadding(16,24,16,10);
+        group.addView(aiHeading,localInsert++);
+        TextView aiHelp=new TextView(this);
+        aiHelp.setText("Modèle open source Apache 2.0 (~105 Mo), sans entraînement. "
+            +"Génération hors ligne à la demande, 2 threads CPU maximum, libération de la mémoire après chaque réponse. "
+            +"ChatGPT peut le consulter via Local 3. Le modèle conseille, mais ne clique et ne publie jamais directement.");
+        aiHelp.setPadding(16,8,16,12);group.addView(aiHelp,localInsert++);
+        Switch aiSwitch=new Switch(this);
+        aiSwitch.setText("Autoriser ChatGPT à interroger le modèle local");
+        aiSwitch.setTextSize(15);aiSwitch.setChecked(localAi.enabled());
+        aiSwitch.setOnCheckedChangeListener((b,on)->{
+            localAi.setEnabled(on);
+            if(localAiStatus!=null)localAiStatus.setText(localAi.statusText());
+        });
+        group.addView(aiSwitch,localInsert++);
+        localAiStatus=new TextView(this);
+        localAiStatus.setPadding(16,8,16,12);
+        localAiStatus.setText(localAi.statusText());
+        group.addView(localAiStatus,localInsert++);
+        Button aiDownload=new Button(this);
+        aiDownload.setAllCaps(false);
+        aiDownload.setText("Télécharger le mini-modèle (~105 Mo)");
+        aiDownload.setOnClickListener(v->{
+            if(!localAi.enabled()||!LocalAiController.nativeAvailable()){
+                Toast.makeText(this,"Active l'IA et vérifie la disponibilité du moteur natif.",Toast.LENGTH_LONG).show();return;
+            }
+            new AgentDialog.Builder(this).setTitle("Installer le modèle open source ?")
+                .setMessage("Télécharger environ 105 Mo depuis Hugging Face, avec contrôle SHA-256. "
+                    +"Aucune page CHK n'est envoyée à ce service.")
+                .setNegativeButton("Annuler",null)
+                .setPositiveButton("Télécharger",(d,w)->{
+                    boolean started=localAi.install((ok,message)->{
+                        if(!isFinishing()&&!isDestroyed())
+                            Toast.makeText(this,message,Toast.LENGTH_LONG).show();
+                    });
+                    Toast.makeText(this,started?"Téléchargement lancé":"Déjà installé ou téléchargement en cours",Toast.LENGTH_LONG).show();
+                }).show();
+        });
+        group.addView(aiDownload,localInsert++);
+        Button aiDelete=new Button(this);
+        aiDelete.setAllCaps(false);aiDelete.setText("Supprimer le modèle local");
+        aiDelete.setOnClickListener(v->new AgentDialog.Builder(this)
+            .setTitle("Supprimer le modèle ?")
+            .setMessage("Les fichiers, notes et données CHK ne seront pas supprimés.")
+            .setNegativeButton("Annuler",null)
+            .setPositiveButton("Supprimer",(d,w)->{
+                try {
+                    org.json.JSONObject request=new org.json.JSONObject().put("operation","delete");
+                    localAi.command(request,(ok,message)->{
+                        localAiStatus.setText(localAi.statusText());
+                        Toast.makeText(this,message,Toast.LENGTH_LONG).show();
+                    });
+                }catch(Exception e){Toast.makeText(this,"Suppression impossible.",Toast.LENGTH_LONG).show();}
+            }).show());
+        group.addView(aiDelete,localInsert++);
+
 
         local3.setOnCheckedChangeListener((b,on)->{
             Local3Client.get(this).setEnabled(on);
