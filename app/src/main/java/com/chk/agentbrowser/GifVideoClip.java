@@ -81,8 +81,8 @@ final class GifVideoClip {
         if(srcW<1||srcH<1||(long)srcW*srcH>12000000L)
             throw new IOException("Dimensions GIF invalides.");
         float scale=Math.min(1f,(float)MAX_EDGE/Math.max(srcW,srcH));
-        int w=Math.max(2,(Math.round(srcW*scale)+1)&~1);
-        int h=Math.max(2,(Math.round(srcH*scale)+1)&~1);
+        int w=Math.max(64,(Math.round(srcW*scale)+1)&~1);
+        int h=Math.max(64,(Math.round(srcH*scale)+1)&~1);
         Movie movie=Movie.decodeFile(gif.getAbsolutePath());
         if(movie==null)throw new IOException("GIF impossible à animer.");
         int period=Math.max(100,movie.duration());
@@ -110,7 +110,9 @@ final class GifVideoClip {
                 movie.setTime((int)(timeMs%period));
                 canvas.drawColor(Color.BLACK);
                 canvas.save();
-                canvas.scale(w/(float)srcW,h/(float)srcH);
+                float frameScale=Math.min(w/(float)srcW,h/(float)srcH);
+                canvas.translate((w-srcW*frameScale)/2,(h-srcH*frameScale)/2);
+                canvas.scale(frameScale,frameScale);
                 movie.draw(canvas,0,0);
                 canvas.restore();
                 frame.getPixels(pixels,0,w,0,0,w,h);
