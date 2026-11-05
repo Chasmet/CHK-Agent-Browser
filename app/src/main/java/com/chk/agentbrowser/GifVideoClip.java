@@ -64,7 +64,7 @@ final class GifVideoClip {
             String duration=retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
             return "yes".equals(video) && duration!=null
                 && Long.parseLong(duration)>=Math.max(200,length-250);
-        }catch(Exception ignored){return false;}finally{retriever.release();}
+        }catch(Exception ignored){return false;}finally{try{retriever.release();}catch(Exception ignored){}}
     }
     private static String hash(String value)throws Exception {
         byte[] bytes=MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
