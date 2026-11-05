@@ -226,6 +226,70 @@ def probe(args):
                                 "max_score": result["total"]}))
 
 
+
+def edit(args):
+    """Write a real BF16 safetensors weight patch; no gradients, no optimizer."""
+    import numpy as np
+    import torch
+    from safetensors.torch import load_file, save_file
+    w, original, candidate = paths(args.work)
+    source = original / "model.safetensors"
+    if digest(source) != SOURCE_SHA256:
+        raise RuntimeError("Refusing to modify unexpected source weights.")
+    target = candidate / "model.safetensors"
+    if target.exists():
+        raise FileExistsError("Candidate already exists; refusing overwrite.")
+    direction = np.load(w / "direction.npy", allow_pickle=False)
+    cols = [int(v) for v in (w / "columns.txt").read_text().strip().split(",")]
+    if len(cols) != COLUMN_COUNT or len(set(cols)) != len(cols):
+        raise ValueError("Invalid calibration-selected columns.")
+    name = "model.layers.%d.mlp.down_proj.weight" % LAYER
+    tensors = load_file(str(source), device="cpu")
+    W = tensors[name]
+    if W.ndim != 2 or W.shape[0] != direction.size:
+        raise ValueError("Wrong checkpoint layer dimensions.")
+    if max(cols) >= W.shape[1]:
+        raise ValueError("Selected feature out of matrix bounds.")
+    d = torch.from_numpy(direction).to(torch.float32)
+    norm = torch.linalg.vector_norm(d)
+    if float(norm) < 1e-8:
+        raise ValueError("Measured activation contrast has zero norm.")
+    d = d / norm
+    strength = 0.15
+    with torch.no_grad():
+        before = W[:, cols].float().clone()
+        corrected = before - strength * d[:, None] * (d @ before)[None, :]
+        updated = corrected.to(dtype=W.dtype)
+        relative_delta = float(
+            torch.linalg.vector_norm(corrected-before) /
+            torch.clamp(torch.linalg.vector_norm(before), min=1e-10)
+        )
+        changed = int(torch.count_nonzero(updated != W[:, cols]))
+        fraction = len(cols) * W.shape[0] / sum(v.numel() for v in tensors.values())
+        if relative_delta > 0.05 or fraction > 0.0005 or changed == 0:
+            raise RuntimeError("Unsafe, excessive or ineffective direct weight edit.")
+        W[:, cols] = updated
+    candidate.mkdir(exist_ok=True, parents=True)
+    save_file(tensors, str(target), metadata={"format": "pt"})
+    if digest(source) != SOURCE_SHA256:
+        raise RuntimeError("The original checkpoint changed unexpectedly.")
+    report = {
+        "method": "activation_contrast_direct_bf16_weight_projection",
+        "tensor": name, "columns": cols,
+        "source_sha256": SOURCE_SHA256,
+        "changed_values": changed,
+        "fraction_of_shard_parameters": fraction,
+        "relative_delta_selected_columns": relative_delta,
+        "training_steps": 0, "gradients_used": False,
+        "evaluation_passed": False, "activated_in_CHK": False,
+        "output_sha256": digest(target)
+    }
+    (candidate / "model.patch.json").write_text(
+        json.dumps(report, indent=2), encoding="utf-8"
+    )
+    print("WSP_ACTUAL_WEIGHTS_CHANGED", changed, "IN_LAYER", LAYER)
+
+
 def evaluate(args):
     w, _, candidate = paths(args.work)
     if not (candidate / "model.safetensors").is_file():
@@ -276,7 +340,7 @@ def gate(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("operation", choices=("prepare", "probe", "evaluate", "gate"))
+    parser.add_argument("operation", choices=("prepare", "probe", "edit", "evaluate", "gate"))
     parser.add_argument("--work", default=".ci-wsp-360m")
     args = parser.parse_args()
     globals()[args.operation](args)
