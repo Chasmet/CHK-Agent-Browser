@@ -49,7 +49,9 @@ public final class WorkspaceStore {
         file(path);Uri.Builder b=new Uri.Builder().scheme("content").authority(app.getPackageName()+".browserfiles").appendPath("workspace");
         for(String part:path.split("/"))b.appendPath(part);return b.build();
     }
-    public String mime(String path){String name=path.toLowerCase(Locale.ROOT);int dot=name.lastIndexOf('.');String ext=dot<0?"":name.substring(dot+1);String m=android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
+    public String mime(String path){String name=path.toLowerCase(Locale.ROOT);int dot=name.lastIndexOf('.');String ext=dot<0?"":name.substring(dot+1);
+        if("gif".equals(ext))return "image/gif";
+        String m=android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
         if(m==null)switch(ext){case "mkv":m="video/x-matroska";break;case "mov":m="video/quicktime";break;case "ts":m="video/mp2t";break;case "md":m="text/markdown";break;case "json":m="application/json";break;case "m4a":m="audio/mp4";break;default:m=java.net.URLConnection.guessContentTypeFromName(path);}
         return m==null?"application/octet-stream":m;
     }
