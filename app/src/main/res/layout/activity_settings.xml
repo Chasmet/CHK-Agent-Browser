@@ -1,8 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#0D1423" android:fillViewport="true">
-<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
-    <Button android:id="@+id/settings_back" android:layout_width="match_parent" android:layout_height="48dp" android:text="‹ Revenir à mon espace" android:textAllCaps="false" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Réglages" android:textSize="25sp" android:textStyle="bold" android:textColor="#FFFFFF" android:paddingBottom="15dp" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0D1423">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:paddingLeft="20dp" android:paddingRight="20dp"
+        android:paddingTop="18dp" android:paddingBottom="8dp">
+        <Button android:id="@+id/settings_back" android:layout_width="match_parent"
+            android:layout_height="48dp" android:text="‹ Revenir à mon espace" android:textAllCaps="false" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Réglages" android:textSize="25sp" android:textStyle="bold"
+            android:textColor="#FFFFFF" android:paddingTop="14dp" android:paddingBottom="10dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:paddingBottom="5dp">
+            <Button android:id="@+id/settings_tab_general" android:layout_width="0dp"
+                android:layout_weight="1" android:layout_height="52dp"
+                android:contentDescription="Onglet Général"
+                android:text="Général" android:textAllCaps="false" />
+            <Button android:id="@+id/settings_tab_ai" android:layout_width="0dp"
+                android:layout_weight="1" android:layout_height="52dp"
+                android:contentDescription="Onglet IA locale"
+                android:text="IA locale" android:textAllCaps="false" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <ScrollView android:id="@+id/settings_general_scroll" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:paddingLeft="20dp"
+            android:paddingRight="20dp" android:paddingBottom="20dp">
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Navigation locale" android:textColor="#69E2C6" android:textSize="17sp" android:paddingBottom="8dp" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Connexion Internet du téléphone ; aucun crédit d'API IA." android:textColor="#CAD8E9" android:paddingBottom="22dp" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Mise à jour automatique" android:textColor="#69E2C6" android:textSize="19sp" />
@@ -41,5 +69,24 @@
 
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Le mode autonome mémorise ton accord pour tous les travaux du connecteur, après redémarrage et mise à jour. En mode manuel, chaque commande demande une validation. Ton adresse MCP reste privée." android:textColor="#CAD8E9" android:paddingVertical="12dp" />
     <Button android:id="@+id/clear_history" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Effacer l'historique local" android:textAllCaps="false" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <ScrollView android:id="@+id/settings_ai_scroll" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1" android:visibility="gone"
+        android:fillViewport="true">
+        <LinearLayout android:id="@+id/ai_settings_content"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:paddingLeft="20dp"
+            android:paddingRight="20dp" android:paddingBottom="24dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Assistant IA local" android:textSize="21sp"
+                android:textStyle="bold" android:textColor="#69E2C6"
+                android:paddingTop="16dp" android:paddingBottom="8dp"/>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Réglages dédiés au modèle open source embarqué. Ce module n'altère ni les connexions MCP ni les données enregistrées."
+                android:textColor="#CAD8E9" android:paddingBottom="12dp"/>
+        </LinearLayout>
+    </ScrollView>
 </LinearLayout>
-</ScrollView>
