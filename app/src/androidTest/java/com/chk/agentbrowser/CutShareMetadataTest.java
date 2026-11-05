@@ -55,4 +55,32 @@ public final class CutShareMetadataTest {
             store.file(folder).delete();
         }
     }
+    @Test public void metadataBeyondPreviewPageIsReadInFull() throws Exception {
+        android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        WorkspaceStore store=new WorkspaceStore(context);
+        try{store.mkdir("CutVideo");}catch(java.io.IOException expected){}
+        String folder="CutVideo/long_meta_"+UUID.randomUUID().toString().substring(0,8);
+        store.mkdir(folder);
+        File video=store.file(folder+"/dernier.mp4");
+        try{
+            assertTrue(video.createNewFile());
+            JSONArray items=new JSONArray();
+            for(int i=0;i<300;i++)items.put(new JSONObject().put("file","autre-"+i+".mp4")
+                .put("platforms",new JSONObject().put("youtube",new JSONObject()
+                    .put("title","Archives et recherches numéro "+i)
+                    .put("description","Une découverte à raconter, avec une voix française.")
+                    .put("hashtags","#Archives #Vidéo"))));
+            items.put(new JSONObject().put("file","dernier.mp4").put("platforms",
+                new JSONObject().put("youtube",new JSONObject().put("title","Les Dalton")
+                    .put("description","Le clip complet").put("hashtags","#Dalton"))));
+            String payload=new JSONObject().put("items",items).toString(2);
+            assertTrue(payload.length()>65536);
+            store.writeText(folder+"/metadonnees.json",payload,false);
+            JSONObject metadata=CutShareMetadata.forVideo(store,folder+"/dernier.mp4","youtube");
+            assertEquals("Les Dalton",metadata.getString("title"));
+            assertEquals("Les Dalton\nLe clip complet\n#Dalton",metadata.getString("text"));
+        }finally{
+            video.delete();store.file(folder+"/metadonnees.json").delete();store.file(folder).delete();
+        }
+    }
 }

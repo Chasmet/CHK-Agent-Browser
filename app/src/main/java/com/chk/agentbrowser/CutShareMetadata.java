@@ -25,8 +25,8 @@ final class CutShareMetadata {
         String parent=videoPath.substring(0,videoPath.lastIndexOf('/'));
         File manifest=workspace.file(parent+"/"+NAME);
         if(!manifest.isFile())throw new IOException("Aucune fiche de métadonnées pour ce dossier");
-        if(manifest.length()>65536)throw new IOException("Fiche trop volumineuse");
-        JSONObject payload=new JSONObject(workspace.readText(parent+"/"+NAME,0).getString("text"));
+        if(manifest.length()>1048576)throw new IOException("Fiche limitée à 1 Mo");
+        JSONObject payload=AgentFiles.read(manifest);
         JSONArray items=payload.optJSONArray("items");
         if(items==null)throw new IOException("Fiches de métadonnées mal formées");
         for(int i=0;i<items.length();i++){

@@ -1,3 +1,9 @@
+## Cut — lecture complète des métadonnées
+
+- Correction de l'erreur « Unterminated string at character 12000 » visible pendant le partage.
+- Les fiches JSON sont lues intégralement jusqu'à 1 Mo. Les longues listes de clips et de réseaux restent partageables.
+- Test de régression avec une fiche de plus de 64 Ko et la vidéo ciblée en fin de liste.
+
 ## Cut et fiabilité générale — 5 novembre 2026
 
 - Bouton « PARTAGER LE MP4 » visible sur chaque vidéo de la bibliothèque, avec ou sans métadonnées.
