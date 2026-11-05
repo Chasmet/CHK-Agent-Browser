@@ -507,8 +507,8 @@ public final class VideoEditorEngine {
                 throw new IllegalArgumentException("Découpe au-delà du média: "+f.getName());
         }finally{r.release();}
     }
-    private static MediaItem media(File file,long start,long duration)throws Exception{
-        if(StudioImages.isImage(file))return StudioImages.media(file,duration);
+    private static MediaItem media(Context context,File file,long start,long duration)throws Exception{
+        if(StudioImages.isImage(file))return StudioImages.media(context,file,duration);
         return new MediaItem.Builder().setUri(android.net.Uri.fromFile(file))
            .setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder()
                .setStartPositionMs(start).setEndPositionMs(start+duration).build()).build();
@@ -644,21 +644,24 @@ public final class VideoEditorEngine {
             }
             if(layered)fx.add(Presentation.createForWidthAndHeight(layerWidth,layerHeight,"fit".equals(project.optString("aspect_mode","fit"))?Presentation.LAYOUT_SCALE_TO_FIT:Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP));
             final float speed=(float)c.optDouble("speed",1);
-            EditedMediaItem.Builder video=new EditedMediaItem.Builder(media(store.file(c.getString("path")),c.optLong("start_ms",0),len))
+            EditedMediaItem.Builder video=new EditedMediaItem.Builder(media(context,store.file(c.getString("path")),c.optLong("start_ms",0),len))
                 .setFrameRate(project.optInt("fps",30))
                 .setRemoveAudio(StudioImages.isImage(store.file(c.getString("path")))||!original||c.optBoolean("mute",false))
                 .setEffects(new Effects(volumeProcessors(c),fx));
-            if(!StudioImages.isImage(store.file(c.getString("path"))))video.setDurationUs(sourceDurationUs(store,c,sourceDurations));
+            if(StudioImages.isGif(store.file(c.getString("path"))))
+                video.setDurationUs(len*1000);
+            else if(!StudioImages.isImage(store.file(c.getString("path"))))
+                video.setDurationUs(sourceDurationUs(store,c,sourceDurations));
             if(speed!=1)video.setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return speed;}public long getNextSpeedChangeTimeUs(long timeUs){return androidx.media3.common.C.TIME_UNSET;}});
             videos.add(video.build());
         }
         if(external&&!mixed)for(int i=0;i<audios.length();i++){
             JSONObject a=audios.getJSONObject(i);
-            sounds.add(new EditedMediaItem.Builder(media(store.file(a.getString("path")),a.optLong("start_ms",0),a.optLong("duration_ms",10000))).setDurationUs(sourceDurationUs(store,a,sourceDurations)).setRemoveVideo(true).setEffects(new Effects(volumeProcessors(a),Collections.emptyList())).build());
+            sounds.add(new EditedMediaItem.Builder(media(context,store.file(a.getString("path")),a.optLong("start_ms",0),a.optLong("duration_ms",10000))).setDurationUs(sourceDurationUs(store,a,sourceDurations)).setRemoveVideo(true).setEffects(new Effects(volumeProcessors(a),Collections.emptyList())).build());
         }
         if(mixed){
             StudioAudioMixer.Render mix=StudioAudioMixer.render(context,project,active,value->{if(state.equals("preparing"))percent=value/2;});
-            sounds.add(new EditedMediaItem.Builder(media(mix.wav,0,StudioEdits.total(project))).setDurationUs(StudioEdits.total(project)*1000).setRemoveVideo(true).build());
+            sounds.add(new EditedMediaItem.Builder(media(context,mix.wav,0,StudioEdits.total(project))).setDurationUs(StudioEdits.total(project)*1000).setRemoveVideo(true).build());
         }
         EditedMediaItemSequence sequence=original?EditedMediaItemSequence.withAudioAndVideoFrom(videos):EditedMediaItemSequence.withVideoFrom(videos);
         Composition.Builder builder=sounds.isEmpty()?new Composition.Builder(sequence):new Composition.Builder(sequence,EditedMediaItemSequence.withAudioFrom(sounds));
