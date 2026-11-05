@@ -46,7 +46,15 @@ final class StudioImages {
         Bitmap bitmap=BitmapFactory.decodeFile(file.getAbsolutePath(),b);
         if(bitmap==null)throw new IOException("Photographie indécodable");return bitmap;
     }
-    static MediaItem media(File file,long duration)throws IOException{
+    static MediaItem media(android.content.Context context,File file,long duration)throws Exception{
+        if(isGif(file)){
+            // Media3 displays only the first GIF frame when used as an image.
+            // Convert the complete animation to H.264 in private cache instead.
+            File motion=GifVideoClip.ensure(context,file,duration);
+            return new MediaItem.Builder().setUri(android.net.Uri.fromFile(motion))
+                .setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(0).setEndPositionMs(duration).build()).build();
+        }
         BitmapFactory.Options b=bounds(file);
         return new MediaItem.Builder().setUri(android.net.Uri.fromFile(file))
             .setMimeType(b.outMimeType).setImageDurationMs(duration).build();
