@@ -1,0 +1,26 @@
+name: CHK Local AI - weight-space research checks
+on:
+  pull_request:
+    paths:
+      - 'research/**'
+      - '.github/workflows/local-ai-weight-space.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/**'
+      - '.github/workflows/local-ai-weight-space.yml'
+permissions:
+  contents: read
+jobs:
+  research-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install research-only dependencies (not bundled with Android)
+        run: python -m pip install --disable-pip-version-check numpy==2.2.6 safetensors==0.6.2
+      - name: Dry-run, source preservation and SHA256 tests
+        run: python -m unittest discover -s research -p 'test_*.py' -v
