@@ -139,8 +139,9 @@ final class LocalAiPlaybook {
                 String normalized = normalize(chunk).replaceFirst("^[0-9]+ ", "");
                 if (normalized.length()>12 && !unique.add(normalized)) repeats++;
             }
-            boolean contrad = (a.contains(" not scheduled ") && a.contains(" is scheduled "))
-                || (a.contains(" pas programme ") && a.contains(" est programme "));
+            String padded = " " + a + " ";
+            boolean contrad = (padded.contains(" is not scheduled ") && padded.contains(" is scheduled "))
+                || (padded.contains(" est programme ") && padded.contains(" est pas programme "));
             boolean ok = !empty && !echo && repeats==0 && !contrad;
             result.put("passed",ok).put("echo",echo).put("repetitions",repeats)
                 .put("possible_contradiction",contrad)
