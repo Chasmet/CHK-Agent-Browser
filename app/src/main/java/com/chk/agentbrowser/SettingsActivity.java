@@ -214,22 +214,29 @@ public final class SettingsActivity extends Activity {
         LocalAiController localAi=LocalAiController.get(this);
         TextView aiHeading=new TextView(this);
         aiHeading.setText("IA LOCALE · SMOLLM2 135M");
-        aiHeading.setTextSize(18);aiHeading.setPadding(16,24,16,10);
+        aiHeading.setTextSize(18);aiHeading.setTextColor(android.graphics.Color.parseColor("#69E2C6"));
+        aiHeading.setPadding(16,24,16,10);
         aiGroup.addView(aiHeading);
         TextView aiHelp=new TextView(this);
         aiHelp.setText("Modèle open source Apache 2.0 (~105 Mo), sans entraînement. "
             +"Génération hors ligne à la demande, 2 threads CPU maximum, libération de la mémoire après chaque réponse. "
             +"ChatGPT peut le consulter via Local 3. Le modèle conseille, mais ne clique et ne publie jamais directement.");
+        aiHelp.setTextColor(android.graphics.Color.parseColor("#CAD8E9"));
         aiHelp.setPadding(16,8,16,12);aiGroup.addView(aiHelp);
         Switch aiSwitch=new Switch(this);
         aiSwitch.setText("Autoriser ChatGPT à interroger le modèle local");
-        aiSwitch.setTextSize(15);aiSwitch.setChecked(localAi.enabled());
+        aiSwitch.setId(R.id.local_ai_toggle);
+        aiSwitch.setTextSize(15);
+        aiSwitch.setTextColor(android.graphics.Color.parseColor("#F1F5FF"));
+        aiSwitch.setMinHeight((int)(52*getResources().getDisplayMetrics().density));
+        aiSwitch.setChecked(localAi.enabled());
         aiSwitch.setOnCheckedChangeListener((b,on)->{
             localAi.setEnabled(on);
             if(localAiStatus!=null)localAiStatus.setText(localAi.statusText());
         });
         aiGroup.addView(aiSwitch);
         localAiStatus=new TextView(this);
+        localAiStatus.setTextColor(android.graphics.Color.parseColor("#CAD8E9"));
         localAiStatus.setPadding(16,8,16,12);
         localAiStatus.setText(localAi.statusText());
         aiGroup.addView(localAiStatus);
