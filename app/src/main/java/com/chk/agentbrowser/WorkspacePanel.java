@@ -789,10 +789,13 @@ public final class WorkspacePanel {
                         ||info.optString("kind").equals("media")&&extensionMime.startsWith("audio/");
                     boolean video=info.optString("mime_type",extensionMime).startsWith("video/")
                         ||extensionMime.startsWith("video/");
+                    boolean animatedGif="gif".equals(info.optString("format"))
+                        ||"image/gif".equalsIgnoreCase(extensionMime)
+                        ||path.toLowerCase(java.util.Locale.ROOT).endsWith(".gif");
                     a.runOnUiThread(()->{
                         if(a.isFinishing())return;
                         if(sound&&audioBar!=null)audioBar.open(path);
-                        else a.startActivity(new Intent(a,video?MediaPreviewActivity.class:FileViewerActivity.class).putExtra("path",path));
+                        else a.startActivity(new Intent(a,(video||animatedGif)?MediaPreviewActivity.class:FileViewerActivity.class).putExtra("path",path));
                     });
                 }catch(Exception ex){a.runOnUiThread(()->toast(ex.getMessage()));}
             });return;

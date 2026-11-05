@@ -24,10 +24,14 @@ public final class FileViewerActivity extends Activity {
     @Override public void onCreate(Bundle state){super.onCreate(state);alive=true;path=getIntent().getStringExtra("path");
         // A video is not a text document: bypass the generic reader and its raw JSON.
         // Keep request_id for remote open-file acknowledgement in the portrait player.
-        try{if(path!=null&&new WorkspaceStore(this).mime(path).startsWith("video/")){
+        try{if(path!=null){
+            String mime=new WorkspaceStore(this).mime(path);
+            if(mime.startsWith("video/")||mime.equals("image/gif")
+                ||path.toLowerCase(java.util.Locale.ROOT).endsWith(".gif")){
             Intent watch=new Intent(this,MediaPreviewActivity.class).putExtra("path",path);
             watch.putExtra("request_id",getIntent().getStringExtra("request_id"));
             startActivity(watch);finish();return;
+            }
         }}catch(java.io.IOException unavailable){/* load() displays the storage error below. */}
         root=MobileUi.column(this);root.setBackgroundColor(0xfffafbff);setContentView(root);
         TextView back=label("‹ "+(path==null?"Fichier":new File(path).getName()),19);back.setTypeface(null,Typeface.BOLD);root.addView(back);back.setOnClickListener(v->onBackPressed());

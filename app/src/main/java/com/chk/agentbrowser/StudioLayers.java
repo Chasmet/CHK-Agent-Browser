@@ -42,9 +42,10 @@ final class StudioLayers {
         for(int i=0;i<layers.length();i++){
             JSONObject layer=layers.getJSONObject(i);long offset=layer.optLong("offset_ms"),duration=layer.optLong("duration_ms",3000),start=layer.optLong("start_ms");
             File file=store.file(layer.getString("path"));boolean image=StudioImages.isImage(file);
-            MediaItem media=image?StudioImages.media(file,duration):new MediaItem.Builder().setUri(android.net.Uri.fromFile(file)).setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(start).setEndPositionMs(start+duration).build()).build();
+            MediaItem media=image?StudioImages.media(context,file,duration):new MediaItem.Builder().setUri(android.net.Uri.fromFile(file)).setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(start).setEndPositionMs(start+duration).build()).build();
             EditedMediaItem.Builder item=new EditedMediaItem.Builder(media).setFrameRate(project.optInt("fps",30)).setRemoveAudio(true);
-            if(!image)item.setDurationUs(MediaInspection.info(context,layer.getString("path")).optLong("duration_ms")*1000);
+            if(StudioImages.isGif(file))item.setDurationUs(duration*1000);
+            else if(!image)item.setDurationUs(MediaInspection.info(context,layer.getString("path")).optLong("duration_ms")*1000);
             EditedMediaItemSequence.Builder sequence=new EditedMediaItemSequence.Builder(Collections.singleton(C.TRACK_TYPE_VIDEO));
             if(offset>0)sequence.addGap(offset*1000);sequence.addItem(item.build());if(total>offset+duration)sequence.addGap((total-offset-duration)*1000);out.add(sequence.build());
         }

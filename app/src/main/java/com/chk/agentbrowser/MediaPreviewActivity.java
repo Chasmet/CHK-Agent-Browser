@@ -51,11 +51,19 @@ public final class MediaPreviewActivity extends Activity {
                     });
                 }
                 video.setMediaItem(androidx.media3.common.MediaItem.fromUri(s.uri(path)));if(state!=null)video.seekTo(state.getInt("position",0));video.addListener(new androidx.media3.common.Player.Listener(){@Override public void onPlayerError(androidx.media3.common.PlaybackException error){new AgentDialog.Builder(MediaPreviewActivity.this).setTitle("Format indisponible").setMessage("Ce codec ne peut pas être lu sur ce téléphone. Tu peux ouvrir le fichier dans une autre application.").setNegativeButton("Fermer",null).setPositiveButton("Ouvrir ailleurs",(d,n)->{try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_VIEW).setDataAndType(s.uri(path),mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"Ouvrir le média"));}catch(Exception e){Toast.makeText(MediaPreviewActivity.this,"Aucune application compatible",Toast.LENGTH_LONG).show();}}).show();}});video.prepare();video.play();}
-            else{image=new ImageView(this);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setContentDescription("Aperçu de "+path);root.addView(image,new LinearLayout.LayoutParams(-1,0,1));TextView hint=MobileUi.text(this,"Pince l’image pour zoomer · Double touche pour réinitialiser",14,MobileUi.MUTED);root.addView(hint);
+            else{
+                boolean animatedGif="image/gif".equalsIgnoreCase(mime)
+                    || path.toLowerCase(java.util.Locale.ROOT).endsWith(".gif");
+                image=animatedGif?new GifPlaybackView(this):new ImageView(this);
+                image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setContentDescription("Aperçu de "+path);root.addView(image,new LinearLayout.LayoutParams(-1,0,1));TextView hint=MobileUi.text(this,"Pince l’image pour zoomer · Double touche pour réinitialiser",14,MobileUi.MUTED);root.addView(hint);
                 ScaleGestureDetector pinch=new ScaleGestureDetector(this,new ScaleGestureDetector.SimpleOnScaleGestureListener(){@Override public boolean onScale(ScaleGestureDetector d){float scale=Math.max(1f,Math.min(4f,image.getScaleX()*d.getScaleFactor()));image.setScaleX(scale);image.setScaleY(scale);return true;}});
                 GestureDetector gestures=new GestureDetector(this,new GestureDetector.SimpleOnGestureListener(){@Override public boolean onDown(MotionEvent e){return true;}@Override public boolean onDoubleTap(MotionEvent e){image.setScaleX(1);image.setScaleY(1);image.setTranslationX(0);image.setTranslationY(0);return true;}@Override public boolean onScroll(MotionEvent e1,MotionEvent e2,float x,float y){if(image.getScaleX()>1){image.setTranslationX(image.getTranslationX()-x);image.setTranslationY(image.getTranslationY()-y);}return true;}});
                 image.setOnTouchListener((v,e)->{pinch.onTouchEvent(e);if(!pinch.isInProgress())gestures.onTouchEvent(e);if(e.getAction()==MotionEvent.ACTION_UP)v.performClick();return true;});
-                WorkspaceCommands.IO.execute(()->{Bitmap loaded=null;try{File f=s.file(path);BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeFile(f.getPath(),bounds);if(bounds.outWidth<=0)throw new Exception("Image illisible");BitmapFactory.Options opts=new BitmapFactory.Options();opts.inSampleSize=1;while(bounds.outWidth/opts.inSampleSize>1600||bounds.outHeight/opts.inSampleSize>1600)opts.inSampleSize*=2;loaded=BitmapFactory.decodeFile(f.getPath(),opts);if(loaded==null)throw new Exception("Image illisible");
+                if(animatedGif){
+                    hint.setText("GIF animé · lecture en boucle · pincer pour zoomer");
+                    ((GifPlaybackView)image).load(s.file(path),1600,
+                        ()->hint.setText("GIF illisible ou trop grand : ouvrir avec une autre application."));
+                }else WorkspaceCommands.IO.execute(()->{Bitmap loaded=null;try{File f=s.file(path);BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeFile(f.getPath(),bounds);if(bounds.outWidth<=0)throw new Exception("Image illisible");BitmapFactory.Options opts=new BitmapFactory.Options();opts.inSampleSize=1;while(bounds.outWidth/opts.inSampleSize>1600||bounds.outHeight/opts.inSampleSize>1600)opts.inSampleSize*=2;loaded=BitmapFactory.decodeFile(f.getPath(),opts);if(loaded==null)throw new Exception("Image illisible");
                     try{android.media.ExifInterface exif=new android.media.ExifInterface(f.getPath());int orientation=exif.getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION,1);Matrix m=new Matrix();if(orientation==6)m.postRotate(90);else if(orientation==3)m.postRotate(180);else if(orientation==8)m.postRotate(270);if(orientation==6||orientation==3||orientation==8){Bitmap rotated=Bitmap.createBitmap(loaded,0,0,loaded.getWidth(),loaded.getHeight(),m,true);if(rotated!=loaded){loaded.recycle();loaded=rotated;}}}catch(Exception ignored){}
                     Bitmap ready=loaded;WorkspaceCommands.UI.post(()->{if(closed){ready.recycle();return;}bitmap=ready;image.setImageBitmap(ready);});
                 }catch(Exception e){if(loaded!=null)loaded.recycle();WorkspaceCommands.UI.post(()->{if(!closed)hint.setText("Aperçu impossible. Ouvre le fichier avec une application compatible.");});}});
@@ -63,7 +71,15 @@ public final class MediaPreviewActivity extends Activity {
         }catch(Exception e){root.addView(MobileUi.text(this,"Fichier inaccessible",18,MobileUi.TEXT));}
     }
     @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus&&openedPath!=null)FileOpenRequests.visible(getIntent().getStringExtra("request_id"),openedPath);}
-    @Override protected void onPause(){if(video!=null)video.pause();super.onPause();}
+    @Override protected void onPause(){
+        if(video!=null)video.pause();
+        if(image instanceof GifPlaybackView)((GifPlaybackView)image).pause();
+        super.onPause();
+    }
+    @Override protected void onResume(){
+        super.onResume();
+        if(image instanceof GifPlaybackView)((GifPlaybackView)image).start();
+    }
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(video!=null)out.putInt("position",(int)video.getCurrentPosition());}
-    @Override protected void onDestroy(){closed=true;if(video!=null)video.release();if(image!=null)image.setImageDrawable(null);if(bitmap!=null)bitmap.recycle();super.onDestroy();}
+    @Override protected void onDestroy(){closed=true;if(video!=null)video.release();if(image instanceof GifPlaybackView)((GifPlaybackView)image).clear();else if(image!=null)image.setImageDrawable(null);if(bitmap!=null)bitmap.recycle();super.onDestroy();}
 }
