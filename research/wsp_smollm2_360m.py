@@ -320,8 +320,8 @@ def head_edit(args):
                 "Audio export is still at 41 percent. Is the audio finished? Answer yes or no.",
                 "Suno is still generating with a spinner. Is the song ready? Answer yes or no.",
             ],
-            "yes": ("Yes", " yes", "Yes", " yes"),
-            "no": ("No", " no", "No", " no")
+            "yes": ("Yes", " yes", "yes", " Yes"),
+            "no": ("No", " no", "no", " No")
         },
         "french": {
             "positive": [
@@ -336,8 +336,8 @@ def head_edit(args):
                 "Le rendu MP4 est encore en progression. Est-ce fini ? Réponds oui ou non.",
                 "Suno affiche Génération en cours. Le morceau est-il prêt ? Réponds oui ou non.",
             ],
-            "yes": ("Oui", " oui", "Oui", " oui"),
-            "no": ("Non", " non", "Non", " non")
+            "yes": ("Oui", " oui", "OUI", " OUI"),
+            "no": ("Non", " non", "NON", " NON")
         }
     }
     def final_hiddens(inputs):
@@ -372,6 +372,7 @@ def head_edit(args):
         raise RuntimeError("Cannot locate the tied output embedding matrix.")
     edited = embedding.clone()
     changed_rows = []
+    seen_tokens = set()
     with torch.no_grad():
         for key, items in sets.items():
             d = calibration[key]
@@ -380,6 +381,8 @@ def head_edit(args):
                 if len(token_ids) != 1:
                     continue
                 idx = int(token_ids[0])
+                if idx in seen_tokens: continue
+                seen_tokens.add(idx)
                 before = edited[idx].float()
                 # Fixed bounded direct-edit strength (not an optimizer).
                 adjustment = 0.20 * float(torch.linalg.vector_norm(before)) * sign * d
@@ -390,6 +393,9 @@ def head_edit(args):
         fraction = len({x["token_id"] for x in changed_rows}) * embedding.shape[1] / sum(v.numel() for v in tensors.values())
         if modified == 0 or fraction > .0003:
             raise RuntimeError("No meaningful or safely bounded embedding modification.")
+        row_changes = [float(torch.linalg.vector_norm(edited[t].float()-embedding[t].float()) / torch.clamp(torch.linalg.vector_norm(embedding[t].float()), min=1e-10)) for t in seen_tokens]
+        if max(row_changes) > 0.25:
+            raise RuntimeError("WSP row delta exceeds 25 percent.")
         tensors["model.embed_tokens.weight"] = edited
     candidate.mkdir(exist_ok=True, parents=True)
     save_file(tensors, str(candidate / "model.safetensors"), metadata={"format": "pt"})
@@ -403,7 +409,7 @@ def head_edit(args):
         "source_sha256": SOURCE_SHA256,
         "changed_values": modified,
         "fraction_of_shard_parameters": fraction,
-        "relative_delta_selected_columns": .20,
+        "relative_delta_selected_columns": max(row_changes),
         "training_steps": 0, "gradients_used": False,
         "evaluation_passed": False, "activated_in_CHK": False,
         "output_sha256": digest(candidate / "model.safetensors")
