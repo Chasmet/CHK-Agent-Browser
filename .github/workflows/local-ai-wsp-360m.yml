@@ -36,13 +36,9 @@ jobs:
         run: python research/wsp_smollm2_360m.py prepare
       - name: Measure actual activations and score unmodified model
         run: python research/wsp_smollm2_360m.py probe
-      - name: WSP direct edit of layer 16 selected real weights
+      - name: WSP direct bilingual evidence-aware edit of tied output weights
         run: |
-          python research/weight_space_edit.py direction \
-            --normal .ci-wsp-360m/normal.npy \
-            --repeating .ci-wsp-360m/repeating.npy \
-            --output .ci-wsp-360m/direction.npy
-          python research/wsp_smollm2_360m.py edit
+          python research/wsp_smollm2_360m.py head_edit
       - name: Re-evaluate changed neural weights on unseen prompts
         run: python research/wsp_smollm2_360m.py evaluate
       - name: Verify improvement and no regressions (never deploy unverified)
