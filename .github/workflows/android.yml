@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, feat/offline-studio-director, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009, agent/mobile-studio-20261009, agent/general-audit-20261010, feature/cut-studio-20261010, 'feature/cut-*', 'feature/files-*', 'feature/share-*', 'feature/browser-*', 'feature/session-*', 'feature/publication-*', 'feature/agent-desktop-*', 'feature/local3-*']
+    branches: [main, feat/offline-studio-director, agent/persistent-autopilot-preview, agent/connection-resilience, agent/browser-stability-20261009, agent/mobile-workspace-20261009, agent/mobile-studio-20261009, agent/general-audit-20261010, feature/cut-studio-20261010, 'feature/cut-*', 'feature/files-*', 'feature/share-*', 'feature/browser-*', 'feature/session-*', 'feature/publication-*', 'feature/agent-desktop-*', 'feature/local3-*', 'feature/local-ai-*']
   workflow_dispatch:
 permissions:
   contents: write
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - name: Télécharger les sources
         uses: actions/checkout@v4
@@ -29,13 +29,17 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           test -n "$SDKMANAGER"
-          "$SDKMANAGER" 'platforms;android-36' 'build-tools;35.0.0'
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018'
       - name: Installer Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
       - name: Générer le wrapper Gradle
         run: gradle wrapper --gradle-version 8.11.1
+      - name: Compiler le moteur IA local ARM64 (llama.cpp, code source figé)
+        run: |
+          bash scripts/build_local_ai_android.sh
+          test -s app/src/main/jniLibs/arm64-v8a/libchk_local_ai.so
       - name: Vérifier les scripts navigateur et la reconnexion
         run: bash validation/check.sh
       - name: Compiler APK debug

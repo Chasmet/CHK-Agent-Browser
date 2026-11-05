@@ -8,6 +8,7 @@ final class Local3TaskPolicy {
     static JSONObject args(String a,JSONObject p){JSONObject nested=a.equals("android_action")?p.optJSONObject("args"):null;return nested==null?p:nested;}
     static long timeout(String a,JSONObject args){
         String name=action(a,args);JSONObject p=args(a,args);
+        if(name.equals("desktop")&&p.optString("tool").equals("local_ai")&&p.optString("operation").equals("ask"))return 180000L;
         if(name.equals("desktop")&&p.optString("tool").equals("tor")&&java.util.Arrays.asList("connect","tor_connect").contains(p.optString("operation")))return 390000L;
         if(name.equals("desktop")&&p.optString("tool").equals("tor"))return 240000L;
         if(name.equals("desktop")&&p.optString("tool").equals("studio")&&java.util.Arrays.asList("audio_mix","audio_analyze","audio_verify","crop_preview").contains(StudioMcp.operation(p)))return 900000L;
@@ -23,6 +24,7 @@ final class Local3TaskPolicy {
         String name=action(a,args);JSONObject p=args(a,args);
         if(Arrays.asList("local3_status","browser_status","files_capabilities","video_editor_capabilities").contains(name)
             ||name.equals("browser_tabs")&&p.optString("operation","list").equals("list"))return "read";
+        if(name.equals("desktop")&&p.optString("tool").equals("local_ai"))return p.optString("operation","status").equals("status")?"read":"local-ai";
         if(name.equals("desktop")&&p.optString("tool").equals("tor")&&
             Arrays.asList("status","capabilities","tor_status","tor_capabilities").contains(p.optString("operation")))return "read";
         if(name.equals("desktop")&&p.optString("tool").equals("tor"))return TorMcp.operation(p).equals("disconnect")?"tor-stop":"tor";
