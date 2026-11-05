@@ -44,8 +44,8 @@ Java_com_chk_agentbrowser_LocalAiController_nativeAsk(
 
     llama_model_params modelParams = llama_model_default_params();
     modelParams.n_gpu_layers = 0;
-    modelParams.use_mmap = true;
-    modelParams.use_mlock = false;
+    // Pinned llama.cpp uses load_mode instead of the former mmap/mlock flags.
+    modelParams.load_mode = LLAMA_LOAD_MODE_MMAP;
     llama_model * model = llama_model_load_from_file(path.c_str(), modelParams);
     if (!model) { fail(env, "Modèle GGUF impossible à charger."); return nullptr; }
     const llama_vocab * vocab = llama_model_get_vocab(model);
