@@ -71,6 +71,9 @@ Java_com_chk_agentbrowser_LocalAiController_nativeAsk(
     if (!ctx) { llama_model_free(model); fail(env, "Mémoire insuffisante pour l'IA locale."); return nullptr; }
 
     llama_sampler * sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
+    // Decode-time steering: small repetition penalty, no parameter modification.
+    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(
+        llama_vocab_n_tokens(vocab), 64, 1.10f, 0.0f, 0.0f));
     llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
     llama_batch_ext * batch = llama_batch_ext_init(ctx);
     bool ok = batch != nullptr;
@@ -86,6 +89,7 @@ Java_com_chk_agentbrowser_LocalAiController_nativeAsk(
     }
     for (int i = 0; i < maxTokens && ok; ++i) {
         const llama_token token = llama_sampler_sample(sampler, ctx, -1);
+        llama_sampler_accept(sampler, token);
         if (llama_vocab_is_eog(vocab, token)) break;
         char piece[512];
         int n = llama_token_to_piece(vocab, token, piece, sizeof(piece), 0, true);
