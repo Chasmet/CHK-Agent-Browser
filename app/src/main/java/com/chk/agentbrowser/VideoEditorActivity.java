@@ -453,7 +453,7 @@ public final class VideoEditorActivity extends Activity {
     private MediaItem mediaForPreview(WorkspaceStore store,JSONObject c)throws Exception{
         java.io.File file=store.file(c.getString("path"));
         if(!file.isFile()||file.length()==0)throw new java.io.IOException("Fichier absent : "+c.getString("path"));
-        if(StudioImages.isImage(file))return StudioImages.media(file,c.optLong("duration_ms",5000));
+        if(StudioImages.isImage(file))return StudioImages.media(this,file,c.optLong("duration_ms",5000));
         long begin=c.optLong("start_ms",0),end=begin+c.optLong("duration_ms",10000);
         return new MediaItem.Builder().setUri(android.net.Uri.fromFile(file))
             .setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder()
@@ -947,7 +947,7 @@ public final class VideoEditorActivity extends Activity {
                     }
                 }).show();
     }
-    private void addMenu(String kind){if(project==null||saving||importing)return;if(kind.equals("layer")){pickWorkspace(kind);return;}importKind=kind;new AgentDialog.Builder(this).setTitle("Ajouter "+(!kind.equals("audio")?"des vidéos ou photos":"un audio")).setItems(new String[]{"Depuis le téléphone","Depuis Fichiers CHK"},(d,n)->{if(n==0)startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(!kind.equals("audio")?"*/*":"audio/*").putExtra(Intent.EXTRA_MIME_TYPES,!kind.equals("audio")?new String[]{"video/*","image/png","image/jpeg","image/webp"}:new String[]{"audio/*"}).addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true),810);else pickWorkspace(kind);}).show();}
+    private void addMenu(String kind){if(project==null||saving||importing)return;if(kind.equals("layer")){pickWorkspace(kind);return;}importKind=kind;new AgentDialog.Builder(this).setTitle("Ajouter "+(!kind.equals("audio")?"des vidéos ou photos":"un audio")).setItems(new String[]{"Depuis le téléphone","Depuis Fichiers CHK"},(d,n)->{if(n==0)startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(!kind.equals("audio")?"*/*":"audio/*").putExtra(Intent.EXTRA_MIME_TYPES,!kind.equals("audio")?new String[]{"video/*","image/png","image/jpeg","image/webp","image/gif"}:new String[]{"audio/*"}).addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true),810);else pickWorkspace(kind);}).show();}
     private void invalidateRenderedPreview(){
         if(renderedMode&&player!=null&&editSeek==null)editSeek=player.getCurrentPosition();renderedMode=false;
         if(renderPreview!=null)renderPreview.cancel();if(renderBadge!=null)renderBadge.setText(StudioLayers.items(project==null?new JSONObject():project).length()>0?"Source sans calques · toucher pour l’aperçu rendu":"Source · toucher pour voir les effets rendus");
@@ -1001,9 +1001,9 @@ public final class VideoEditorActivity extends Activity {
     private void pickWorkspace(String kind){
         importKind=kind;
         try{studioPicker=WorkspaceMediaChooser.show(this,new android.webkit.WebChromeClient.FileChooserParams(){
-            public int getMode(){return MODE_OPEN_MULTIPLE;}public String[] getAcceptTypes(){return kind.equals("audio")?new String[]{"audio/*"}:new String[]{"video/*","image/png","image/jpeg","image/webp"};}
+            public int getMode(){return MODE_OPEN_MULTIPLE;}public String[] getAcceptTypes(){return kind.equals("audio")?new String[]{"audio/*"}:new String[]{"video/*","image/png","image/jpeg","image/webp","image/gif"};}
             public boolean isCaptureEnabled(){return false;}public CharSequence getTitle(){return "Ajouter au montage";}public String getFilenameHint(){return "";}public Intent createIntent(){return new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*");}
-        },uris->{if(uris==null||uris.length==0)return;ArrayList<String> paths=new ArrayList<>();for(android.net.Uri uri:uris)paths.add(android.text.TextUtils.join("/",uri.getPathSegments().subList(1,uri.getPathSegments().size())));addWorkspaceBatch(kind,paths);},()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(kind.equals("audio")?"audio/*":"*/*").putExtra(Intent.EXTRA_MIME_TYPES,kind.equals("audio")?new String[]{"audio/*"}:new String[]{"video/*","image/png","image/jpeg","image/webp"}).addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true),810));}catch(Exception e){toast(e.getMessage());}
+        },uris->{if(uris==null||uris.length==0)return;ArrayList<String> paths=new ArrayList<>();for(android.net.Uri uri:uris)paths.add(android.text.TextUtils.join("/",uri.getPathSegments().subList(1,uri.getPathSegments().size())));addWorkspaceBatch(kind,paths);},()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(kind.equals("audio")?"audio/*":"*/*").putExtra(Intent.EXTRA_MIME_TYPES,kind.equals("audio")?new String[]{"audio/*"}:new String[]{"video/*","image/png","image/jpeg","image/webp","image/gif"}).addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true),810));}catch(Exception e){toast(e.getMessage());}
     }
     private void addWorkspaceBatch(String kind,List<String> paths){
         if(kind.equals("layer")){addLayers(paths);return;}
