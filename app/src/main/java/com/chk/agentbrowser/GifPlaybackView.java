@@ -24,6 +24,7 @@ import java.io.IOException;
  * Android 9+ uses Android's streaming AnimatedImageDrawable; API 23-27 uses
  * software-rendered Movie with bounded inputs. No WebView, server or network.
  */
+@android.annotation.SuppressLint("AppCompatCustomView")
 final class GifPlaybackView extends ImageView {
     private static final long MAX_GIF_BYTES = 64L * 1024L * 1024L;
     private static final int MAX_SOURCE_PIXELS = 12000000;
