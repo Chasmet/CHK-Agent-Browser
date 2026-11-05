@@ -30,6 +30,9 @@ public final class SettingsActivity extends Activity {
     private boolean askedToInstall, awaitingInstallPermission;
     private long validatedDownloadId=Long.MIN_VALUE;
     private Switch autonomousMode, previewMode;
+    private android.widget.ScrollView settingsGeneralScroll, settingsAiScroll;
+    private Button settingsTabGeneral, settingsTabAi;
+    private boolean showingAiTab;
     private final Handler refresh=new Handler();
     private final Runnable statusTick=new Runnable(){
         @Override public void run(){showMcp();showDownloadProgress();if(local2Status!=null)local2Status.setText(Local2Client.get(SettingsActivity.this).status()+"\nMode autonome : "+(agent.isAutonomous()?"actif":"désactivé")+"\nNavigateur : "+agent.local2BrowserSummary());if(local3Status!=null)local3Status.setText(Local3Client.get(SettingsActivity.this).diagnostic());if(localAiStatus!=null)localAiStatus.setText(LocalAiController.get(SettingsActivity.this).statusText());refresh.postDelayed(this,2000L);}
@@ -39,6 +42,13 @@ public final class SettingsActivity extends Activity {
         super.onCreate(state);
         setContentView(R.layout.activity_settings);
         if(state!=null)awaitingInstallPermission=state.getBoolean("awaiting_install_permission",false);
+        settingsGeneralScroll=findViewById(R.id.settings_general_scroll);
+        settingsAiScroll=findViewById(R.id.settings_ai_scroll);
+        settingsTabGeneral=findViewById(R.id.settings_tab_general);
+        settingsTabAi=findViewById(R.id.settings_tab_ai);
+        settingsTabGeneral.setOnClickListener(v->showSettingsTab(false));
+        settingsTabAi.setOnClickListener(v->showSettingsTab(true));
+        showSettingsTab(state!=null && state.getBoolean("settings_ai_tab",false));
         updates=new UpdateManager(this);
         agent=AgentClient.get(this);
         findViewById(R.id.settings_back).setOnClickListener(v->finish());
@@ -199,17 +209,18 @@ public final class SettingsActivity extends Activity {
         permissionInfo.setText("Avec le mode autonome activé, Local 3 peut naviguer, saisir, importer, gérer les fichiers et utiliser Studio sans quota de demandes. Désactive cet interrupteur pour révoquer l’autorisation. L’historique et les résultats réels restent accessibles depuis le serveur.");
         permissionInfo.setPadding(16,8,16,12);group.addView(permissionInfo,localInsert++);
 
-        // Optional private local model: not a new network service.
+        // Optional local model has its own dedicated settings tab.
+        android.widget.LinearLayout aiGroup=findViewById(R.id.ai_settings_content);
         LocalAiController localAi=LocalAiController.get(this);
         TextView aiHeading=new TextView(this);
         aiHeading.setText("IA LOCALE · SMOLLM2 135M");
         aiHeading.setTextSize(18);aiHeading.setPadding(16,24,16,10);
-        group.addView(aiHeading,localInsert++);
+        aiGroup.addView(aiHeading);
         TextView aiHelp=new TextView(this);
         aiHelp.setText("Modèle open source Apache 2.0 (~105 Mo), sans entraînement. "
             +"Génération hors ligne à la demande, 2 threads CPU maximum, libération de la mémoire après chaque réponse. "
             +"ChatGPT peut le consulter via Local 3. Le modèle conseille, mais ne clique et ne publie jamais directement.");
-        aiHelp.setPadding(16,8,16,12);group.addView(aiHelp,localInsert++);
+        aiHelp.setPadding(16,8,16,12);aiGroup.addView(aiHelp);
         Switch aiSwitch=new Switch(this);
         aiSwitch.setText("Autoriser ChatGPT à interroger le modèle local");
         aiSwitch.setTextSize(15);aiSwitch.setChecked(localAi.enabled());
@@ -217,11 +228,11 @@ public final class SettingsActivity extends Activity {
             localAi.setEnabled(on);
             if(localAiStatus!=null)localAiStatus.setText(localAi.statusText());
         });
-        group.addView(aiSwitch,localInsert++);
+        aiGroup.addView(aiSwitch);
         localAiStatus=new TextView(this);
         localAiStatus.setPadding(16,8,16,12);
         localAiStatus.setText(localAi.statusText());
-        group.addView(localAiStatus,localInsert++);
+        aiGroup.addView(localAiStatus);
         Button aiDownload=new Button(this);
         aiDownload.setAllCaps(false);
         aiDownload.setText("Télécharger le mini-modèle (~105 Mo)");
@@ -241,7 +252,7 @@ public final class SettingsActivity extends Activity {
                     Toast.makeText(this,started?"Téléchargement lancé":"Déjà installé ou téléchargement en cours",Toast.LENGTH_LONG).show();
                 }).show();
         });
-        group.addView(aiDownload,localInsert++);
+        aiGroup.addView(aiDownload);
         Button aiDelete=new Button(this);
         aiDelete.setAllCaps(false);aiDelete.setText("Supprimer le modèle local");
         aiDelete.setOnClickListener(v->new AgentDialog.Builder(this)
@@ -257,7 +268,7 @@ public final class SettingsActivity extends Activity {
                     });
                 }catch(Exception e){Toast.makeText(this,"Suppression impossible.",Toast.LENGTH_LONG).show();}
             }).show());
-        group.addView(aiDelete,localInsert++);
+        aiGroup.addView(aiDelete);
 
 
         local3.setOnCheckedChangeListener((b,on)->{
@@ -425,7 +436,24 @@ public final class SettingsActivity extends Activity {
                 }).setNegativeButton("Fermer",null).show();
         }catch(Exception error){Toast.makeText(this,"Historique Publications indisponible.",Toast.LENGTH_LONG).show();}
     }
-    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putBoolean("awaiting_install_permission",awaitingInstallPermission);}
+    @Override protected void onSaveInstanceState(Bundle out){
+        super.onSaveInstanceState(out);
+        out.putBoolean("awaiting_install_permission",awaitingInstallPermission);
+        out.putBoolean("settings_ai_tab",showingAiTab);
+    }
+    private void showSettingsTab(boolean ai) {
+        showingAiTab=ai;
+        settingsGeneralScroll.setVisibility(ai?View.GONE:View.VISIBLE);
+        settingsAiScroll.setVisibility(ai?View.VISIBLE:View.GONE);
+        settingsTabGeneral.setSelected(!ai);
+        settingsTabAi.setSelected(ai);
+        settingsTabGeneral.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+            android.graphics.Color.parseColor(ai?"#293346":"#69E2C6")));
+        settingsTabAi.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+            android.graphics.Color.parseColor(ai?"#69E2C6":"#293346")));
+        settingsTabGeneral.setTextColor(android.graphics.Color.parseColor(ai?"#F1F5FF":"#0D1423"));
+        settingsTabAi.setTextColor(android.graphics.Color.parseColor(ai?"#0D1423":"#F1F5FF"));
+    }
     @Override protected void onPause(){refresh.removeCallbacks(statusTick);super.onPause();}
     private void showMcp() {
         boolean enabled=agent.isEnabled(), link=!agent.mcpUrl().isEmpty();
