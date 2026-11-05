@@ -46,6 +46,7 @@ public final class CutStudioLibraryActivity extends Activity {
     private LinearLayout content, toolbar;
     private String groupId="", groupName="", folderName="";
     private boolean selecting=false;
+    private int renderGeneration;
     private final Set<String> selection=new HashSet<>();
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
 
@@ -95,6 +96,7 @@ public final class CutStudioLibraryActivity extends Activity {
         add(parent,t,6);t.setOnClickListener(v->callback.run());
     }
     private void render(){
+        renderGeneration++;
         LinearLayout screen=column();screen.setBackgroundColor(BG);
         LinearLayout top=column();top.setBackgroundColor(0xff00796b);
         top.setPadding(dp(16),dp(14),dp(16),dp(12));screen.addView(top);
@@ -254,6 +256,7 @@ public final class CutStudioLibraryActivity extends Activity {
             cb.setOnCheckedChangeListener((v,b)->{if(b)selection.add(videoPath);else selection.remove(videoPath);});
         }else{
             action(p,"▶ LIRE",()->openVideo(videoPath));
+            action(p,"PARTAGER LE MP4",()->shareFiles(Arrays.asList(video)));
             if(hasShareMetadata(videoPath))
                 action(p,"PARTAGER + MÉTADONNÉES",()->chooseShareMetadata(video));
             int schedules=0;
@@ -282,16 +285,12 @@ public final class CutStudioLibraryActivity extends Activity {
         }
     }
     private void loadThumb(ImageView target,File file){
-        new Thread(()->{
-            Bitmap frame=null;MediaMetadataRetriever retriever=new MediaMetadataRetriever();
-            try{retriever.setDataSource(file.getAbsolutePath());frame=retriever.getFrameAtTime(0);}
-            catch(Exception ignored){}finally{try{retriever.release();}catch(Exception ignored){}}
-            Bitmap finalFrame=frame;
-            runOnUiThread(()->{
-                if(!isDestroyed()&&target.isAttachedToWindow()&&finalFrame!=null)target.setImageBitmap(finalFrame);
-                else if(finalFrame!=null)finalFrame.recycle();
-            });
-        },"cut-thumbnail").start();
+        final int generation=renderGeneration;
+        final String source=path(file);
+        ThumbnailLoader.load(this,source,0,true,new ThumbnailLoader.Result(){
+            public boolean current(){return generation==renderGeneration&&!isFinishing()&&!isDestroyed();}
+            public void ready(Bitmap bitmap){target.setImageBitmap(bitmap);}
+        });
     }
     private void openVideo(String path){
         startActivity(new Intent(this,MediaPreviewActivity.class).putExtra("path",path));
@@ -323,7 +322,7 @@ public final class CutStudioLibraryActivity extends Activity {
                                     .put("title",meta.optString("title",""))
                                     .put("description",meta.optString("description",""))
                                     .put("hashtags",meta.optString("hashtags",""));
-                                NativeSocialSession.offer(this,workspace,row);
+                                CutPublicationShare.publishClassic(this,workspace,row);
                             }catch(Exception e){toast("Partage : "+e.getMessage());}
                         })
                         .setNegativeButton("Copier seulement",(d,n)->copyMetadata(text))

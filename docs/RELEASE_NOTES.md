@@ -1,3 +1,14 @@
+## Cut et fiabilité générale — 5 novembre 2026
+
+- Bouton « PARTAGER LE MP4 » visible sur chaque vidéo de la bibliothèque, avec ou sans métadonnées.
+- Partage Android direct depuis les métadonnées et le planning. Le partage simple ouvre les applications disponibles immédiatement.
+- Miniatures réduites et mises en cache, avec deux décodeurs simultanés pour garder la bibliothèque réactive.
+- Type MP4 transmis par le fournisseur Android et lecture du fichier couvert par un test de régression.
+- Studio regroupe l'accès au MP4 existant, Remplacer et Nouvelle copie dans le même menu Exporter. Le suivi signale un rendu interrompu après redémarrage.
+- Sauvegarde des notes fiabilisée lors de la recréation de l'éditeur pendant un chargement.
+- Traductions Web protégées contre les résultats tardifs. Dans Tor, Retour revient à l'original et les rechargements effacent la traduction précédente.
+- Les rappels Cut sont programmés même si l'export de leur copie JSON échoue.
+
 ## CHK Studio — copier un clip déjà exporté vers Android (2 novembre 2026)
 
 - Le bouton « Exporter » propose maintenant d'ouvrir/enregistrer/partager un MP4 déjà rendu, même après redémarrage de Studio ; un nouveau rendu reste possible par choix explicite. Le menu refuse de reprendre le dernier MP4 d'un autre projet.

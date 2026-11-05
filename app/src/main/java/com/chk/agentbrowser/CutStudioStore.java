@@ -46,10 +46,10 @@ public final class CutStudioStore {
         for(int i=0;i<old.length();i++){
             JSONObject item=old.optJSONObject(i);
             if(item==null)continue;
-            if(id.equals(item.optString("id"))) cancel(context,id);
-            else next.put(item);
+            if(!id.equals(item.optString("id")))next.put(item);
         }
         persist(context,next);
+        cancel(context,id);
     }
     public static synchronized void published(Context context,String id,boolean done) throws Exception {
         JSONArray entries=all(context);
@@ -87,16 +87,18 @@ public final class CutStudioStore {
      */
     public static synchronized void removeForPath(Context context,String path) throws Exception {
         JSONArray entries=all(context), retained=new JSONArray();
-        boolean changed=false;
+        List<String> removed=new ArrayList<>();
         for(int i=0;i<entries.length();i++){
             JSONObject item=entries.optJSONObject(i);
             if(item==null)continue;
             String candidate=item.optString("path","");
             if(candidate.equals(path)||(path.endsWith("/")&&candidate.startsWith(path))){
-                cancel(context,item.optString("id"));changed=true;
+                removed.add(item.optString("id"));
             }else retained.put(item);
         }
-        if(changed)persist(context,retained);
+        if(removed.isEmpty())return;
+        persist(context,retained);
+        for(String id:removed)cancel(context,id);
     }
 
     public static synchronized void reschedule(Context context) {
@@ -164,14 +166,15 @@ public final class CutStudioStore {
             if(row!=null&&!ids.contains(row.optString("id")))merged.put(row);
         }
         for(int i=0;i<incoming.length();i++)merged.put(incoming.getJSONObject(i));
-        persist(context,merged);
+        boolean mirrorVerified=persist(context,merged);
         for(int i=0;i<incoming.length();i++)alarm(context,incoming.getJSONObject(i));
         return new JSONObject()
             .put("imported",incoming.length())
             .put("ids",identifiers)
             .put("state","scheduled_local_reminder")
             .put("platform_publication_confirmed",false)
-            .put("planning_file",FOLDER+"/publications.json");
+            .put("planning_file",mirrorVerified?FOLDER+"/publications.json":JSONObject.NULL)
+            .put("planning_file_verified",mirrorVerified);
     }
 
     private static void validate(Context context,JSONObject entry) throws Exception {
@@ -214,16 +217,20 @@ public final class CutStudioStore {
         Collections.sort(entries,(x,y)->Long.compare(x.optLong("at"),y.optLong("at")));
         return entries;
     }
-    private static void persist(Context context,JSONArray entries) throws Exception {
+    private static boolean persist(Context context,JSONArray entries) throws Exception {
         if(!context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
             .putString(KEY,entries.toString()).commit())
             throw new IllegalStateException("Échec de l'enregistrement");
-        WorkspaceStore store=new WorkspaceStore(context);
-        try{store.mkdir(FOLDER);}catch(Exception e){
-            if(!store.file(FOLDER).isDirectory())throw e;
+        try{
+            WorkspaceStore store=new WorkspaceStore(context);
+            if(!store.file(FOLDER).isDirectory())store.mkdir(FOLDER);
+            store.writeText(FOLDER+"/publications.json",entries.toString(2),true);
+            return true;
+        }catch(Exception error){
+            // The planning is already durable. A failed export must not skip its alarms.
+            android.util.Log.w("CHK-Cut","Copie JSON du planning indisponible",error);
+            return false;
         }
-        // Copie de lecture exploitable par l'agent MCP Fichiers et sauvegardée hors de l'UI.
-        store.writeText(FOLDER+"/publications.json",entries.toString(2),true);
     }
     private static PendingIntent intent(Context ctx,String id,int flags){
         Intent i=new Intent(ctx,CutStudioReminderReceiver.class)

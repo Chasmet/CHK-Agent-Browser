@@ -47,7 +47,7 @@ final class CutPublicationShare {
     }
 
     static void publish(Activity activity, WorkspaceStore files, JSONObject entry) {
-        NativeSocialSession.offer(activity,files,entry);
+        publishClassic(activity,files,entry);
     }
 
     /** Existing Android share unchanged, available as the owner-selected fallback. */

@@ -25,7 +25,8 @@ public final class CutPublicationShareTest {
         storage.mkdir(folder);
         File video=storage.file(folder+"/clip.mp4");
         try {
-            assertTrue(video.createNewFile());
+            byte[] bytes="test de lecture du partage MP4".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            try(java.io.FileOutputStream output=new java.io.FileOutputStream(video)){output.write(bytes);}
             JSONObject entry=new JSONObject().put("path",folder+"/clip.mp4")
                 .put("platform","tiktok").put("title","Anunnaki : Urus")
                 .put("description","La cité se dévoile.")
@@ -36,6 +37,25 @@ public final class CutPublicationShareTest {
             Uri uri=intent.getParcelableExtra(Intent.EXTRA_STREAM);
             assertNotNull(uri);
             assertEquals("content",uri.getScheme());
+            assertEquals("video/mp4",context.getContentResolver().getType(uri));
+            try(java.io.InputStream input=context.getContentResolver().openInputStream(uri)){
+                assertNotNull(input);
+                byte[] received=new byte[bytes.length];
+                int count=0;
+                while(count<received.length){
+                    int read=input.read(received,count,received.length-count);
+                    if(read<0)break;
+                    count+=read;
+                }
+                assertEquals(bytes.length,count);
+                assertArrayEquals(bytes,received);
+            }
+            try(android.database.Cursor metadata=context.getContentResolver().query(uri,
+                    new String[]{android.provider.OpenableColumns.DISPLAY_NAME,android.provider.OpenableColumns.SIZE},null,null,null)){
+                assertNotNull(metadata);assertTrue(metadata.moveToFirst());
+                assertEquals("clip.mp4",metadata.getString(metadata.getColumnIndexOrThrow(android.provider.OpenableColumns.DISPLAY_NAME)));
+                assertEquals(bytes.length,metadata.getLong(metadata.getColumnIndexOrThrow(android.provider.OpenableColumns.SIZE)));
+            }
             assertEquals(context.getPackageName()+".browserfiles",uri.getAuthority());
             assertTrue((intent.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION)!=0);
             ClipData clip=intent.getClipData();

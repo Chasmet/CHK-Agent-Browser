@@ -113,4 +113,33 @@ public class NotesFoldersIntegrationTest {
         assertEquals(directory.getString("id"),revised.getString("folder_id"));
     }
 
+    @Test public void recreatingEditorDuringLoadReadsExistingNote() throws Exception {
+        android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
+        android.content.Context context=instrumentation.getTargetContext();
+        WorkspaceStore store=store();
+        String title="Reprise "+UUID.randomUUID();
+        JSONObject note=store.saveNote("",title,"Texte à conserver","",true,0);
+        java.util.concurrent.CountDownLatch release=new java.util.concurrent.CountDownLatch(1);
+        WorkspaceCommands.IO.execute(()->{
+            try{release.await(30,java.util.concurrent.TimeUnit.SECONDS);}
+            catch(InterruptedException error){Thread.currentThread().interrupt();}
+        });
+        android.content.Intent intent=new android.content.Intent(context,NoteEditorActivity.class)
+            .putExtra("id",note.getString("id"));
+        try(androidx.test.core.app.ActivityScenario<NoteEditorActivity> scenario=
+                androidx.test.core.app.ActivityScenario.launch(intent)){
+            scenario.recreate();
+            scenario.onActivity(activity->assertFalse(activity.findViewById(R.id.note_body).isEnabled()));
+            release.countDown();
+            WorkspaceCommands.IO.submit(()->{}).get(10,java.util.concurrent.TimeUnit.SECONDS);
+            instrumentation.waitForIdleSync();
+            scenario.onActivity(activity->{
+                android.widget.EditText body=activity.findViewById(R.id.note_body);
+                assertTrue(body.isEnabled());
+                assertEquals("Texte à conserver",body.getText().toString());
+            });
+            assertEquals(note.getInt("revision"),store.note(note.getString("id")).getInt("revision"));
+        }finally{release.countDown();}
+    }
+
 }

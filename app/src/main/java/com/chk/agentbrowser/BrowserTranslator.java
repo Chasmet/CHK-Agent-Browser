@@ -22,8 +22,10 @@ public final class BrowserTranslator {
     private BrowserTranslator() {}
     public interface Callback { void done(boolean ok, String message); }
 
+    private static final java.util.concurrent.atomic.AtomicLong REQUEST_ID = new java.util.concurrent.atomic.AtomicLong();
+
     private static final String PREPARE =
-        "(function(){if(!document.body)return JSON.stringify({error:'Page non chargée'});"
+        "(function(requestId){if(!document.body)return JSON.stringify({error:'Page non chargée'});"
         +"var s=window.__chkTranslation;"
         +"if(!s){s={nodes:[],original:[]};"
         +"var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);var n,total=0;"
@@ -32,7 +34,7 @@ public final class BrowserTranslator {
         +"if(p.closest('script,style,noscript,textarea,input,select,option,code,pre,[contenteditable], [translate=no], [class*=password]'))continue;"
         +"var t=n.nodeValue;if(t.length>1100||!/[a-zA-ZÀ-ÿ]{2}/.test(t))continue;"
         +"s.nodes.push(n);s.original.push(t);total+=t.length;}"
-        +"window.__chkTranslation=s;}return JSON.stringify({texts:s.original});})()";
+        +"window.__chkTranslation=s;}s.requestId=requestId;return JSON.stringify({texts:s.original});})";
 
     private static final String RESTORE =
         "(function(){var s=window.__chkTranslation;if(!s)return false;"
@@ -50,7 +52,8 @@ public final class BrowserTranslator {
         else if("fr-en".equals(direction)){source=TranslateLanguage.FRENCH;target=TranslateLanguage.ENGLISH;}
         else {callback.done(false,"Langues acceptées : en-fr, fr-en, original.");return;}
         final String page=web.getUrl();
-        web.evaluateJavascript(PREPARE,raw->{
+        final long requestId=REQUEST_ID.incrementAndGet();
+        web.evaluateJavascript(PREPARE+"("+requestId+")",raw->{
             JSONArray texts;
             try {
                 String serialized=new JSONArray("["+raw+"]").getString(0);
@@ -73,11 +76,11 @@ public final class BrowserTranslator {
                         }
                         JSONArray translated=new JSONArray();
                         for(Object item:results)translated.put(String.valueOf(item));
-                        String script="(function(){var s=window.__chkTranslation;if(!s)return false;"
+                        String script="(function(){var s=window.__chkTranslation;if(!s||s.requestId!=="+requestId+")return false;"
                             +"var t="+translated.toString()+";s.nodes.forEach(function(n,i){"
                             +"if(n&&n.isConnected)n.nodeValue=t[i]});return true;})()";
                         web.evaluateJavascript(script,result->callback.done("true".equals(result),
-                            "true".equals(result)?"Page traduite ("+direction+").":"La page a changé."));
+                            "true".equals(result)?"Page traduite ("+direction+").":"Traduction remplacée ou page modifiée."));
                     }).addOnFailureListener(error->{
                         translator.close();callback.done(false,"Traduction impossible : "+error.getMessage());
                     });

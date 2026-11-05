@@ -91,6 +91,7 @@ public final class CutStudioIntegrationTest {
             JSONObject first=CutStudioStore.importFromAgent(ctx,json);
             identifier=first.getJSONArray("ids").getString(0);
             assertEquals(1,first.getInt("imported"));
+            assertTrue(first.getBoolean("planning_file_verified"));
             assertFalse(first.getBoolean("platform_publication_confirmed"));
             assertEquals(identifier,CutStudioStore.importFromAgent(ctx,json)
                 .getJSONArray("ids").getString(0));

@@ -35,8 +35,7 @@ public final class BrowserFileProvider extends ContentProvider {
     @Override public boolean onCreate(){return true;}
     @Override public String getType(Uri uri){
         try{
-            String type=URLConnection.guessContentTypeFromName(resolve(uri).getName());
-            return type==null?"application/octet-stream":type;
+            return new WorkspaceStore(getContext()).mime(resolve(uri).getName());
         }catch(Exception e){return "application/octet-stream";}
     }
     @Override public ParcelFileDescriptor openFile(Uri uri,String mode)throws FileNotFoundException{

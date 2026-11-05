@@ -103,8 +103,37 @@ public final class VideoEditorIntegrationTest {
         store.file(output).delete();
     }
     @Test public void testExportDialogOffersReplacementAndCopy()throws Exception{
-        String output="dialog-"+UUID.randomUUID()+".mp4";try(FileOutputStream old=new FileOutputStream(store.file(output))){old.write(new byte[1024]);}invoke("video_editor_project_save",new JSONObject().put("project",project(output)));
-        VideoEditorActivity activity=(VideoEditorActivity)getInstrumentation().startActivitySync(new Intent(context,VideoEditorActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));Thread.sleep(1500);getInstrumentation().runOnMainSync(()->activity.getWindow().getDecorView().findViewWithTag("export_project").performClick());boolean choices=false;for(int i=0;i<30;i++){android.view.accessibility.AccessibilityNodeInfo root=getInstrumentation().getUiAutomation().getRootInActiveWindow();if(root!=null&&!root.findAccessibilityNodeInfosByText("Nouvelle copie").isEmpty()&&!root.findAccessibilityNodeInfosByText("Remplacer").isEmpty()){choices=true;root.findAccessibilityNodeInfosByText("Annuler").get(0).performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK);break;}Thread.sleep(200);}assertTrue("Both export choices must be reachable",choices);getInstrumentation().runOnMainSync(()->activity.finish());assertEquals(1024,store.file(output).length());store.file(output).delete();
+        String output="dialog-"+UUID.randomUUID()+".mp4";
+        try(FileOutputStream old=new FileOutputStream(store.file(output))){
+            old.write(new byte[1024]);
+        }
+        invoke("video_editor_project_save",new JSONObject().put("project",project(output)));
+        VideoEditorActivity activity=(VideoEditorActivity)getInstrumentation().startActivitySync(
+            new Intent(context,VideoEditorActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try{
+            Thread.sleep(1500);
+            getInstrumentation().runOnMainSync(()->activity.getWindow().getDecorView()
+                .findViewWithTag("export_project").performClick());
+            boolean choices=false;
+            for(int i=0;i<30;i++){
+                android.view.accessibility.AccessibilityNodeInfo root=getInstrumentation()
+                    .getUiAutomation().getRootInActiveWindow();
+                if(root!=null&&!root.findAccessibilityNodeInfosByText("Nouvelle copie").isEmpty()
+                    &&!root.findAccessibilityNodeInfosByText("Remplacer").isEmpty()
+                    &&!root.findAccessibilityNodeInfosByText("Lire, enregistrer ou partager").isEmpty()){
+                    choices=true;
+                    root.findAccessibilityNodeInfosByText("Annuler").get(0)
+                        .performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK);
+                    break;
+                }
+                Thread.sleep(200);
+            }
+            assertTrue("The existing MP4 and both render choices must be reachable together",choices);
+            assertEquals(1024,store.file(output).length());
+        }finally{
+            getInstrumentation().runOnMainSync(activity::finish);
+            store.file(output).delete();
+        }
     }
     @Test public void testFullscreenPreviewAndReturnToTimeline()throws Exception{
         String output="fullscreen-"+UUID.randomUUID()+".mp4";

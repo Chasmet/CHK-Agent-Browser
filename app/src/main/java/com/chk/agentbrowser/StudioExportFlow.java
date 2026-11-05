@@ -100,38 +100,45 @@ final class StudioExportFlow {
             return "Le décodeur vidéo Android a échoué. Vérifie les codecs ou réessaie avec des médias compatibles.";
         return error.length()>260?error.substring(0,260):error;
     }
-    void open(JSONObject project,int revision){
+    void open(JSONObject project,int revision,Runnable openExisting){
+        if(copying||verifying){message("Une vérification ou une copie du MP4 est en cours.");return;}
         if(project==null){message("Aucun montage ouvert.");return;}
         JSONObject state=engine.status();
-        if(("running".equals(state.optString("state"))||"preparing".equals(state.optString("state")))
-            &&output.equals(state.optString("output"))){refresh();details();return;}
-        if(project.optJSONArray("clips")==null||project.optJSONArray("clips").length()==0){message("Ajoute des vidéos au montage.");return;}
+        if("running".equals(state.optString("state"))||"preparing".equals(state.optString("state"))){
+            if(exportStarted&&output.equals(state.optString("output"))){refresh();details();}
+            else message("Un rendu Studio est en cours.");
+            return;
+        }
+        final String previous=project.optString("output","");
+        boolean existing=false;
+        try{existing=!previous.isEmpty()&&new WorkspaceStore(activity).file(previous).isFile();}
+        catch(Exception error){android.util.Log.w("ChkStudio","Vérification MP4 existant impossible",error);}
+        if(project.optJSONArray("clips")==null||project.optJSONArray("clips").length()==0){
+            if(existing)openExisting.run();
+            else message("Ajoute des vidéos au montage.");
+            return;
+        }
+        final boolean showExisting=existing;
         final String name=fileName(project.optString("output","CHK_Studio.mp4"));
+        ArrayList<String> choices=new ArrayList<>(Arrays.asList(
+            "📁 Dossier de l'application CHK — choisir",
+            "📱 Téléphone — choisir le dossier Android",
+            "⬇ Téléphone — Téléchargements / CHK Studio",
+            "✓ Dossier CHK actuel : "+name));
+        if(showExisting)choices.add(0,"Lire, enregistrer ou partager le MP4 existant");
         AgentDialog.Builder dialog=new AgentDialog.Builder(activity);
-        // Android AlertDialog cannot show its message and list at the same time:
-        // setMessage() takes priority over setItems(), leaving only "Annuler".
-        // Put the context in the title and use a real visible choice list.
         dialog.setTitle("Exporter · "+project.optJSONArray("clips").length()+" plans · "
                 +project.optInt("resolution",720)+"p")
-            .setItems(new String[]{
-                "📁 Dossier de l'application CHK — choisir",
-                "📱 Téléphone — choisir le dossier Android",
-                "⬇ Téléphone — Téléchargements / CHK Studio",
-                "✓ Dossier CHK actuel : "+name
-            },(d,choice)->{
-                if(choice==0)browseChk(project,revision,initialFolder(project));
-                else if(choice==1)prepare(project,revision,project.optString("output",""),"phone");
-                else if(choice==2)prepare(project,revision,project.optString("output",""),"downloads");
-                else prepare(project,revision,project.optString("output",""),"chk");
+            .setItems(choices.toArray(new String[0]),(d,choice)->{
+                int destinationIndex=showExisting?choice-1:choice;
+                if(destinationIndex<0)openExisting.run();
+                else if(destinationIndex==0)browseChk(project,revision,initialFolder(project));
+                else if(destinationIndex==1)prepare(project,revision,previous,"phone");
+                else if(destinationIndex==2)prepare(project,revision,previous,"downloads");
+                else prepare(project,revision,previous,"chk");
             }).setNegativeButton("Annuler",null);
-        try{
-            String previous=project.optString("output","");
-            if(!previous.isEmpty()&&new WorkspaceStore(activity).file(previous).isFile()){
-                // Keep existing Studio's Replace / New copy actions for old MP4s.
-                dialog.setNeutralButton("Remplacer",(d,n)->render(project,revision,previous,"chk",true))
-                    .setPositiveButton("Nouvelle copie",(d,n)->render(project,revision,copyName(previous),"chk",false));
-            }
-        }catch(Exception ignored){}
+        if(existing)dialog.setNeutralButton("Remplacer",(d,n)->render(project,revision,previous,"chk",true))
+            .setPositiveButton("Nouvelle copie",(d,n)->render(project,revision,copyName(previous),"chk",false));
         dialog.show();
     }
     private String initialFolder(JSONObject project){
@@ -246,7 +253,7 @@ final class StudioExportFlow {
      */
     void saveExistingToDownloads(JSONObject candidate){
         if(disposed)return;
-        if(copying){message("Une copie Android est déjà en cours.");return;}
+        if(copying||verifying){message("Une vérification ou une copie du MP4 est en cours.");return;}
         if(candidate==null){message("Aucun projet disponible pour vérifier le MP4.");return;}
         try{
             final JSONObject snapshot=new JSONObject(candidate.toString());
@@ -258,10 +265,12 @@ final class StudioExportFlow {
             String engineState=engine.status().optString("state","");
             if("running".equals(engineState)||"preparing".equals(engineState))
                 throw new java.io.IOException("Un rendu est en cours. Attends sa fin avant de copier.");
+            verifying=true;
             show("Vérification du MP4 existant",fileName(existing),-1);
             engine.command(activity,"video_editor_verify_output",
                 new JSONObject().put("project",snapshot),(ok,raw)->main.post(()->{
                     if(disposed)return;
+                    verifying=false;
                     try{
                         if(!ok)throw new java.io.IOException(raw);
                         JSONObject checked=new JSONObject(raw);
@@ -271,7 +280,6 @@ final class StudioExportFlow {
                         output=existing;
                         destination="downloads";
                         handled=true;
-                        verifying=false;
                         exportStarted=false;
                         if(Build.VERSION.SDK_INT>=29)saveToDownloads();
                         else completedRenderingFallback();
@@ -281,19 +289,27 @@ final class StudioExportFlow {
                             +"\nLe MP4 reste intact dans CHK.");
                     }
                 }));
-        }catch(Exception ex){message("Copie impossible : "+ex.getMessage());}
+        }catch(Exception ex){verifying=false;message("Copie impossible : "+ex.getMessage());}
     }
 
     void refresh(){
         if(disposed||copying||output.isEmpty()||handled||!exportStarted)return;
         JSONObject state=engine.status();
-        if(!output.equals(state.optString("output","")))return;
         String current=state.optString("state","");
+        if("idle".equals(current)){
+            handled=true;
+            clearPending();
+            show("Suivi du rendu interrompu","Ouvre Exporter pour retrouver un MP4 déjà enregistré ou relancer le rendu.",0);
+            return;
+        }
+        if(!output.equals(state.optString("output","")))return;
         int percent=Math.max(0,Math.min(99,state.optInt("progress_percent",0)));
         if(current.equals("preparing"))show("Export MP4 · préparation",output,-1);
         else if(current.equals("running")){
             show(percent>=99?"Export · 99 % · vérification en cours":"Export MP4 · "+percent+" %",
                 fileName(output)+" · "+destinationName(),percent);
+        }else if(current.equals("cancelled")){
+            failure("Export annulé.");
         }else if(current.equals("failed")){
             failure(state.optString("error","Le rendu a échoué."));
         }else if(current.equals("completed")&&!verifying){
@@ -307,7 +323,7 @@ final class StudioExportFlow {
                     try{
                         if(!ok)throw new IllegalStateException(result);
                         JSONObject info=new JSONObject(result);
-                        if(!info.optBoolean("valid",false))
+                        if(!info.optBoolean("valid",false)||!output.equals(info.optString("output","")))
                             throw new IllegalStateException(info.optString("error","Fichier non validé par Studio."));
                         completedRendering();
                     }catch(Exception ex){failure("Vérification MP4 : "+ex.getMessage());}
@@ -428,6 +444,7 @@ final class StudioExportFlow {
                     copying=false;finalMessage="MP4 copié et vérifié sur Android :\n"+location;
                     show("Enregistré sur le téléphone · 100 %",finalMessage,100);
                     clearPending();
+                    if(disposed)return;
                     new AgentDialog.Builder(activity).setTitle("MP4 disponible sur le téléphone")
                         .setMessage(finalMessage).setPositiveButton("OK",null).show();
                 });
@@ -445,6 +462,7 @@ final class StudioExportFlow {
         finalMessage="Échec de l’export : "+text;
         show("EXPORT ÉCHOUÉ — aucun MP4 final confirmé",finalMessage,0);
         clearPending();
+        if(disposed)return;
         new AgentDialog.Builder(activity).setTitle("Export non terminé")
             .setMessage(text+"\n\nLe montage et ses sources restent conservés dans CHK.")
             .setPositiveButton("Compris",null).show();

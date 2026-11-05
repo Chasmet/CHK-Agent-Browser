@@ -177,9 +177,16 @@ public final class TorWebActivity extends Activity {
                 if(!allowed(request.getUrl().toString()))return new WebResourceResponse("text/plain","UTF-8",403,"Tor required",Collections.emptyMap(),new ByteArrayInputStream("TOR_REQUEST_BLOCKED".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                 return null;
             }
-            @Override public void onPageStarted(WebView view,String url,Bitmap favicon){runtime.pageStarted(url);}
+            @Override public void onPageStarted(WebView view,String url,Bitmap favicon){
+                translationToken++;
+                translatedUrl="";translatedBody="";
+                pageReady=false;
+                runtime.pageStarted(url);
+            }
             @Override public void onPageFinished(WebView view,String url){
                 runtime.pageFinished(url,view.getTitle());address.setText(url);
+                pageReady=url.equals(view.getUrl())&&allowed(url)
+                    &&runtime.policy.usable(SystemClock.elapsedRealtime());
                 pageInfo.setText("Page : "+(view.getTitle()==null?url:view.getTitle()));
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){
@@ -247,6 +254,10 @@ public final class TorWebActivity extends Activity {
         if(!raw.contains("://"))raw=(raw.contains(".onion")?"http://":"https://")+raw;
         action("navigate",raw);
     }
+    @Override public void onBackPressed(){
+        if(translatedPage!=null&&translatedPage.getVisibility()==View.VISIBLE){showBrowser();return;}
+        super.onBackPressed();
+    }
     private void showHome(){translationToken++;startPage.setVisibility(View.VISIBLE);web.setVisibility(View.GONE);translatedPage.setVisibility(View.GONE);}
     private void showBrowser(){showBrowserForNavigation();}
     /** Called by TorRuntime on the UI thread for MCP navigations, including background use. */
@@ -293,10 +304,11 @@ public final class TorWebActivity extends Activity {
         translatedPage.setVisibility(View.VISIBLE);translatedPage.scrollTo(0,0);
     }
     private int translationToken;
+    private boolean pageReady;
     private String translatedUrl="",translatedBody="";
     private void translatePage(){
-        if(web==null||web.getUrl()==null||web.getUrl().isEmpty()){
-            Toast.makeText(this,"Ouvre d'abord une page.",Toast.LENGTH_SHORT).show();return;
+        if(!pageReady||web==null||web.getUrl()==null||web.getUrl().isEmpty()||startPage.getVisibility()==View.VISIBLE){
+            Toast.makeText(this,"Ouvre une page et attends la fin du chargement.",Toast.LENGTH_SHORT).show();return;
         }
         final int token=++translationToken;
         final String url=web.getUrl();
