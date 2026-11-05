@@ -109,6 +109,10 @@ final class ProductionNarration {
             JSONObject segment=input.getJSONObject(i);String text=segment.getString("text").trim();
             if(text.isEmpty()||text.length()>3000)throw new IOException("Un segment contient entre 1 et 3000 caractères");
             total+=text.length();
+            for(String key:new String[]{"rate","pitch"}){
+                double value=segment.optDouble(key,args.optDouble(key,1));
+                if(!Double.isFinite(value)||value<.5||value>2)throw new IOException(key+" du segment entre 0,5 et 2 requis");
+            }
             if(segment.optLong("pause_ms",300)<0||segment.optLong("pause_ms",300)>10000)throw new IOException("Pause entre 0 et 10000 ms");
         }
         if(total>40000)throw new IOException("Narration limitée à 40000 caractères");
@@ -191,6 +195,8 @@ final class ProductionNarration {
                 partial=store.file(folder+"/"+name+".partial.wav");output=store.file(folder+"/"+name+".wav");
                 if(output.exists()&&!output.renameTo(store.file(folder+"/"+name+"-interrompu-"+System.currentTimeMillis()+".wav")))
                     throw new IOException("Segment précédent verrouillé");
+                tts.setSpeechRate((float)item.optDouble("rate",args.optDouble("rate",1)));
+                tts.setPitch((float)item.optDouble("pitch",args.optDouble("pitch",1)));
                 utterance=args.getString("request_id")+"-"+index;
                 WorkspaceCommands.UI.removeCallbacks(timeout);WorkspaceCommands.UI.postDelayed(timeout,90000);
                 if(tts.synthesizeToFile(item.getString("text"),new Bundle(),partial,utterance)!=TextToSpeech.SUCCESS)

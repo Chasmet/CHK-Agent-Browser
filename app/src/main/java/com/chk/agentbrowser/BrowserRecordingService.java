@@ -30,5 +30,5 @@ public final class BrowserRecordingService extends Service {
         return START_NOT_STICKY;
     }
     @Override public IBinder onBind(Intent intent){return null;}
-    @Override public void onDestroy(){if(wake!=null&&wake.isHeld())wake.release();super.onDestroy();}
+    @Override public void onDestroy(){if(BrowserRecording.active())BrowserRecording.stopFromNotification();if(wake!=null&&wake.isHeld())wake.release();super.onDestroy();}
 }

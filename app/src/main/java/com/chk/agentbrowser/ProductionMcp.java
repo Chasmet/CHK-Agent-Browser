@@ -33,7 +33,7 @@ final class ProductionMcp {
                 .put("record_start","project_path, request_id, tab_id?:string, max_duration_ms?:1000..600000, width?:int, height?:int")
                 .put("record_stop / record_status","project_path, request_id; stop is asynchronous, poll until completed and valid=true")
                 .put("narration_voices","no arguments; installed French voice ids, quality and network requirement")
-                .put("narrate","project_path, request_id, text:string OR segments:[{text, offset_ms?:int, pause_ms?:int}], voice?:id, rate?:0.5..2, pitch?:0.5..2, allow_network?:boolean, trim_silence?:boolean")
+                .put("narrate","project_path, request_id, text:string OR segments:[{text, offset_ms?:int, pause_ms?:int, rate?:0.5..2, pitch?:0.5..2}], voice?:id, rate?:0.5..2, pitch?:0.5..2, allow_network?:boolean, trim_silence?:boolean")
                 .put("narration_status / narration_resume / narration_cancel","project_path, request_id; resume reuses the saved request and confirmed segments")
                 .put("assemble","project_path, request_id, clips?:[{path,start_ms?,duration_ms?}], narration_id?:string, narration_offset_ms?:int, title?:string, credits?:string, aspect_ratio?:9:16|16:9|1:1, music_path?:string, music_volume?:0..2, fade_ms?:int, camera_motion?:boolean, mute_original?:boolean")
                 .put("export","project_path, request_id; adds the saved montage to Studio's durable export queue")
