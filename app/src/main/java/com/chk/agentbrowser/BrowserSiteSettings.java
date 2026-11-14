@@ -39,7 +39,7 @@ final class BrowserSiteSettings {
         Switch desktop=new Switch(app);desktop.setText("Afficher la version ordinateur");desktop.setChecked(prefs.getBoolean(host+":desktop",false));panel.addView(desktop);
         Switch cookies=new Switch(app);cookies.setText("Autoriser les cookies tiers pour ce site");cookies.setChecked(CookieManager.getInstance().acceptThirdPartyCookies(web));panel.addView(cookies);
         new AgentDialog.Builder(app).setTitle("Compatibilité du site").setView(panel)
-            .setPositiveButton("Appliquer et recharger",(d,w)->{prefs.edit().putBoolean(host+":desktop",desktop.isChecked()).putBoolean(host+":cookies",cookies.isChecked()).apply();apply(app,web,web.getUrl());web.reload();})
+            .setPositiveButton("Appliquer et recharger",(d,w)->{prefs.edit().putBoolean(host+":desktop",desktop.isChecked()).putBoolean(host+":cookies",cookies.isChecked()).apply();apply(app,web,web.getUrl());BrowserViewport.apply(app,web,web.getUrl());web.reload();})
             .setNegativeButton("Annuler",null).show();
     }
     static boolean external(Activity app,String value){

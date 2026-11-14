@@ -120,6 +120,12 @@ public class MainActivity extends Activity {
         findViewById(R.id.nav_video).setOnClickListener(v->startActivity(new Intent(this,StudioProjectsActivity.class)));
          findViewById(R.id.nav_cut).setOnClickListener(v->startActivity(new Intent(this,CutStudioHomeActivity.class)));
         findViewById(R.id.menu).setOnClickListener(v->browserMenu());
+        findViewById(R.id.desktop_toggle).setOnClickListener(v->toggleDesktop());
+        findViewById(R.id.desktop_toggle).setOnLongClickListener(v->{desktopModeMenu();return true;});
+        container.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or_,ob)->{
+            if(current!=null&&(r-l!=or_-ol||b-t!=ob-ot))
+                BrowserViewport.apply(this,current,current.getUrl()==null?BrowserWebState.url(current):current.getUrl());
+        });
         findViewById(R.id.translate_page).setOnClickListener(v->translateMenu());
         findViewById(R.id.tab_count).setOnClickListener(v->tabOverview());
         findViewById(R.id.tab_count).setOnLongClickListener(v->{newTab(HOME);return true;});
@@ -229,7 +235,8 @@ public class MainActivity extends Activity {
                 // Keep that error for this URL; clear old errors before loadUrl.
                 if(!url.equals(pageErrorUrls.get(v))){pageErrors.remove(v);pageErrorUrls.remove(v);}
                 updatePageError();
-                applyCookiePolicy(v,url);if(v==current&&home!=null)home.page(url);
+                applyCookiePolicy(v,url);BrowserViewport.apply(MainActivity.this,v,url);
+                if(v==current){updateDesktopToggle();if(home!=null)home.page(url);}
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
                 if(request.isForMainFrame())pageError(view,"Erreur réseau "+error.getErrorCode()+" · "+error.getDescription(),request.getUrl().toString());
@@ -244,7 +251,8 @@ public class MainActivity extends Activity {
             @Override public void onPageFinished(WebView v,String url){
                 if(!BrowserWebState.alive(v))return;
                 BrowserWebState.finished(v,url);
-                applyCookiePolicy(v,url);
+                applyCookiePolicy(v,url);BrowserViewport.apply(MainActivity.this,v,url);
+                if(v==current)updateDesktopToggle();
                 if(url!=null)store.add("history",v.getTitle(),url);
                 if(v==current){if(home!=null)home.page(url);if(!address.hasFocus())address.setText(home!=null&&home.isHome(url)?"google.com":url);refreshTabs();saveTabs();}
             }
@@ -373,6 +381,7 @@ public class MainActivity extends Activity {
         current=web;
         if(web.getParent() instanceof ViewGroup)((ViewGroup)web.getParent()).removeView(web);
         container.addView(web,new FrameLayout.LayoutParams(-1,-1));
+        container.post(()->{if(current==web)BrowserViewport.apply(this,web,web.getUrl()==null?BrowserWebState.url(web):web.getUrl());});
         String page=web.getUrl()==null?BrowserWebState.url(web):web.getUrl();
         address.setText(page);
         if(home!=null)home.page(page);
@@ -380,7 +389,7 @@ public class MainActivity extends Activity {
             bottomNavCollapsed=false;
             findViewById(R.id.space_nav).setVisibility(focusMode?View.GONE:View.VISIBLE);
         }
-        progress.setVisibility(View.GONE);refreshTabs();updatePageError();
+        progress.setVisibility(View.GONE);refreshTabs();updatePageError();updateDesktopToggle();
         // Restored background tabs are lazy: only the selected tab loads over the network.
         if(web.getUrl()==null&&BrowserWebState.alive(web)){beginNavigation(web);web.loadUrl(page);}
     }
@@ -983,6 +992,35 @@ public class MainActivity extends Activity {
                 });
             }).setNegativeButton("Annuler",null).show();
     }
+    private void updateDesktopToggle(){
+        TextView toggle=findViewById(R.id.desktop_toggle);
+        String url=current==null?"":current.getUrl();
+        boolean desktop=BrowserViewport.desktop(this,url);
+        toggle.setText("PC");toggle.setTextColor(desktop?0xff69e2c6:0xffbfc2cd);
+        toggle.setContentDescription(desktop?"Mode ordinateur actif : toucher pour mobile; appui long pour la largeur":
+            "Mode mobile : toucher pour ordinateur; appui long pour la largeur");
+    }
+    private void toggleDesktop(){
+        if(current==null||!BrowserPolicy.webUrl(current.getUrl())){toast("Ouvre un site avant de changer de mode");return;}
+        String url=current.getUrl();boolean desktop=!BrowserViewport.desktop(this,url);
+        BrowserViewport.change(this,url,desktop?"desktop":"mobile",1366);
+        BrowserSiteSettings.apply(this,current,url);
+        BrowserViewport.apply(this,current,url);
+        updateDesktopToggle();
+        toast(desktop?"Mode PC 1366 activé · actualise si nécessaire":"Mode mobile activé · actualise si nécessaire");
+    }
+    private void desktopModeMenu(){
+        if(current==null||!BrowserPolicy.webUrl(current.getUrl())){toast("Aucune page Web ouverte");return;}
+        String url=current.getUrl();WebView tab=current;
+        new AgentDialog.Builder(this).setTitle("Affichage du site")
+            .setItems(new String[]{"Mobile","Ordinateur 1366","Ordinateur 1920","Automatique (Google Play / GitHub)"},(d,index)->{
+                BrowserViewport.change(this,url,index==0?"mobile":index==3?"auto":"desktop",index==2?1920:1366);
+                BrowserSiteSettings.apply(this,tab,url);
+                BrowserViewport.apply(this,tab,url);
+                updateDesktopToggle();
+                toast("Mode appliqué à ce site, sans effacer le formulaire. Actualise si nécessaire.");
+            }).setNegativeButton("Annuler",null).show();
+    }
     private void browserMenu(){
         if(!activeSpace.equals("browser")){new AgentDialog.Builder(this).setTitle("Espace de travail").setItems(new String[]{"Réglages","Revenir au navigateur"},(d,i)->{if(i==0)startActivity(new Intent(this,SettingsActivity.class));else showSpace("browser");}).show();return;}
         new AgentDialog.Builder(this).setTitle("Menu navigateur").setItems(new String[]{
@@ -991,7 +1029,7 @@ public class MainActivity extends Activity {
             store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris",
             "Favoris et historique","Rechercher dans la page","Partager le lien",
             "Enregistrer dans Notes","Lire / copier le texte","Taille du texte",
-            "Mode lecture plein écran","Reprendre la page MCP","Réglages","Compatibilité du site","Ouvrir dans le navigateur externe"},(d,i)->{
+            "Mode lecture plein écran","Reprendre la page MCP","Réglages","Compatibilité du site","Ouvrir dans le navigateur externe","Mode Mobile / Ordinateur"},(d,i)->{
             switch(i){
                 case 0:newTab(HOME);break;
                 case 1:tabOverview();break;
@@ -1011,6 +1049,7 @@ public class MainActivity extends Activity {
                 case 15:startActivity(new Intent(this,SettingsActivity.class));break;
                 case 16:BrowserSiteSettings.show(this,current);break;
                 case 17:if(current!=null)BrowserSiteSettings.external(this,current.getUrl());break;
+                case 18:desktopModeMenu();break;
             }
         }).setNegativeButton("Fermer",null).show();
     }
