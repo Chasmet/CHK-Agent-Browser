@@ -334,10 +334,26 @@ public final class BrowserScripts {
             +"}catch(e){return JSON.stringify({forms:[],count:0,dynamic_controls:[],validation_errors:[],error:e.message});}})()";
     }
 
+    /** Full-document DOM inventory, not a stitched pixel screenshot. */
+    public static String fullPageScan(){
+        return "(function(){try{var body=document.body,doc=document.documentElement;"
+            +"var height=Math.max(body?body.scrollHeight:0,doc.scrollHeight),width=Math.max(doc.scrollWidth,innerWidth);"
+            +"var nodes=Array.from(document.querySelectorAll('h1,h2,h3,[role=heading],button,[role=button],input,select,textarea,table,[role=dialog]'));"
+            +"var controls=nodes.slice(0,260).map(function(el){var r=el.getBoundingClientRect();"
+            +"return {type:(el.getAttribute('role')||el.tagName||'').toLowerCase(),label:(el.getAttribute('aria-label')||el.innerText||el.placeholder||'').trim().slice(0,110),"
+            +"x:Math.round(r.left+window.scrollX),y:Math.round(r.top+window.scrollY),disabled:!!el.disabled||el.getAttribute('aria-disabled')==='true'};});"
+            +"return JSON.stringify({url:location.href,title:document.title,document_width:width,document_height:height,"
+            +"viewport_width:innerWidth,viewport_height:innerHeight,controls:controls,total_controls:nodes.length,truncated:nodes.length>260,"
+            +"capture_type:'dom_full_page',pixel_screenshot:false});"
+            +"}catch(e){return JSON.stringify({error:e.message,capture_type:'dom_full_page',pixel_screenshot:false});}})()";
+    }
     public static String pageStatus() {
         return "(function(){try{var text=(document.body&&document.body.innerText||'').slice(0,12000);"
             +"var messages=text.split(/\\n+/).filter(function(x){return /error|erreur|failed|échec|invalid|invalide|required|obligatoire|saved|enregistr|success|réussi/i.test(x);}).slice(0,20);"
-            +"return JSON.stringify({readyState:document.readyState,url:location.href,title:document.title,forms:document.forms.length,dialogs:document.querySelectorAll('[role=dialog],dialog').length,messages:messages});"
+            +"var buttons=Array.from(document.querySelectorAll('button,[role=button]')).filter(function(el){return el.getClientRects().length>0;});"
+            +"var disabled=buttons.filter(function(el){return !!el.disabled||el.getAttribute('aria-disabled')==='true';});"
+            +"var busy=Array.from(document.querySelectorAll('[aria-busy=true],[role=progressbar],[class*=spinner],[class*=loading]')).filter(function(el){return el.getClientRects().length>0;});"
+            +"return JSON.stringify({readyState:document.readyState,url:location.href,title:document.title,forms:document.forms.length,dialogs:document.querySelectorAll('[role=dialog],dialog').length,messages:messages,viewport_css_width:innerWidth,viewport_css_height:innerHeight,disabled_buttons:disabled.length,disabled_labels:disabled.slice(0,12).map(function(el){return (el.innerText||el.getAttribute('aria-label')||'').trim().slice(0,100);}),busy_indicators:busy.length,dom_blocked_suspected:busy.length>0});"
             +"}catch(e){return JSON.stringify({readyState:'unknown',error:e.message});}})()";
     }
 

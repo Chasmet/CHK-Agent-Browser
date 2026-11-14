@@ -1,3 +1,13 @@
+## Local 3 — mode PC réel et diagnostic (14 novembre 2026)
+
+- Barre Web : bouton PC, appui long pour Mobile, PC 1366, PC 1920 ou Automatique pour Play Console et GitHub.
+- WebView réellement élargie puis réduite visuellement, aussi en navigation MCP autonome. Changer seulement le User-Agent ne suffisait pas.
+- MCP : desktop / tool=browser / operation=set_viewport|get_viewport|full_page_scan et alias récents browser_viewport, browser_viewport_status, browser_full_page_scan.
+- Vérification de window.innerWidth et de la taille de la WebView ; résultat indéterminé en cas de preuve manquante. Pas de rechargement automatique des formulaires non enregistrés.
+- Diagnostic des boutons grisés et chargements, inventaire DOM borné même hors écran.
+- Authentification, signatures APK, onglets et notes inchangés.
+- Limites : le scan DOM ne constitue pas une capture PNG de la page entière. Tests sur l'APK installé et transferts binaires résumables encore à faire.
+
 ## Production vidéo de l'agent dans CHK
 
 - Nouveau canal Android `desktop / tool=production` avec découverte des paramètres et version APK installée.
