@@ -101,7 +101,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
                 Uri link=request.getUrl();return link==null||!BrowserPolicy.publicUrl(link.toString());
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap favicon){
-                BrowserWebState.remember(view,url);failures.remove(view);applyCookiePolicy(view,url);
+                BrowserWebState.remember(view,url);failures.remove(view);applyCookiePolicy(view,url);BrowserViewport.apply(app,view,url);
                 if(view==current)loading=true;
             }
             @Override public void onReceivedError(WebView web,WebResourceRequest request,android.webkit.WebResourceError error){
@@ -121,7 +121,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             @Override public void onPageFinished(WebView view,String url){
                 if(!BrowserWebState.alive(view))return;
                 BrowserWebState.finished(view,url);
-                applyCookiePolicy(view,url);
+                applyCookiePolicy(view,url);BrowserViewport.apply(app,view,url);
                 if(view==current){
                     loading=false;
                     saveLast(url);
@@ -159,11 +159,7 @@ public final class BackgroundBrowser implements AgentClient.CommandHandler {
             }
             downloadResolved(web,url,mime,cb);
         });
-        if(!shared || web.getWidth()<=0){
-        web.measure(android.view.View.MeasureSpec.makeMeasureSpec(540,android.view.View.MeasureSpec.EXACTLY),
-            android.view.View.MeasureSpec.makeMeasureSpec(960,android.view.View.MeasureSpec.EXACTLY));
-        web.layout(0,0,540,960);
-        }
+        BrowserViewport.apply(app,web,web.getUrl()==null?BrowserWebState.url(web):web.getUrl());
     }
 
     private void applyCookiePolicy(WebView web,String url){BrowserSiteSettings.apply(app,web,url);}
