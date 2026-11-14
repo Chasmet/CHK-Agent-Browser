@@ -22,6 +22,9 @@ final class Local3Commands {
             case "browser_get_page_status":tool="browser";operation="get_page_status";break;
             case "browser_fill_fields":tool="browser";operation="fill_form";break;
             case "browser_verify_fields":tool="browser";operation="verify_form";break;
+            case "browser_viewport":tool="browser";operation="set_viewport";break;
+            case "browser_viewport_status":tool="browser";operation="get_viewport";break;
+            case "browser_full_page_scan":tool="browser";operation="full_page_scan";break;
             case "workflow_run":tool="tasks";operation="submit";break;
             case "workflow_status":tool="tasks";operation="status";break;
             case "workflow_resume":tool="tasks";operation="resume";break;

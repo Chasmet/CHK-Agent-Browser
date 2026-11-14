@@ -25,7 +25,7 @@ final class BrowserAutomation {
                     .put("args",new JSONObject().put("tool","browser").put("operation","capabilities"))))
             .put("operations",new JSONArray().put("capabilities").put("upload_file").put("upload_status")
                 .put("get_form").put("fill_form").put("verify_form").put("get_page_status").put("read_pdf")
-                .put("click_verified").put("click_when_enabled").put("download_file").put("download_status").put("publication_submit"))
+                .put("click_verified").put("click_when_enabled").put("download_file").put("download_status").put("publication_submit").put("set_viewport").put("get_viewport").put("full_page_scan"))
             .put("upload",new JSONObject().put("required",new JSONArray().put("id").put("expected_host").put("selector").put("files"))
                 .put("files","[{workspace_path: chemin relatif CHK}]")
                 .put("max_files",8).put("max_local_bytes",WorkspaceStore.MAX_IMPORT)
@@ -57,6 +57,9 @@ final class BrowserAutomation {
             if(operation.equals("download_status")){BrowserDownloads.inspect(context,args,cb);return;}
             destination(web,args);
             switch(operation){
+                case "set_viewport":BrowserViewport.command(context,web,args,true,cb);return;
+                case "get_viewport":BrowserViewport.command(context,web,args,false,cb);return;
+                case "full_page_scan":web.evaluateJavascript(BrowserScripts.fullPageScan(),raw->cb.finish(true,decode(raw)));return;
                 case "upload_file":if(!args.has("id"))throw new Exception("id stable obligatoire pour une importation MCP.");upload(context,web,args,cb);return;
                 case "get_form":web.evaluateJavascript(BrowserScripts.getForm(),raw->cb.finish(true,decode(raw)));return;
                 case "get_page_status":web.evaluateJavascript(BrowserScripts.pageStatus(),raw->cb.finish(true,decode(raw)));return;

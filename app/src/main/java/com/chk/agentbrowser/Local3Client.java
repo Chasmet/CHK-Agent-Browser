@@ -196,7 +196,7 @@ public final class Local3Client {
     static JSONArray capabilities() throws Exception{
         JSONArray a=new JSONArray();
         String[] read={
-            "browser_upload_status","browser_get_page_status","browser_verify_fields","workflow_status",
+            "browser_upload_status","browser_get_page_status","browser_verify_fields","browser_viewport_status","browser_full_page_scan","workflow_status",
             "local3_status","browser_inspect","browser_capture","browser_status","browser_read_page","browser_get_form","files_list",
             "files_read_text","files_read_bytes","files_transfer_read","files_stat","files_hash","files_catalog",
             "files_downloads","files_preview","files_detect_format","files_capabilities",
@@ -208,7 +208,7 @@ public final class Local3Client {
             "publication_status"
         };
         String[] write={
-            "browser_upload_file","browser_download_file","browser_click_when_enabled","browser_fill_fields","workflow_run","workflow_resume","workflow_cancel",
+            "browser_upload_file","browser_download_file","browser_click_when_enabled","browser_fill_fields","browser_viewport","workflow_run","workflow_resume","workflow_cancel",
             "android_action","browser_tabs","browser_open_url","browser_click",
             "browser_type","browser_scroll","browser_batch","files_write_text",
             "files_edit_text","files_move","files_copy","files_mkdir","files_trash",
@@ -237,6 +237,7 @@ public final class Local3Client {
         for(int i=0;i<all.length();i++){
             JSONObject entry=all.getJSONObject(i);String name=entry.getString("name");
             if(!name.equals("browser_download_file")&&!name.equals("browser_click_when_enabled")
+                &&!name.equals("browser_viewport")&&!name.equals("browser_viewport_status")&&!name.equals("browser_full_page_scan")
                 &&!name.equals("notes_folders")&&!name.equals("notes_folder_save")
                 &&!name.equals("notes_folder_delete")&&!name.equals("notes_move"))
                 compatible.put(entry);
