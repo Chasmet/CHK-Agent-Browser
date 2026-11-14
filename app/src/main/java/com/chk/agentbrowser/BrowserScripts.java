@@ -353,7 +353,7 @@ public final class BrowserScripts {
             +"var buttons=Array.from(document.querySelectorAll('button,[role=button]')).filter(function(el){return el.getClientRects().length>0;});"
             +"var disabled=buttons.filter(function(el){return !!el.disabled||el.getAttribute('aria-disabled')==='true';});"
             +"var busy=Array.from(document.querySelectorAll('[aria-busy=true],[role=progressbar],[class*=spinner],[class*=loading]')).filter(function(el){return el.getClientRects().length>0;});"
-            +"return JSON.stringify({readyState:document.readyState,url:location.href,title:document.title,forms:document.forms.length,dialogs:document.querySelectorAll('[role=dialog],dialog').length,messages:messages,viewport_css_width:innerWidth,viewport_css_height:innerHeight,disabled_buttons:disabled.length,disabled_labels:disabled.slice(0,12).map(function(el){return (el.innerText||el.getAttribute('aria-label')||'').trim().slice(0,100);}),busy_indicators:busy.length,dom_blocked_suspected:busy.length>0});"
+            +"return JSON.stringify({readyState:document.readyState,url:location.href,title:document.title,forms:document.forms.length,dialogs:document.querySelectorAll('[role=dialog],dialog').length,messages:messages,viewport_css_width:typeof innerWidth==='undefined'?0:innerWidth,viewport_css_height:typeof innerHeight==='undefined'?0:innerHeight,disabled_buttons:disabled.length,disabled_labels:disabled.slice(0,12).map(function(el){return (el.innerText||el.getAttribute('aria-label')||'').trim().slice(0,100);}),busy_indicators:busy.length,dom_blocked_suspected:busy.length>0});"
             +"}catch(e){return JSON.stringify({readyState:'unknown',error:e.message});}})()";
     }
 
