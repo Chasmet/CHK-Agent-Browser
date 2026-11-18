@@ -90,4 +90,26 @@ public final class AndroidEmulatorWorkspaceTest {
             assertTrue(nvram.delete());
         }
     }
+
+    @Test public void guestScreenDecodesQemuPpmWithoutDroppingLeadingPixelBytes() throws Exception {
+        Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        java.io.File screen = java.io.File.createTempFile("guest-screen", ".ppm", app.getCacheDir());
+        try {
+            try (java.io.FileOutputStream output = new java.io.FileOutputStream(screen)) {
+                output.write("P6\n2 1\n255\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                output.write(new byte[] {32, (byte) 129, (byte) 255, 0, 16, (byte) 230});
+            }
+            android.graphics.Bitmap image = GuestFrame.read(screen);
+            try {
+                assertEquals(2, image.getWidth());
+                assertEquals(1, image.getHeight());
+                assertEquals(0xff2081ff, image.getPixel(0, 0));
+                assertEquals(0xff0010e6, image.getPixel(1, 0));
+            } finally {
+                image.recycle();
+            }
+        } finally {
+            assertTrue(screen.delete());
+        }
+    }
 }
