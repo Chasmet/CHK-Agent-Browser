@@ -20,7 +20,9 @@ jobs:
           echo '171c0d215899d68f070fd45aea05ddb25737cf4ff16a25468e7cafbc65f4d8c9  image.zip' | sha256sum --check
           unzip -j image.zip '*/Data/vda.qcow2' '*/Data/vdb.qcow2' '*/Data/efi_vars.fd'
           rm image.zip
-          truncate -s 64M efi_vars.fd
+          qemu-img info --output=json efi_vars.fd | tee proof/efi-format.json
+          EFI_FORMAT=$(python3 -c 'import json; print(json.load(open("proof/efi-format.json"))["format"])')
+          if [ "$EFI_FORMAT" = raw ]; then truncate -s 64M efi_vars.fd; fi
           FIRMWARE=/usr/share/AAVMF/AAVMF_CODE.fd
           test -s "$FIRMWARE"
           qemu-system-aarch64 -machine virt -cpu max,pauth-impdef=on -accel tcg,thread=multi,tb-size=128 \
@@ -29,7 +31,7 @@ jobs:
             -device virtio-rng-pci -device virtio-serial -device virtio-net-pci,netdev=net0 \
             -netdev user,id=net0,hostfwd=tcp:127.0.0.1:5655-:5555 \
             -drive if=pflash,unit=0,format=raw,readonly=on,file="$FIRMWARE" \
-            -drive if=pflash,unit=1,format=raw,file=efi_vars.fd \
+            -drive if=pflash,unit=1,format="$EFI_FORMAT",file=efi_vars.fd \
             -drive file=vda.qcow2,if=none,id=vda,format=qcow2 -device virtio-blk-pci,drive=vda,bootindex=0 \
             -drive file=vdb.qcow2,if=none,id=vdb,format=qcow2 -device virtio-blk-pci,drive=vdb,bootindex=1 \
             > proof/qemu.log 2>&1 &
@@ -68,6 +70,11 @@ jobs:
           done
           echo 'Android guest boot was not confirmed'
           exit 1
+      - name: Print boot errors
+        if: failure()
+        run: |
+          cat proof/qemu.log || true
+          tail -100 proof/serial.log || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
