@@ -373,13 +373,13 @@ public final class AndroidEmulatorActivity extends Activity {
             try {
                 JSONObject data = connection.diagnostics(getApplicationContext());
                 report = "Moteur : " + (data.optBoolean("running") ? "actif" : "arrêté")
-                        + "\\nImage Android : " + (data.optBoolean("image_present") ? "installée" : "absente")
-                        + "\\nÉcran QEMU : " + (data.optBoolean("display_ready") ? "accessible" : "non vérifié")
-                        + "\\nDémarrage : " + data.optLong("boot_elapsed_seconds") / 60 + " min"
-                        + "\\nÉtat QEMU : " + data.optString("qemu_runstate", data.optString("qemu_status_error", "inconnu"))
-                        + "\\nAndroid prêt : non vérifiable par le seul affichage"
-                        + "\\n\\nJournal du moteur :\\n" + data.optString("engine_log_tail", "Indisponible")
-                        + "\\n\\nConsole Android :\\n" + data.optString("guest_serial_tail", "Indisponible");
+                        + "\nImage Android : " + (data.optBoolean("image_present") ? "installée" : "absente")
+                        + "\nÉcran QEMU : " + (data.optBoolean("display_ready") ? "accessible" : "non vérifié")
+                        + "\nDémarrage : " + data.optLong("boot_elapsed_seconds") / 60 + " min"
+                        + "\nÉtat QEMU : " + data.optString("qemu_runstate", data.optString("qemu_status_error", "inconnu"))
+                        + "\nAndroid prêt : non vérifiable par le seul affichage"
+                        + "\n\nJournal du moteur :\n" + data.optString("engine_log_tail", "Indisponible")
+                        + "\n\nConsole Android :\n" + data.optString("guest_serial_tail", "Indisponible");
             } catch (Exception error) {
                 report = message(error);
             }
