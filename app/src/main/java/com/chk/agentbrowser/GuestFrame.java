@@ -48,6 +48,30 @@ final class GuestFrame {
         }
     }
 
+    /** Conservative visual hint, not proof that Android itself finished booting. */
+    static boolean looksLikeBootAnimation(Bitmap bitmap) {
+        if (bitmap == null) return false;
+        int width = bitmap.getWidth(), height = bitmap.getHeight();
+        if (width < 64 || height < 64) return false;
+        int step = Math.max(1, Math.min(width, height) / 160);
+        int sampled = 0, brightCenter = 0, brightOutside = 0, notDark = 0;
+        for (int y = 0; y < height; y += step) {
+            for (int x = 0; x < width; x += step) {
+                int color = bitmap.getPixel(x, y);
+                int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
+                sampled++;
+                if (Math.max(r, Math.max(g, b)) > 45) notDark++;
+                if (r > 195 && g > 195 && b > 195) {
+                    if (x >= width / 4 && x < width * 3 / 4
+                            && y >= height / 4 && y < height * 3 / 4) brightCenter++;
+                    else brightOutside++;
+                }
+            }
+        }
+        return brightCenter >= 8 && brightCenter < sampled / 100
+                && brightOutside < 4 && notDark < sampled / 40;
+    }
+
     private static String token(DataInputStream input) throws IOException {
         int next;
         do { next = input.readUnsignedByte(); }
