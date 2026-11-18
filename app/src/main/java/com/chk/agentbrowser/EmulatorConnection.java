@@ -24,6 +24,7 @@ final class EmulatorConnection {
     private static final long MAX_MEDIA = 480L * 1024 * 1024;
     private static volatile long agentUntil;
     private Process process;
+    private long startedElapsed;
     private File folder;
     private GuestQmp qmp;
     private String frameId;
@@ -73,9 +74,9 @@ final class EmulatorConnection {
                 "-L", folder.getPath(),
                 "-machine", "virt",
                 "-cpu", "max,pauth-impdef=on",
-                "-accel", "tcg,thread=multi,tb-size=128",
+                "-accel", "tcg,thread=multi,tb-size=256",
                 "-m", "2048", "-smp", "2",
-                "-display", "none", "-monitor", "none", "-serial", "none",
+                "-display", "none", "-monitor", "none", "-serial", "file:serial.log",
                 "-qmp", "unix:qmp.sock,server=on,wait=off",
                 "-device", "virtio-gpu-pci",
                 "-device", "qemu-xhci,id=usb",
@@ -88,7 +89,7 @@ final class EmulatorConnection {
                 "-drive", "if=pflash,unit=0,format=raw,readonly=on,file=" + firmware.getName(),
                 "-drive", "if=pflash,unit=1,format=" + nvramFormat + ",file=efi_vars.fd"));
         for (String drive : Arrays.asList("vda", "vdb")) {
-            command.addAll(Arrays.asList("-drive", "file=" + drive + ".qcow2,if=none,id=" + drive + ",format=qcow2",
+            command.addAll(Arrays.asList("-drive", "file=" + drive + ".qcow2,if=none,id=" + drive + ",format=qcow2,discard=unmap,detect-zeroes=unmap",
                     "-device", "virtio-blk-pci,drive=" + drive + (drive.equals("vda") ? ",bootindex=0" : ",bootindex=1")));
         }
         File exchange = new File(folder, "media");
@@ -115,6 +116,7 @@ final class EmulatorConnection {
         builder.redirectErrorStream(true);
         builder.redirectOutput(new File(folder, "boot.log"));
         process = builder.start();
+        startedElapsed = SystemClock.elapsedRealtime();
         // Keep the spawning worker alive for the native launcher's parent-death signal.
         SystemClock.sleep(250);
         if (!running()) throw new IOException("Le moteur Android s’est arrêté au démarrage. Consulte le journal dans le menu.");
@@ -208,12 +210,78 @@ final class EmulatorConnection {
     }
 
     static void allowAgent() { agentUntil = SystemClock.elapsedRealtime() + 20 * 60_000L; }
+    synchronized long bootElapsedSeconds() {
+        return running() && startedElapsed > 0 ? (SystemClock.elapsedRealtime() - startedElapsed) / 1000L : 0L;
+    }
     static void stopAgent() { agentUntil = 0L; }
     static boolean agentAllowed() { return agentUntil > SystemClock.elapsedRealtime(); }
 
     synchronized JSONObject status() throws Exception {
-        return new JSONObject().put("ready", running() && frameId != null)
-                .put("running", running()).put("execution", "on_device");
+        boolean active = running();
+        // Backward-compatible ready means QEMU's display is accessible, NOT Android boot_completed.
+        JSONObject result = new JSONObject().put("ready", active && frameId != null)
+                .put("display_ready", active && frameId != null)
+                .put("guest_boot_verified", false)
+                .put("running", active).put("execution", "on_device")
+                .put("boot_elapsed_seconds", bootElapsedSeconds());
+        if (active) {
+            try {
+                Object response = command("query-status", null);
+                if (response instanceof JSONObject) {
+                    result.put("qemu_runstate", ((JSONObject) response).optString("status", "unknown"));
+                }
+            } catch (Exception error) {
+                result.put("qemu_status_error", safeMessage(error));
+            }
+        }
+        return result;
+    }
+
+    synchronized JSONObject diagnostics(Context context) throws Exception {
+        JSONObject report = status()
+                .put("abi_compatible", compatible())
+                .put("engine_present", engineInstalled(context))
+                .put("image_present", GuestImage.exists(context))
+                .put("display_does_not_prove_boot", true)
+                .put("guest_ram_mib", 2048)
+                .put("guest_cpus", 2);
+        if (folder != null) {
+            report.put("engine_log_tail", tail(new File(folder, "boot.log"), 4096))
+                    .put("guest_serial_tail", tail(new File(folder, "serial.log"), 4096));
+        }
+        return report;
+    }
+
+    private static String safeMessage(Exception error) {
+        String message = error.getMessage();
+        return message == null ? error.getClass().getSimpleName() : message.substring(0, Math.min(300, message.length()));
+    }
+
+    private static String tail(File path, int limit) {
+        if (!path.isFile()) return "Journal indisponible.";
+        try (java.io.RandomAccessFile log = new java.io.RandomAccessFile(path, "r")) {
+            long size = log.length();
+            byte[] content = new byte[(int) Math.min(size, limit)];
+            log.seek(size - content.length);
+            log.readFully(content);
+            return content.length == 0 ? "Journal vide." : new String(content, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return "Journal inaccessible.";
+        }
+    }
+
+    synchronized void forceStop() throws InterruptedException {
+        Process active = process;
+        if (active != null) {
+            active.destroy();
+            if (!active.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
+                active.destroyForcibly();
+                active.waitFor(3, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        }
+        process = null;
+        resetChannel();
+        stopAgent();
     }
 
     synchronized Frame screen() throws Exception {
