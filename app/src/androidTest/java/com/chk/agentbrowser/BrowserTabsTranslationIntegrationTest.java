@@ -66,7 +66,7 @@ public final class BrowserTabsTranslationIntegrationTest {
             state.edit().putBoolean("enabled",true).commit();
             final int before=new JSONArray(command(activity,"tabs",new JSONObject())).length();
             assertEquals(View.VISIBLE,activity.findViewById(R.id.translate_page).getVisibility());
-            assertTrue("Browser must have spare tab capacity",before<12);
+            assertTrue("Browser must have spare tab capacity",before<BrowserPolicy.MAX_TABS);
             command(activity,"new_tab",new JSONObject().put("url","https://example.com/"));
             JSONArray after=new JSONArray(command(activity,"list_tabs",new JSONObject()));
             assertEquals(before+1,after.length());
@@ -94,11 +94,9 @@ public final class BrowserTabsTranslationIntegrationTest {
         String oldTabs=ui.getString("tabs","[]");
         int oldActive=ui.getInt("active_tab",0);
         app.getSharedPreferences("update_monitor",0).edit().putBoolean("enabled",false).commit();
-        JSONArray saved=new JSONArray()
-            .put("https://example.com/first")
-            .put("https://example.com/second")
-            .put("https://example.com/third");
-        ui.edit().putString("tabs",saved.toString()).putInt("active_tab",1).commit();
+        JSONArray saved=new JSONArray();
+        for(int i=0;i<20;i++)saved.put("https://example.com/tab-"+i);
+        ui.edit().putString("tabs",saved.toString()).putInt("active_tab",18).commit();
         MainActivity activity=null;
         try {
             activity=(MainActivity)instrument.startActivitySync(
@@ -109,14 +107,14 @@ public final class BrowserTabsTranslationIntegrationTest {
             MainActivity active=activity;
             // WebView methods must always run on the WebView-owning main Looper.
             instrument.runOnMainSync(()->{
-                assertEquals(3,tabs.size());
+                assertEquals(20,tabs.size());
                 assertNull("First restored tab should not load until selected",
                     ((android.webkit.WebView)tabs.get(0)).getUrl());
-                assertNull("Third restored tab should not load until selected",
-                    ((android.webkit.WebView)tabs.get(2)).getUrl());
-                assertEquals("https://example.com/third",BrowserWebState.url(
-                    (android.webkit.WebView)tabs.get(2)));
-                assertSame(tabs.get(1),getCurrent(active));
+                assertNull("Last restored tab should not load until selected",
+                    ((android.webkit.WebView)tabs.get(19)).getUrl());
+                assertEquals("https://example.com/tab-19",BrowserWebState.url(
+                    (android.webkit.WebView)tabs.get(19)));
+                assertSame(tabs.get(18),getCurrent(active));
             });
         }finally{
             if(activity!=null){MainActivity finishing=activity;instrument.runOnMainSync(finishing::finish);instrument.waitForIdleSync();}

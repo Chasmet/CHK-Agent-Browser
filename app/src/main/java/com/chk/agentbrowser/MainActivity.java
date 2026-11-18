@@ -1146,7 +1146,7 @@ public class MainActivity extends Activity {
     private void saveTabs(){if(tabs.isEmpty())return;JSONArray urls=new JSONArray();for(WebView web:tabs){String url=web.getUrl();urls.put(url!=null&&BrowserPolicy.webUrl(url)?url:BrowserWebState.url(web));}getSharedPreferences("mobile_ui",MODE_PRIVATE).edit().putString("tabs",urls.toString()).putInt("active_tab",Math.max(0,tabs.indexOf(current))).apply();}
     private void restoreTabs(Bundle state){
         try{JSONArray urls=new JSONArray(state==null?getSharedPreferences("mobile_ui",MODE_PRIVATE).getString("tabs","[]"):state.getString("tabs","[]"));int selected=state==null?getSharedPreferences("mobile_ui",MODE_PRIVATE).getInt("active_tab",0):state.getInt("active_tab",0);
-            for(int i=0;i<Math.min(12,urls.length());i++){
+            for(int i=0;i<Math.min(BrowserPolicy.MAX_TABS,urls.length());i++){
                 String url=urls.optString(i,HOME);
                 if(!BrowserPolicy.webUrl(url))url=HOME;
                 WebView restored=new WebView(new android.content.MutableContextWrapper(this));
