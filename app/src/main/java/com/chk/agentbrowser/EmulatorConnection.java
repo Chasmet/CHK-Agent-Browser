@@ -2,7 +2,6 @@ package com.chk.agentbrowser;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.os.Build;
 import android.os.SystemClock;
 
@@ -219,19 +218,10 @@ final class EmulatorConnection {
 
     synchronized Frame screen() throws Exception {
         if (!running()) throw new IOException("Android est arrêté.");
-        File file = new File(folder, "current.png");
+        File file = new File(folder, "current.ppm");
         try {
-            command("screendump", new JSONObject().put("filename", file.getName()).put("format", "png"));
-            if (file.length() > 12 * 1024 * 1024) throw new IOException("Capture Android trop grande.");
-            BitmapFactory.Options options = new BitmapFactory.Options();
-            options.inJustDecodeBounds = true;
-            BitmapFactory.decodeFile(file.getPath(), options);
-            if (options.outWidth < 1 || options.outHeight < 1 || (long) options.outWidth * options.outHeight > 10_000_000) {
-                throw new IOException("Android prépare son écran.");
-            }
-            options.inJustDecodeBounds = false;
-            Bitmap bitmap = BitmapFactory.decodeFile(file.getPath(), options);
-            if (bitmap == null) throw new IOException("Capture Android illisible.");
+            command("screendump", new JSONObject().put("filename", file.getName()).put("format", "ppm"));
+            Bitmap bitmap = GuestFrame.read(file);
             if (frameId == null || width != bitmap.getWidth() || height != bitmap.getHeight()
                     || SystemClock.elapsedRealtime() - capturedAt >= 30000) {
                 frameId = UUID.randomUUID().toString().replace("-", "");
