@@ -63,17 +63,7 @@ final class EmulatorConnection {
         folder = GuestImage.installed(context);
         File firmware = prepareAsset(context, FIRMWARE);
         if (firmware.length() != FIRMWARE_FLASH_SIZE) throw new IOException("Micrologiciel Android incomplet.");
-        File nvram = new File(folder, "efi_vars.fd");
-        try (java.io.RandomAccessFile flash = new java.io.RandomAccessFile(nvram, "rw")) {
-            long size = flash.length();
-            if (size <= 0 || size > FIRMWARE_FLASH_SIZE) throw new IOException("Variables UEFI Android invalides.");
-            // QEMU's virt board requires each raw pflash bank to span 64 MiB.
-            // Preserve all imported variables and extend only the unused tail.
-            if (size < FIRMWARE_FLASH_SIZE) {
-                flash.setLength(FIRMWARE_FLASH_SIZE);
-                flash.getFD().sync();
-            }
-        }
+        String nvramFormat = prepareNvram(new File(folder, "efi_vars.fd"));
         prepareAsset(context, "efi-virtio.rom");
         File sockets = new File(folder, "qmp.sock");
         if (sockets.exists() && !sockets.delete()) throw new IOException("Le canal Android ne peut pas être réinitialisé.");
@@ -97,7 +87,7 @@ final class EmulatorConnection {
                 "-device", "virtio-net-pci,netdev=net0",
                 "-netdev", "user,id=net0",
                 "-drive", "if=pflash,unit=0,format=raw,readonly=on,file=" + firmware.getName(),
-                "-drive", "if=pflash,unit=1,format=raw,file=efi_vars.fd"));
+                "-drive", "if=pflash,unit=1,format=" + nvramFormat + ",file=efi_vars.fd"));
         for (String drive : Arrays.asList("vda", "vdb")) {
             command.addAll(Arrays.asList("-drive", "file=" + drive + ".qcow2,if=none,id=" + drive + ",format=qcow2",
                     "-device", "virtio-blk-pci,drive=" + drive + (drive.equals("vda") ? ",bootindex=0" : ",bootindex=1")));
@@ -129,6 +119,26 @@ final class EmulatorConnection {
         // Keep the spawning worker alive for the native launcher's parent-death signal.
         SystemClock.sleep(250);
         if (!running()) throw new IOException("Le moteur Android s’est arrêté au démarrage. Consulte le journal dans le menu.");
+    }
+
+    static String prepareNvram(File nvram) throws IOException {
+        try (java.io.RandomAccessFile flash = new java.io.RandomAccessFile(nvram, "rw")) {
+            long size = flash.length();
+            if (size < 32) throw new IOException("Variables UEFI Android invalides.");
+            if (flash.readInt() == 0x514649fb) {
+                // UTM can store the flash bank in a sparse QCOW2 container.
+                // Its virtual size is independent of the size of the file.
+                flash.seek(24);
+                if (flash.readLong() != FIRMWARE_FLASH_SIZE) throw new IOException("Taille de la banque UEFI Android invalide.");
+                return "qcow2";
+            }
+            if (size > FIRMWARE_FLASH_SIZE) throw new IOException("Variables UEFI Android invalides.");
+            if (size < FIRMWARE_FLASH_SIZE) {
+                flash.setLength(FIRMWARE_FLASH_SIZE);
+                flash.getFD().sync();
+            }
+            return "raw";
+        }
     }
 
     private File prepareAsset(Context context, String name) throws IOException {

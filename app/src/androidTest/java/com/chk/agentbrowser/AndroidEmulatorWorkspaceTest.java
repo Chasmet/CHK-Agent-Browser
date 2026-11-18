@@ -73,4 +73,21 @@ public final class AndroidEmulatorWorkspaceTest {
         assertFalse(status.getBoolean("running"));
         assertFalse(status.getBoolean("ready"));
     }
+
+    @Test public void uefiFlashUsesTheQcow2VirtualSizeWithoutResizingItsContainer() throws Exception {
+        Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        java.io.File nvram = java.io.File.createTempFile("guest-flash", ".fd", app.getCacheDir());
+        try {
+            try (java.io.RandomAccessFile flash = new java.io.RandomAccessFile(nvram, "rw")) {
+                flash.setLength(334848);
+                flash.writeInt(0x514649fb);
+                flash.seek(24);
+                flash.writeLong(64L * 1024 * 1024);
+            }
+            assertEquals("qcow2", EmulatorConnection.prepareNvram(nvram));
+            assertEquals(334848, nvram.length());
+        } finally {
+            assertTrue(nvram.delete());
+        }
+    }
 }
