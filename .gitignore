@@ -6,3 +6,7 @@ local.properties
 *.keystore
 .idea/
 *.iml
+app/src/main/jniLibs/arm64-v8a/libqemu-system-aarch64.so
+app/src/main/jniLibs/arm64-v8a/libpodroid-launcher.so
+app/src/main/jniLibs/arm64-v8a/libslirp.so
+app/src/main/assets/android-guest/
