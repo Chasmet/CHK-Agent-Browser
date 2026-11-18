@@ -396,6 +396,11 @@ final class EmulatorConnection {
         }
     }
 
+    static boolean acceptedGuestFile(String name) {
+        return name != null && name.toLowerCase(Locale.ROOT)
+                .matches("[a-z0-9._-]{1,125}\\.(mp4|mov|m4v|webm|jpg|jpeg|png|webp|mp3|m4a|wav|apk)");
+    }
+
     JSONObject sendMedia(InputStream source, String filename, long size) throws Exception {
         File targetFolder;
         synchronized (this) {
@@ -404,8 +409,8 @@ final class EmulatorConnection {
         }
         if (size <= 0 || size > MAX_MEDIA) throw new IOException("Choisis un média de 480 Mio maximum pour le support d’échange.");
         String name = filename.replaceAll("[^A-Za-z0-9._-]", "_");
-        if (!name.toLowerCase(Locale.ROOT).matches("[a-z0-9._-]{1,125}\\.(mp4|mov|m4v|webm|jpg|jpeg|png|webp|mp3|m4a|wav)")) {
-            throw new IOException("Choisis un fichier vidéo, image ou audio compatible.");
+        if (!acceptedGuestFile(name)) {
+            throw new IOException("Choisis un APK, une vidéo, une image ou un audio compatible.");
         }
         File staged = File.createTempFile("media-", ".part", folder);
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
