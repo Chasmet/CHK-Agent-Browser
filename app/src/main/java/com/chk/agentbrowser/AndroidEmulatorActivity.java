@@ -28,6 +28,7 @@ import java.util.concurrent.Executors;
 public final class AndroidEmulatorActivity extends Activity {
     private static final int PICK_DEVICE_MEDIA = 814;
     private static final int PICK_SYSTEM_IMAGE = 815;
+    private static final int PICK_GUEST_APK = 816;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private static final ExecutorService ENGINE = Executors.newSingleThreadExecutor();
     private final ExecutorService commands = Executors.newSingleThreadExecutor();
@@ -337,7 +338,7 @@ public final class AndroidEmulatorActivity extends Activity {
         boolean agent = EmulatorConnection.agentAllowed();
         String[] options = {"Actualiser l’écran", "Démarrer Android", "Arrêter Android",
                 agent ? "Arrêter l’accès Local 3" : "Autoriser Local 3 pendant 20 min",
-                "Diagnostic de démarrage", "Forcer l’arrêt (si bloqué)", "Réglages"};
+                "Diagnostic de démarrage", "Forcer l’arrêt (si bloqué)", "Importer un APK dans Android", "Réglages"};
         new AgentDialog.Builder(this).setTitle("Android sur le téléphone").setItems(options, (dialog, choice) -> {
             switch (choice) {
                 case 0: errorDisplayed = false; scheduleRefresh(0); break;
@@ -346,7 +347,8 @@ public final class AndroidEmulatorActivity extends Activity {
                 case 3: agentAccess(); break;
                 case 4: showBootDiagnostic(); break;
                 case 5: confirmForceStop(); break;
-                case 6: startActivity(new Intent(this, SettingsActivity.class)); break;
+                case 6: pickGuestApk(); break;
+                case 7: startActivity(new Intent(this, SettingsActivity.class)); break;
                 default: break;
             }
         }).show();
@@ -395,6 +397,22 @@ public final class AndroidEmulatorActivity extends Activity {
                 scheduleRefresh(0);
             });
         });
+    }
+
+    private void pickGuestApk() {
+        if (!connection.running()) {
+            showMessage("Démarre d’abord Android pour importer un APK.");
+            return;
+        }
+        new AgentDialog.Builder(this).setTitle("Importer un APK dans Android")
+                .setMessage("L’APK sera copié dans le stockage d’échange de la machine virtuelle. Son installation devra ensuite être confirmée dans Android invité. Aucun APK n’est installé sur ton téléphone principal.")
+                .setNegativeButton("Annuler", null)
+                .setPositiveButton("Choisir un APK", (dialog, which) -> {
+                    Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    picker.setType("*/*");
+                    picker.addCategory(Intent.CATEGORY_OPENABLE);
+                    startActivityForResult(picker, PICK_GUEST_APK);
+                }).show();
     }
 
     private void confirmForceStop() {
@@ -567,7 +585,7 @@ public final class AndroidEmulatorActivity extends Activity {
         super.onActivityResult(request, result, data);
         if (workspace.result(request, result, data)) return;
         if (result != RESULT_OK || data == null || data.getData() == null) return;
-        if (request == PICK_DEVICE_MEDIA) sendMedia(data.getData());
+        if (request == PICK_DEVICE_MEDIA || request == PICK_GUEST_APK) sendMedia(data.getData());
         if (request == PICK_SYSTEM_IMAGE) importImage(data.getData(), false);
     }
 
@@ -585,7 +603,9 @@ public final class AndroidEmulatorActivity extends Activity {
                 if (name == null) throw new IOException("Nom du média indisponible.");
                 long size = cursor.getLong(cursor.getColumnIndexOrThrow(OpenableColumns.SIZE));
                 if (!requested.sendMedia(source, name, size).optBoolean("verified")) throw new IOException("Transfert Android non vérifié.");
-                result = "Copie vérifiée. Redémarre Android pour monter le support d’échange.";
+                result = name.toLowerCase(java.util.Locale.ROOT).endsWith(".apk")
+                        ? "APK copié et vérifié. Redémarre Android, puis ouvre Fichiers > stockage USB pour lancer son installation."
+                        : "Copie vérifiée. Redémarre Android pour monter le support d’échange.";
             } catch (Exception error) {
                 result = message(error);
             }
