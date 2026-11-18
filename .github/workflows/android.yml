@@ -40,12 +40,26 @@ jobs:
         run: |
           bash scripts/build_local_ai_android.sh
           test -s app/src/main/jniLibs/arm64-v8a/libchk_local_ai.so
+      - uses: actions/cache@v4
+        id: guest_engine
+        with:
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libqemu-system-aarch64.so
+            app/src/main/jniLibs/arm64-v8a/libpodroid-launcher.so
+            app/src/main/jniLibs/arm64-v8a/libslirp.so
+            app/src/main/assets/android-guest
+          key: chk-guest-engine-arm64-${{ hashFiles('guest/build-engine.sh') }}
+      - name: Compiler le moteur Android intégré pour ARM64
+        if: steps.guest_engine.outputs.cache-hit != 'true'
+        run: bash guest/build-engine.sh
       - name: Vérifier les scripts navigateur et la reconnexion
         run: bash validation/check.sh
       - name: Tester le compagnon Android sur HTTPS
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s pc/CHK-Android-Emulator -v
       - name: Compiler APK debug
         run: ./gradlew --no-daemon assembleDebug lintDebug
+      - name: Vérifier que le moteur Android est embarqué dans l’APK debug
+        run: python3 guest/check-apk.py app/build/outputs/apk/debug/app-debug.apk
       - name: Afficher les erreurs Android si la vérification échoue
         if: failure()
         run: |
@@ -74,7 +88,6 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
             ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.AgentKeyboardIntegrationTest,com.chk.agentbrowser.StudioLayersIntegrationTest,com.chk.agentbrowser.PrivateWebCaptureTest,com.chk.agentbrowser.Local3RecoveryTest,com.chk.agentbrowser.Local2BrowserAutomationTest,com.chk.agentbrowser.Local2SessionIntegrationTest,com.chk.agentbrowser.StudioSubtitlesTest,com.chk.agentbrowser.VideoEditorIntegrationTest#timedSubtitlesAppearAndDisappearAcrossRealExportClipBoundary
-            bash pc/CHK-Android-Emulator/run_android_smoke.sh
             bash validation/install_studio_test_model.sh
             # Full regression suite is deterministic; real Tor DNS/onion validation lives in tor-connectivity.yml.
             ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
@@ -138,7 +151,21 @@ jobs:
       - name: Vérifier la signature Release
         if: github.ref == 'refs/heads/main'
         run: |
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+          APK=app/build/outputs/apk/release/app-release.apk
+          python3 guest/check-apk.py "$APK"
+          SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$SIGNER" verify --verbose --print-certs "$APK"
+          curl --fail --silent --show-error --location --retry 2 -o previous-release.apk https://github.com/Chasmet/CHK-Agent-Browser/releases/download/v1.0.705/CHK-Agent-Browser-1.0.705.apk
+          cert() { "$SIGNER" verify --print-certs "$1" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p'; }
+          PREVIOUS_CERT=$(cert previous-release.apk)
+          test -n "$PREVIOUS_CERT"
+          test "$PREVIOUS_CERT" = "$(cert "$APK")"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          previous=$("$AAPT" dump badging previous-release.apk | sed -n "s/^package: name='com.chk.agentbrowser' versionCode='\([0-9]*\)'.*/\1/p")
+          current=$("$AAPT" dump badging "$APK" | sed -n "s/^package: name='com.chk.agentbrowser' versionCode='\([0-9]*\)'.*/\1/p")
+          test -n "$previous" && test -n "$current" && test "$current" -gt "$previous"
+          rm previous-release.apk
+          echo "Mise à jour vérifiée pour com.chk.agentbrowser, versionCode $previous → $current, même certificat"
       - name: Renommer l'APK Release
         if: github.ref == 'refs/heads/main'
         env:

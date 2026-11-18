@@ -23,7 +23,7 @@
             <ImageView android:id="@+id/emulator_frame" android:layout_width="match_parent" android:layout_height="match_parent"
                 android:scaleType="fitCenter" android:contentDescription="Écran de l’émulateur Android" />
             <Button android:id="@+id/emulator_connect" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_gravity="center" android:layout_margin="20dp" android:text="Associer le compagnon PC"
+                android:layout_gravity="center" android:layout_margin="20dp" android:text="Installer Android"
                 android:textAllCaps="false" />
         </FrameLayout>
         <FrameLayout android:id="@+id/emulator_workspace" android:layout_width="match_parent" android:layout_height="match_parent"

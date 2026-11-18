@@ -1,0 +1,52 @@
+name: Android guest on the phone - prototype
+on:
+  push:
+    branches: [feature/browser-on-device-guest]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/cache@v4
+        id: engine
+        with:
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libqemu-system-aarch64.so
+            app/src/main/jniLibs/arm64-v8a/libpodroid-launcher.so
+            app/src/main/jniLibs/arm64-v8a/libslirp.so
+            app/src/main/assets/android-guest
+          key: chk-guest-engine-arm64-${{ hashFiles('guest/build-engine.sh') }}
+      - name: Compile the QEMU engine for Android ARM64
+        if: steps.engine.outputs.cache-hit != 'true'
+        run: bash guest/build-engine.sh
+      - name: Compile CHK with the embedded native engine
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+          ./gradlew --no-daemon assembleDebug lintDebug :app:assembleDebugAndroidTest
+      - name: Verify the Android image archive and supported UTM layout
+        run: |
+          curl --fail --show-error --silent --location --retry 2 -o guest-image.zip https://github.com/jqssun/android-lineage-qemu/releases/download/v2026.10.18/UTM-VM-lineage-23.2-20261019-jqssun-virtio_arm64only.zip
+          echo '171c0d215899d68f070fd45aea05ddb25737cf4ff16a25468e7cafbc65f4d8c9  guest-image.zip' | sha256sum --check
+          python3 - <<'PYVERIFY'
+          from zipfile import ZipFile
+          with ZipFile('guest-image.zip') as archive:
+              names = {item.filename.rsplit('/Data/', 1)[-1]: item.file_size for item in archive.infolist() if '/Data/' in item.filename}
+              for name, limit in [('efi_vars.fd', 64 << 20), ('vda.qcow2', 4 << 30), ('vdb.qcow2', 4 << 30)]:
+                  assert 0 < names.get(name, 0) <= limit, (name, names)
+              print('Verified LineageOS ARM64 archive and VM disks')
+          PYVERIFY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CHK-Android-Guest-ARM64-preview
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7

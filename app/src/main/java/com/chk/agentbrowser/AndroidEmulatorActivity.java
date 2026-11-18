@@ -1,6 +1,7 @@
 package com.chk.agentbrowser;
 
 import android.app.Activity;
+import android.app.DownloadManager;
 import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.RectF;
@@ -9,7 +10,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.OpenableColumns;
-import android.text.InputType;
 import android.view.MotionEvent;
 import android.view.View;
 import android.webkit.WebChromeClient;
@@ -27,16 +27,21 @@ import java.util.concurrent.Executors;
 
 public final class AndroidEmulatorActivity extends Activity {
     private static final int PICK_DEVICE_MEDIA = 814;
+    private static final int PICK_SYSTEM_IMAGE = 815;
     private final Handler ui = new Handler(Looper.getMainLooper());
+    private static final ExecutorService ENGINE = Executors.newSingleThreadExecutor();
     private final ExecutorService commands = Executors.newSingleThreadExecutor();
     private final ExecutorService media = Executors.newSingleThreadExecutor();
     private final Runnable refresh = this::refreshScreen;
+    private final Runnable downloadTick = this::checkImageDownload;
+    private static final java.util.concurrent.atomic.AtomicBoolean IMAGE_IMPORT = new java.util.concurrent.atomic.AtomicBoolean();
     private ImageView screen;
     private TextView status;
     private View connect;
     private WorkspacePanel workspace;
     private WorkspaceMediaChooser picker;
     private EmulatorConnection connection;
+    private GuestDownload imageDownload;
     private EmulatorConnection.Frame frame;
     private EmulatorConnection.Frame touchedFrame;
     private RectF touchedBounds;
@@ -47,7 +52,8 @@ public final class AndroidEmulatorActivity extends Activity {
     private boolean sendingInput;
     private boolean sendingMedia;
     private boolean errorDisplayed;
-    private boolean pairing;
+    private boolean starting;
+    private boolean importing;
     private String tab = "android";
 
     @Override protected void onCreate(Bundle state) {
@@ -61,7 +67,7 @@ public final class AndroidEmulatorActivity extends Activity {
         workspace.restoreState(state);
         findViewById(R.id.emulator_exit).setOnClickListener(view -> finish());
         findViewById(R.id.emulator_menu).setOnClickListener(view -> menu());
-        connect.setOnClickListener(view -> pair());
+        connect.setOnClickListener(view -> prepareAndroid());
         findViewById(R.id.emulator_home).setOnClickListener(view -> key("home"));
         findViewById(R.id.emulator_back).setOnClickListener(view -> key("back"));
         findViewById(R.id.emulator_keyboard).setOnClickListener(view -> keyboard());
@@ -74,11 +80,10 @@ public final class AndroidEmulatorActivity extends Activity {
         findViewById(R.id.emulator_nav_cut).setOnClickListener(view ->
                 startActivity(new Intent(this, CutStudioHomeActivity.class)));
         screen.setOnTouchListener((view, event) -> touch(event));
-        try {
-            connection = EmulatorConnection.load(this);
-        } catch (Exception ignored) { }
+        connection = EmulatorConnection.load(this);
+        imageDownload = new GuestDownload(this);
         showTab(state == null ? "android" : state.getString("emulator_tab", "android"));
-        status.setText(connection == null ? "Associe le compagnon PC pour ouvrir l’émulateur." : "Connexion à l’émulateur…");
+        idleState();
     }
 
     private void showTab(String selected) {
@@ -104,6 +109,8 @@ public final class AndroidEmulatorActivity extends Activity {
         super.onResume();
         visible = true;
         if (!"android".equals(tab)) workspace.refresh();
+        if (!connection.running() && !starting && !importing) idleState();
+        ui.post(downloadTick);
         scheduleRefresh(0);
     }
 
@@ -111,6 +118,7 @@ public final class AndroidEmulatorActivity extends Activity {
         visible = false;
         touchedFrame = null;
         ui.removeCallbacks(refresh);
+        ui.removeCallbacks(downloadTick);
         super.onPause();
     }
 
@@ -136,11 +144,17 @@ public final class AndroidEmulatorActivity extends Activity {
 
     private void scheduleRefresh(long delay) {
         ui.removeCallbacks(refresh);
-        if (visible && "android".equals(tab) && connection != null) ui.postDelayed(refresh, delay);
+        if (visible && "android".equals(tab)) ui.postDelayed(refresh, delay);
     }
 
     private void refreshScreen() {
-        if (!visible || isDestroyed() || !"android".equals(tab) || connection == null || framePending) return;
+        if (!visible || isDestroyed() || !"android".equals(tab) || framePending) return;
+        if (!connection.running()) {
+            frame = null;
+            screen.setImageDrawable(null);
+            if (!starting && !importing) idleState();
+            return;
+        }
         EmulatorConnection requested = connection;
         framePending = true;
         commands.execute(() -> {
@@ -162,12 +176,17 @@ public final class AndroidEmulatorActivity extends Activity {
                         screen.setImageBitmap(fetched.bitmap);
                         connect.setVisibility(View.GONE);
                         if (!sendingMedia && !errorDisplayed) status.setText(EmulatorConnection.agentAllowed()
-                                ? "Émulateur connecté · accès Local 3 actif" : "Émulateur connecté");
+                                ? "Android sur ce téléphone · accès Local 3 actif" : "Android sur ce téléphone");
                     } else {
                         frame = null;
                         screen.setImageDrawable(null);
-                        connect.setVisibility(View.VISIBLE);
-                        if (!sendingMedia) status.setText(failure);
+                        if (connection.running()) {
+                            connect.setVisibility(View.GONE);
+                            if (!sendingMedia) status.setText("Démarrage de l’écran Android…");
+                        } else {
+                            idleState();
+                            status.setText(failure + " Consulte le journal dans le menu.");
+                        }
                     }
                 }
                 scheduleRefresh(fetched == null ? 2500 : 750);
@@ -176,64 +195,162 @@ public final class AndroidEmulatorActivity extends Activity {
     }
 
     private static String message(Exception error) {
-        if (error instanceof javax.net.ssl.SSLException) return "Certificat du compagnon Android refusé. Vérifie le code d’appairage.";
-        if (error instanceof java.net.SocketException || error instanceof java.net.SocketTimeoutException) {
-            return "Compagnon PC inaccessible. Vérifie le réseau et le démarrage de l’émulateur.";
-        }
-        return error.getMessage() == null ? "Connexion à l’émulateur impossible." : error.getMessage();
+        return error.getMessage() == null ? "Machine virtuelle Android indisponible." : error.getMessage();
     }
 
-    private void pair() {
-        if (pairing || sendingMedia) return;
-        EditText code = new EditText(this);
-        code.setHint("Coller le code d’appairage");
-        code.setSingleLine(true);
-        code.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        new AgentDialog.Builder(this).setTitle("Associer l’émulateur Android")
-                .setMessage("Démarre le compagnon CHK Android sur le PC et colle ici le code qu’il affiche.")
-                .setView(code).setNegativeButton("Annuler", null)
-                .setPositiveButton("Associer", (dialog, which) -> {
-                    pairing = true;
-                    status.setText("Vérification du compagnon…");
-                    String value = code.getText().toString();
-                    commands.execute(() -> {
-                        try {
-                            EmulatorConnection next = EmulatorConnection.pair(this, value);
-                            ui.post(() -> {
-                                if (isDestroyed()) return;
-                                pairing = false;
-                                connection = next;
-                                errorDisplayed = false;
-                                frame = null;
-                                screen.setImageDrawable(null);
-                                scheduleRefresh(0);
-                            });
-                        } catch (Exception error) {
-                            ui.post(() -> {
-                                if (isDestroyed()) return;
-                                pairing = false;
-                                showMessage(message(error));
-                            });
-                        }
-                    });
-                }).show();
+    private void idleState() {
+        TextView button = (TextView) connect;
+        boolean compatible = EmulatorConnection.compatible();
+        boolean installed = EmulatorConnection.engineInstalled(this);
+        boolean hasImage = GuestImage.exists(this);
+        button.setText(hasImage ? "Démarrer Android" : "Installer Android");
+        boolean downloading = imageDownload.status() != null && !hasImage;
+        button.setVisibility(compatible && installed && !connection.running() && !downloading ? View.VISIBLE : View.GONE);
+        status.setText(connection.running() ? "Démarrage de l’écran Android…"
+                : !compatible ? "Le moteur Android nécessite un téléphone ARM64 sous Android 8 ou supérieur."
+                : !installed ? "Le moteur Android local manque dans cette version de CHK."
+                : hasImage ? "Android est arrêté."
+                : downloading ? "Téléchargement de l’image Android…"
+                : "Installe l’environnement Android dans CHK Browser.");
+    }
+
+    private void prepareAndroid() {
+        if (starting || importing || connection.running() || !EmulatorConnection.compatible()
+                || !EmulatorConnection.engineInstalled(this)) return;
+        if (GuestImage.exists(this)) {
+            starting = true;
+            errorDisplayed = false;
+            connect.setVisibility(View.GONE);
+            status.setText("Démarrage d’Android sur le téléphone…");
+            ENGINE.execute(() -> {
+                String failure = null;
+                try { connection.start(getApplicationContext()); }
+                catch (Exception error) { failure = message(error); }
+                String result = failure;
+                ui.post(() -> {
+                    if (isDestroyed()) return;
+                    starting = false;
+                    if (result != null) {
+                        idleState();
+                        showMessage(result);
+                    } else scheduleRefresh(0);
+                });
+            });
+            return;
+        }
+        if (imageDownload.status() != null) {
+            checkImageDownload();
+            return;
+        }
+        new AgentDialog.Builder(this).setTitle("Installer Android dans CHK")
+                .setMessage("CHK Browser va télécharger et vérifier l’image LineageOS ARM64 (environ 1,1 Go). Prévois 6 Gio libres pour l’installation.")
+                .setPositiveButton("Télécharger et installer", (dialog, which) -> {
+                    try {
+                        imageDownload.start();
+                        checkImageDownload();
+                    } catch (Exception error) {
+                        showMessage(message(error));
+                    }
+                })
+                .setNeutralButton("Choisir un ZIP", (dialog, which) -> startActivityForResult(
+                        new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_SYSTEM_IMAGE))
+                .setNegativeButton("Annuler", null).show();
+    }
+
+    private void checkImageDownload() {
+        ui.removeCallbacks(downloadTick);
+        if (!visible || isDestroyed()) return;
+        if (IMAGE_IMPORT.get()) {
+            connect.setVisibility(View.GONE);
+            status.setText("Vérification et installation de l’image Android…");
+            ui.postDelayed(downloadTick, 1000);
+            return;
+        }
+        GuestDownload.Status current = imageDownload.status();
+        if (current == null) {
+            if (!starting && !connection.running() && GuestImage.exists(this)) idleState();
+            return;
+        }
+        if (GuestImage.exists(this)) {
+            imageDownload.clear();
+            idleState();
+            return;
+        }
+        switch (current.state) {
+            case DownloadManager.STATUS_SUCCESSFUL:
+                if (current.uri != null) {
+                    importImage(current.uri, true);
+                    return;
+                }
+                break;
+            case DownloadManager.STATUS_FAILED:
+                break;
+            default:
+                connect.setVisibility(View.GONE);
+                status.setText(current.total > 0
+                        ? "Téléchargement de l’image Android · " + Math.min(100, current.received * 100 / current.total) + " %"
+                        : "Téléchargement de l’image Android…");
+                ui.postDelayed(downloadTick, 1000);
+                return;
+        }
+        imageDownload.clear();
+        idleState();
+        showMessage("Téléchargement interrompu. Appuie sur Installer Android pour réessayer.");
+    }
+
+    private void importImage(Uri uri, boolean downloaded) {
+        if (GuestImage.exists(this) || !IMAGE_IMPORT.compareAndSet(false, true)) return;
+        importing = true;
+        connect.setVisibility(View.GONE);
+        status.setText("Vérification et installation de l’image Android…");
+        android.content.Context app = getApplicationContext();
+        ENGINE.execute(() -> {
+            String failure = null;
+            try { GuestImage.install(app, uri); }
+            catch (Exception error) { failure = message(error); }
+            finally {
+                if (downloaded) imageDownload.clear();
+                IMAGE_IMPORT.set(false);
+            }
+            String result = failure;
+            ui.post(() -> {
+                if (isDestroyed()) return;
+                importing = false;
+                idleState();
+                if (result != null) showMessage(result);
+                else if (visible && "android".equals(tab)) prepareAndroid();
+            });
+        });
     }
 
     private void menu() {
         boolean agent = EmulatorConnection.agentAllowed();
-        String[] options = {"Actualiser l’écran", "Applications récentes", "Associer le compagnon PC",
-                agent ? "Arrêter l’accès Local 3" : "Autoriser Local 3 pendant 20 min", "Oublier le compagnon PC", "Réglages"};
-        new AgentDialog.Builder(this).setTitle("Émulateur Android").setItems(options, (dialog, choice) -> {
+        String[] options = {"Actualiser l’écran", "Démarrer Android", "Arrêter Android",
+                agent ? "Arrêter l’accès Local 3" : "Autoriser Local 3 pendant 20 min", "Journal de démarrage", "Réglages"};
+        new AgentDialog.Builder(this).setTitle("Android sur le téléphone").setItems(options, (dialog, choice) -> {
             switch (choice) {
                 case 0: errorDisplayed = false; scheduleRefresh(0); break;
-                case 1: key("recent"); break;
-                case 2: pair(); break;
+                case 1: prepareAndroid(); break;
+                case 2: stopAndroid(); break;
                 case 3: agentAccess(); break;
-                case 4: forget(); break;
+                case 4: new AgentDialog.Builder(this).setTitle("Journal de démarrage").setMessage(connection.log())
+                        .setPositiveButton("Fermer", null).show(); break;
                 case 5: startActivity(new Intent(this, SettingsActivity.class)); break;
                 default: break;
             }
         }).show();
+    }
+
+    private void stopAndroid() {
+        if (!connection.running()) return;
+        ENGINE.execute(() -> {
+            try {
+                connection.stop();
+                ui.post(() -> { if (!isDestroyed()) showMessage("Arrêt demandé. Attends l’extinction d’Android."); });
+            } catch (Exception error) {
+                ui.post(() -> { if (!isDestroyed()) showMessage(message(error)); });
+            }
+        });
     }
 
     private void agentAccess() {
@@ -241,7 +358,7 @@ public final class AndroidEmulatorActivity extends Activity {
             EmulatorConnection.stopAgent();
             scheduleRefresh(0);
         } else if (frame == null) {
-            showMessage("Connecte d’abord l’émulateur Android.");
+            showMessage("Démarre d’abord Android dans CHK.");
         } else {
             new AgentDialog.Builder(this).setTitle("Autoriser Local 3 ?")
                     .setMessage("Pendant 20 minutes, Local 3 pourra voir et piloter cet émulateur et y transférer des médias CHK. Tu peux arrêter cet accès ici.")
@@ -251,17 +368,6 @@ public final class AndroidEmulatorActivity extends Activity {
                         scheduleRefresh(0);
                     }).show();
         }
-    }
-
-    private void forget() {
-        if (pairing || sendingMedia) return;
-        EmulatorConnection.forget(this);
-        connection = null;
-        frame = null;
-        screen.setImageDrawable(null);
-        connect.setVisibility(View.VISIBLE);
-        status.setText("Associe le compagnon PC pour ouvrir l’émulateur.");
-        scheduleRefresh(0);
     }
 
     private void showMessage(String text) {
@@ -336,11 +442,11 @@ public final class AndroidEmulatorActivity extends Activity {
     }
 
     private void input(JSONObject args) {
-        if (connection == null) {
-            showMessage("Associe d’abord le compagnon PC Android.");
+        if (!connection.running()) {
+            showMessage("Démarre d’abord Android dans CHK.");
             return;
         }
-        if (sendingInput || pairing) return;
+        if (sendingInput || starting) return;
         sendingInput = true;
         EmulatorConnection requested = connection;
         commands.execute(() -> {
@@ -363,8 +469,8 @@ public final class AndroidEmulatorActivity extends Activity {
 
     private void chooseMedia() {
         if (sendingMedia) return;
-        if (connection == null) {
-            showMessage("Associe d’abord le compagnon PC Android.");
+        if (!connection.running()) {
+            showMessage("Démarre d’abord Android dans CHK.");
             return;
         }
         try {
@@ -395,11 +501,13 @@ public final class AndroidEmulatorActivity extends Activity {
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (workspace.result(request, result, data)) return;
-        if (request == PICK_DEVICE_MEDIA && result == RESULT_OK && data != null && data.getData() != null) sendMedia(data.getData());
+        if (result != RESULT_OK || data == null || data.getData() == null) return;
+        if (request == PICK_DEVICE_MEDIA) sendMedia(data.getData());
+        if (request == PICK_SYSTEM_IMAGE) importImage(data.getData(), false);
     }
 
     private void sendMedia(Uri uri) {
-        if (connection == null || sendingMedia) return;
+        if (!connection.running() || sendingMedia) return;
         EmulatorConnection requested = connection;
         sendingMedia = true;
         status.setText("Envoi du média à l’émulateur…");
@@ -412,7 +520,7 @@ public final class AndroidEmulatorActivity extends Activity {
                 if (name == null) throw new IOException("Nom du média indisponible.");
                 long size = cursor.getLong(cursor.getColumnIndexOrThrow(OpenableColumns.SIZE));
                 if (!requested.sendMedia(source, name, size).optBoolean("verified")) throw new IOException("Transfert Android non vérifié.");
-                result = "Média reçu et vérifié dans Téléchargements / CHK.";
+                result = "Copie vérifiée. Redémarre Android pour monter le support d’échange.";
             } catch (Exception error) {
                 result = message(error);
             }

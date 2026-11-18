@@ -1,9 +1,8 @@
-## Accueil CHK et navigateur Android
+## Émulateur Android intégré à CHK Browser
 
-- Deux entrées au démarrage donnent accès au navigateur classique et à l’émulateur Android Studio du PC.
-- L’espace Android donne accès aux mêmes Fichiers, Studio, Cut et Notes. Les médias envoyés vers l’AVD sont vérifiés par SHA-256 et disponibles dans `Téléchargements/CHK`.
-- Local 3 peut observer et piloter l’AVD via un compagnon HTTPS séparé. Son accès s’active depuis le menu Navigateur Android. [Guide de démarrage Windows](https://github.com/Chasmet/CHK-Agent-Browser/blob/main/pc/CHK-Android-Emulator/README.md).
-- Le navigateur classique restaure jusqu’à 24 onglets et conserve l’onglet sélectionné au redémarrage.
+- Le nouvel espace utilise une machine virtuelle ARM64 locale, affichée dans CHK et pilotable par Local 3.
+- CHK télécharge et vérifie l’image LineageOS ARM64 depuis **Navigateur Android → Installer Android**. Fichiers, Studio, Cut et Notes restent disponibles dans CHK.
+- L’APK officielle embarque le moteur ARM64. La compatibilité des applications sociales et le démarrage sur le téléphone de l’utilisateur restent à valider.
 
 ## Local 3 — mode PC réel et diagnostic (14 novembre 2026)
 

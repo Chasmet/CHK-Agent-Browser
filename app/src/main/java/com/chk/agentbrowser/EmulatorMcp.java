@@ -46,7 +46,7 @@ final class EmulatorMcp {
         if ("status".equals(operation)) {
             JSONObject result = new JSONObject().put("source", "android_emulator").put("authorized", EmulatorConnection.agentAllowed())
                     .put("preview_allowed", AgentClient.get(app).isPreviewAllowed());
-            if (!EmulatorConnection.agentAllowed()) return result.put("ready", false);
+            if (!EmulatorConnection.agentAllowed()) return result.put("execution", "on_device").put("ready", false);
             return EmulatorConnection.load(app).status().put("source", "android_emulator")
                     .put("authorized", true).put("preview_allowed", AgentClient.get(app).isPreviewAllowed());
         }
@@ -130,7 +130,7 @@ final class EmulatorMcp {
                 }) {
                     outcome = connection.sendMedia(stream, source.getName(), source.length());
                 }
-                outcome.put("id", id).put("state", outcome.optBoolean("verified") ? "completed" : "failed");
+                outcome.put("id", id).put("state", outcome.optBoolean("verified") ? "staged" : "failed");
             } catch (Exception e) {
                 try { outcome.put("id", id).put("state", "failed").put("error", e.getMessage()); }
                 catch (org.json.JSONException ignored) { }

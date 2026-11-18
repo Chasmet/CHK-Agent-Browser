@@ -5,27 +5,21 @@ import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Bitmap;
 import android.view.View;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.json.JSONObject;
-import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.security.MessageDigest;
-import java.util.Locale;
 
 import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public final class AndroidEmulatorWorkspaceTest {
-    @Test public void launcherOpensBothSpacesAndSharedTabsWorkWithoutPc() {
+    @Test public void launcherOpensBothSpacesAndSharedTabsBeforeGuestBoot() {
         Instrumentation instrument = InstrumentationRegistry.getInstrumentation();
         Context app = instrument.getTargetContext();
         Intent launch = app.getPackageManager().getLaunchIntentForPackage(app.getPackageName());
@@ -72,38 +66,11 @@ public final class AndroidEmulatorWorkspaceTest {
         }
     }
 
-    @Test public void androidClientPairsCapturesAndSendsHashedMediaThroughRealAdb() throws Exception {
-        String pairing = InstrumentationRegistry.getArguments().getString("chk_emulator_pairing");
-        Assume.assumeNotNull(pairing);
+    @Test public void unopenedGuestReportsOnDeviceAndStopped() throws Exception {
         Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        try {
-            EmulatorConnection connection = EmulatorConnection.pair(app, pairing);
-            assertTrue(EmulatorConnection.load(app).status().getBoolean("ready"));
-            EmulatorConnection.Frame frame = connection.screen();
-            try {
-                assertTrue(frame.bitmap.getWidth() > 0);
-                assertEquals(24, frame.id.length());
-            } finally {
-                frame.bitmap.recycle();
-            }
-            assertTrue(connection.input(new JSONObject().put("operation", "key").put("key", "home")).getBoolean("input_sent"));
-            Bitmap image = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888);
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            try {
-                assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, output));
-            } finally {
-                image.recycle();
-            }
-            byte[] data = output.toByteArray();
-            JSONObject media = connection.sendMedia(new ByteArrayInputStream(data), "chk-emulator-ci.png", data.length);
-            assertTrue(media.getBoolean("verified"));
-            assertEquals(data.length, media.getLong("size"));
-            assertTrue(media.getString("path").startsWith("/sdcard/Download/CHK/"));
-            StringBuilder digest = new StringBuilder();
-            for (byte b : MessageDigest.getInstance("SHA-256").digest(data)) digest.append(String.format(Locale.ROOT, "%02x", b & 0xff));
-            assertEquals(digest.toString(), media.getString("sha256"));
-        } finally {
-            EmulatorConnection.forget(app);
-        }
+        JSONObject status = EmulatorConnection.load(app).status();
+        assertEquals("on_device", status.getString("execution"));
+        assertFalse(status.getBoolean("running"));
+        assertFalse(status.getBoolean("ready"));
     }
 }
