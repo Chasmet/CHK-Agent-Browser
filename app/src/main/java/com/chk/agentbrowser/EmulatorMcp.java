@@ -55,6 +55,7 @@ final class EmulatorMcp {
             return new JSONObject().put("authorized", false);
         }
         requireAccess();
+        if ("diagnostics".equals(operation)) return EmulatorConnection.load(app).diagnostics(app);
         if ("media_status".equals(operation)) return transferStatus(args.getString("id"));
         EmulatorConnection connection = EmulatorConnection.load(app);
         switch (operation) {

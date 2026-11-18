@@ -28,6 +28,7 @@ import java.util.concurrent.Executors;
 public final class AndroidEmulatorActivity extends Activity {
     private static final int PICK_DEVICE_MEDIA = 814;
     private static final int PICK_SYSTEM_IMAGE = 815;
+    private static final int PICK_GUEST_APK = 816;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private static final ExecutorService ENGINE = Executors.newSingleThreadExecutor();
     private final ExecutorService commands = Executors.newSingleThreadExecutor();
@@ -175,8 +176,18 @@ public final class AndroidEmulatorActivity extends Activity {
                         frame = fetched;
                         screen.setImageBitmap(fetched.bitmap);
                         connect.setVisibility(View.GONE);
-                        if (!sendingMedia && !errorDisplayed) status.setText(EmulatorConnection.agentAllowed()
-                                ? "Android sur ce téléphone · accès Local 3 actif" : "Android sur ce téléphone");
+                        if (!sendingMedia && !errorDisplayed) {
+                            boolean animation = GuestFrame.looksLikeBootAnimation(fetched.bitmap);
+                            long seconds = requested.bootElapsedSeconds();
+                            String suffix = EmulatorConnection.agentAllowed() ? " · Local 3 autorisé" : "";
+                            if (animation) {
+                                status.setText("Démarrage Android · " + seconds / 60 + " min"
+                                        + (seconds >= 300 ? " · ⋮ > Diagnostic de démarrage" : "")
+                                        + suffix);
+                            } else {
+                                status.setText("Écran Android accessible (système non vérifié)" + suffix);
+                            }
+                        }
                     } else {
                         frame = null;
                         screen.setImageDrawable(null);
@@ -189,7 +200,7 @@ public final class AndroidEmulatorActivity extends Activity {
                         }
                     }
                 }
-                scheduleRefresh(fetched == null ? 2500 : 750);
+                scheduleRefresh(fetched == null ? 3000 : GuestFrame.looksLikeBootAnimation(fetched.bitmap) ? 3000 : 1500);
             });
         });
     }
@@ -326,16 +337,18 @@ public final class AndroidEmulatorActivity extends Activity {
     private void menu() {
         boolean agent = EmulatorConnection.agentAllowed();
         String[] options = {"Actualiser l’écran", "Démarrer Android", "Arrêter Android",
-                agent ? "Arrêter l’accès Local 3" : "Autoriser Local 3 pendant 20 min", "Journal de démarrage", "Réglages"};
+                agent ? "Arrêter l’accès Local 3" : "Autoriser Local 3 pendant 20 min",
+                "Diagnostic de démarrage", "Forcer l’arrêt (si bloqué)", "Importer un APK dans Android", "Réglages"};
         new AgentDialog.Builder(this).setTitle("Android sur le téléphone").setItems(options, (dialog, choice) -> {
             switch (choice) {
                 case 0: errorDisplayed = false; scheduleRefresh(0); break;
                 case 1: prepareAndroid(); break;
                 case 2: stopAndroid(); break;
                 case 3: agentAccess(); break;
-                case 4: new AgentDialog.Builder(this).setTitle("Journal de démarrage").setMessage(connection.log())
-                        .setPositiveButton("Fermer", null).show(); break;
-                case 5: startActivity(new Intent(this, SettingsActivity.class)); break;
+                case 4: showBootDiagnostic(); break;
+                case 5: confirmForceStop(); break;
+                case 6: pickGuestApk(); break;
+                case 7: startActivity(new Intent(this, SettingsActivity.class)); break;
                 default: break;
             }
         }).show();
@@ -351,6 +364,76 @@ public final class AndroidEmulatorActivity extends Activity {
                 ui.post(() -> { if (!isDestroyed()) showMessage(message(error)); });
             }
         });
+    }
+
+    private void showBootDiagnostic() {
+        status.setText("Lecture du diagnostic de la machine virtuelle…");
+        commands.execute(() -> {
+            String report;
+            try {
+                JSONObject data = connection.diagnostics(getApplicationContext());
+                report = "Moteur : " + (data.optBoolean("running") ? "actif" : "arrêté")
+                        + "\nImage Android : " + (data.optBoolean("image_present") ? "installée" : "absente")
+                        + "\nÉcran QEMU : " + (data.optBoolean("display_ready") ? "accessible" : "non vérifié")
+                        + "\nDémarrage : " + data.optLong("boot_elapsed_seconds") / 60 + " min"
+                        + "\nÉtat QEMU : " + data.optString("qemu_runstate", data.optString("qemu_status_error", "inconnu"))
+                        + "\nAndroid prêt : non vérifiable par le seul affichage"
+                        + "\n\nJournal du moteur :\n" + data.optString("engine_log_tail", "Indisponible")
+                        + "\n\nConsole Android :\n" + data.optString("guest_serial_tail", "Indisponible");
+            } catch (Exception error) {
+                report = message(error);
+            }
+            String result = report;
+            ui.post(() -> {
+                if (isDestroyed()) return;
+                new AgentDialog.Builder(this).setTitle("Diagnostic de démarrage Android")
+                        .setMessage(result)
+                        .setNeutralButton("Copier", (dialog, which) -> {
+                            android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+                                    getSystemService(CLIPBOARD_SERVICE);
+                            if (clipboard != null) clipboard.setPrimaryClip(
+                                    android.content.ClipData.newPlainText("Diagnostic Android CHK", result));
+                        }).setPositiveButton("Fermer", null).show();
+                scheduleRefresh(0);
+            });
+        });
+    }
+
+    private void pickGuestApk() {
+        if (!connection.running()) {
+            showMessage("Démarre d’abord Android pour importer un APK.");
+            return;
+        }
+        new AgentDialog.Builder(this).setTitle("Importer un APK dans Android")
+                .setMessage("L’APK sera copié dans le stockage d’échange de la machine virtuelle. Son installation devra ensuite être confirmée dans Android invité. Aucun APK n’est installé sur ton téléphone principal.")
+                .setNegativeButton("Annuler", null)
+                .setPositiveButton("Choisir un APK", (dialog, which) -> {
+                    Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    picker.setType("*/*");
+                    picker.addCategory(Intent.CATEGORY_OPENABLE);
+                    startActivityForResult(picker, PICK_GUEST_APK);
+                }).show();
+    }
+
+    private void confirmForceStop() {
+        if (!connection.running()) {
+            showMessage("Android est déjà arrêté.");
+            return;
+        }
+        new AgentDialog.Builder(this).setTitle("Forcer l’arrêt d’Android ?")
+                .setMessage("Uniquement si le système reste bloqué. Les opérations en cours dans la machine virtuelle peuvent être perdues. Ni les données CHK ni l’image Android ne seront effacées.")
+                .setNegativeButton("Annuler", null)
+                .setPositiveButton("Forcer l’arrêt", (dialog, which) -> ENGINE.execute(() -> {
+                    String outcome;
+                    try {
+                        connection.forceStop();
+                        outcome = "Android arrêté. Redémarre depuis ce même écran.";
+                    } catch (Exception error) {
+                        outcome = message(error);
+                    }
+                    String result = outcome;
+                    ui.post(() -> { if (!isDestroyed()) { idleState(); showMessage(result); } });
+                })).show();
     }
 
     private void agentAccess() {
@@ -502,7 +585,7 @@ public final class AndroidEmulatorActivity extends Activity {
         super.onActivityResult(request, result, data);
         if (workspace.result(request, result, data)) return;
         if (result != RESULT_OK || data == null || data.getData() == null) return;
-        if (request == PICK_DEVICE_MEDIA) sendMedia(data.getData());
+        if (request == PICK_DEVICE_MEDIA || request == PICK_GUEST_APK) sendMedia(data.getData());
         if (request == PICK_SYSTEM_IMAGE) importImage(data.getData(), false);
     }
 
@@ -520,7 +603,9 @@ public final class AndroidEmulatorActivity extends Activity {
                 if (name == null) throw new IOException("Nom du média indisponible.");
                 long size = cursor.getLong(cursor.getColumnIndexOrThrow(OpenableColumns.SIZE));
                 if (!requested.sendMedia(source, name, size).optBoolean("verified")) throw new IOException("Transfert Android non vérifié.");
-                result = "Copie vérifiée. Redémarre Android pour monter le support d’échange.";
+                result = name.toLowerCase(java.util.Locale.ROOT).endsWith(".apk")
+                        ? "APK copié et vérifié. Redémarre Android, puis ouvre Fichiers > stockage USB pour lancer son installation."
+                        : "Copie vérifiée. Redémarre Android pour monter le support d’échange.";
             } catch (Exception error) {
                 result = message(error);
             }

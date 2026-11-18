@@ -91,6 +91,50 @@ public final class AndroidEmulatorWorkspaceTest {
         }
     }
 
+    @Test public void onlyAcceptedMediaAndApksCanBeStagedForIsolatedAndroid() {
+        assertTrue(EmulatorConnection.acceptedGuestFile("app-v2.apk"));
+        assertTrue(EmulatorConnection.acceptedGuestFile("clip.mp4"));
+        assertTrue(EmulatorConnection.acceptedGuestFile("photo.JPG"));
+        assertFalse(EmulatorConnection.acceptedGuestFile("../outside.apk"));
+        assertFalse(EmulatorConnection.acceptedGuestFile("file.sh"));
+        assertFalse(EmulatorConnection.acceptedGuestFile("malware.apk.exe"));
+        assertFalse(EmulatorConnection.acceptedGuestFile(""));
+    }
+
+    @Test public void bootStatusNeverClaimsOperatingSystemBootWasVerifiedByQemuDisplay() throws Exception {
+        Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        JSONObject status = EmulatorConnection.load(app).status();
+        assertFalse(status.getBoolean("guest_boot_verified"));
+        assertTrue(status.has("display_ready"));
+        assertEquals(0L, status.getLong("boot_elapsed_seconds"));
+        JSONObject diagnostic = EmulatorConnection.load(app).diagnostics(app);
+        assertTrue(diagnostic.getBoolean("display_does_not_prove_boot"));
+        assertTrue(diagnostic.has("image_present"));
+        assertTrue(diagnostic.has("engine_present"));
+    }
+
+    @Test public void virtualDisplayDetectsLineageThreeDotStartupButNotARealScreen() {
+        android.graphics.Bitmap image = android.graphics.Bitmap.createBitmap(320, 200,
+                android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(image);
+        android.graphics.Paint paint = new android.graphics.Paint();
+        try {
+            image.eraseColor(android.graphics.Color.BLACK);
+            paint.setColor(android.graphics.Color.WHITE);
+            paint.setStrokeWidth(3);
+            paint.setStyle(android.graphics.Paint.Style.STROKE);
+            canvas.drawCircle(145, 97, 8, paint);
+            canvas.drawCircle(175, 97, 8, paint);
+            canvas.drawCircle(160, 120, 8, paint);
+            assertTrue(GuestFrame.looksLikeBootAnimation(image));
+            paint.setStyle(android.graphics.Paint.Style.FILL);
+            canvas.drawRect(0, 0, 320, 38, paint);
+            assertFalse(GuestFrame.looksLikeBootAnimation(image));
+        } finally {
+            image.recycle();
+        }
+    }
+
     @Test public void guestScreenDecodesQemuPpmWithoutDroppingLeadingPixelBytes() throws Exception {
         Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
         java.io.File screen = java.io.File.createTempFile("guest-screen", ".ppm", app.getCacheDir());
