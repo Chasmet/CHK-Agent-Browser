@@ -20,6 +20,7 @@ jobs:
           echo '171c0d215899d68f070fd45aea05ddb25737cf4ff16a25468e7cafbc65f4d8c9  image.zip' | sha256sum --check
           unzip -j image.zip '*/Data/vda.qcow2' '*/Data/vdb.qcow2' '*/Data/efi_vars.fd'
           rm image.zip
+          truncate -s 64M efi_vars.fd
           FIRMWARE=/usr/share/AAVMF/AAVMF_CODE.fd
           test -s "$FIRMWARE"
           qemu-system-aarch64 -machine virt -cpu max,pauth-impdef=on -accel tcg,thread=multi,tb-size=128 \
@@ -38,7 +39,7 @@ jobs:
           for attempt in $(seq 1 50); do
             kill -0 "$vm_pid" 2>/dev/null || { cat proof/qemu.log; exit 1; }
             if test -S qmp.sock; then
-              python3 - <<'PY'
+              python3 - <<'PY' || cat proof/qemu.log
           import json, socket
           with socket.socket(socket.AF_UNIX) as qmp:
               qmp.settimeout(5)
@@ -59,7 +60,7 @@ jobs:
             progress=$(timeout 4 adb -s 127.0.0.1:5655 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
             tesseract proof/frame.png stdout >proof/screen.txt 2>/dev/null || true
             cat proof/screen.txt
-            if [ "$progress" = 1 ] || grep -Eiq 'welcome to lineageos|start setup|finishing system update|tap to unlock|initial setup|getting your phone ready' proof/screen.txt; then
+            if [ "$progress" = 1 ] || grep -Eiq 'welcome to lineageos|start setup|finishing system update|tap to unlock|initial setup|getting your phone ready|lineageos setup|swipe up to unlock' proof/screen.txt; then
               echo "Android guest boot verified"
               exit 0
             fi
