@@ -56,7 +56,7 @@ final class EmulatorConnection {
 
     synchronized void start(Context context) throws Exception {
         if (running()) return;
-        if (!compatible()) throw new IOException("Le moteur Android nécessite un téléphone ARM64 sous Android 8 ou plus récent.");
+        if (Build.VERSION.SDK_INT < 26 || !compatible()) throw new IOException("Le moteur Android nécessite un téléphone ARM64 sous Android 8 ou plus récent.");
         if (!engineInstalled(context)) throw new IOException("Le moteur Android ARM64 manque dans cette version de CHK.");
         if (!GuestImage.exists(context)) throw new IOException("Importe une image Android avant de démarrer.");
         folder = GuestImage.installed(context);
