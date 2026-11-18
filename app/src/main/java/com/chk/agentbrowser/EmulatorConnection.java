@@ -271,6 +271,8 @@ final class EmulatorConnection {
     }
 
     synchronized void forceStop() throws InterruptedException {
+        // The Android guest is only supported on API 26+; do not invoke newer Process APIs below it.
+        if (Build.VERSION.SDK_INT < 26) return;
         Process active = process;
         if (active != null) {
             active.destroy();
