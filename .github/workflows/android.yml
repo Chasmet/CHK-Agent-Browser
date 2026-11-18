@@ -139,6 +139,11 @@ jobs:
           done
           echo "Validation Tor non confirmée sur ce commit ; aucune Release."
           exit 1
+      - name: Vérifier que le commit à publier est toujours en tête de main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          CURRENT=$(git ls-remote origin refs/heads/main | cut -f1)
+          test "$CURRENT" = "$GITHUB_SHA"
       - name: Charger signature persistante via GitHub OIDC et Render existant
         if: github.ref == 'refs/heads/main'
         run: python3 signing/prepare_ci.py
@@ -184,6 +189,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: 1.0.${{ github.run_number }}
         run: |
+          CURRENT=$(git ls-remote origin refs/heads/main | cut -f1)
+          test "$CURRENT" = "$GITHUB_SHA"
           ASSETS=("CHK-Agent-Browser-${RELEASE_VERSION}.apk")
           sha256sum "${ASSETS[@]}" > SHA256SUMS.txt
           gh release create "v${RELEASE_VERSION}" "CHK-Agent-Browser-${RELEASE_VERSION}.apk" \
