@@ -31,6 +31,7 @@ final class EmulatorConnection {
     private int width, height;
     private long capturedAt;
     private static final String FIRMWARE = "edk2-aarch64-code.fd";
+    private static final long FIRMWARE_FLASH_SIZE = 64L * 1024 * 1024;
 
     static final class Frame {
         final Bitmap bitmap;
@@ -61,6 +62,18 @@ final class EmulatorConnection {
         if (!GuestImage.exists(context)) throw new IOException("Importe une image Android avant de démarrer.");
         folder = GuestImage.installed(context);
         File firmware = prepareAsset(context, FIRMWARE);
+        if (firmware.length() != FIRMWARE_FLASH_SIZE) throw new IOException("Micrologiciel Android incomplet.");
+        File nvram = new File(folder, "efi_vars.fd");
+        try (java.io.RandomAccessFile flash = new java.io.RandomAccessFile(nvram, "rw")) {
+            long size = flash.length();
+            if (size <= 0 || size > FIRMWARE_FLASH_SIZE) throw new IOException("Variables UEFI Android invalides.");
+            // QEMU's virt board requires each raw pflash bank to span 64 MiB.
+            // Preserve all imported variables and extend only the unused tail.
+            if (size < FIRMWARE_FLASH_SIZE) {
+                flash.setLength(FIRMWARE_FLASH_SIZE);
+                flash.getFD().sync();
+            }
+        }
         prepareAsset(context, "efi-virtio.rom");
         File sockets = new File(folder, "qmp.sock");
         if (sockets.exists() && !sockets.delete()) throw new IOException("Le canal Android ne peut pas être réinitialisé.");
