@@ -91,6 +91,16 @@ public final class AndroidEmulatorWorkspaceTest {
         }
     }
 
+    @Test public void onlyAcceptedMediaAndApksCanBeStagedForIsolatedAndroid() {
+        assertTrue(EmulatorConnection.acceptedGuestFile("app-v2.apk"));
+        assertTrue(EmulatorConnection.acceptedGuestFile("clip.mp4"));
+        assertTrue(EmulatorConnection.acceptedGuestFile("photo.JPG"));
+        assertFalse(EmulatorConnection.acceptedGuestFile("../outside.apk"));
+        assertFalse(EmulatorConnection.acceptedGuestFile("file.sh"));
+        assertFalse(EmulatorConnection.acceptedGuestFile("malware.apk.exe"));
+        assertFalse(EmulatorConnection.acceptedGuestFile(""));
+    }
+
     @Test public void bootStatusNeverClaimsOperatingSystemBootWasVerifiedByQemuDisplay() throws Exception {
         Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
         JSONObject status = EmulatorConnection.load(app).status();
