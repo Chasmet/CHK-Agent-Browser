@@ -1,3 +1,15 @@
+## Correctifs de diagnostic Android invité (18 novembre 2026)
+
+- L'animation blanche sur fond noir (LineageOS) ne constitue plus une preuve de démarrage complet : l'écran indique le temps de lancement et propose un diagnostic après 5 minutes.
+- La capture de l'invité passe de 750 ms à 3 secondes pendant l'animation de démarrage, pour diminuer la pression CPU/mémoire, puis 1,5 seconde sur les autres écrans.
+- Nouveau diagnostic Android dans le menu ⋮ : état de QEMU, durée, image, journal de lancement et console série. Il peut être copié dans le presse-papiers.
+- Nouveau canal Local 3 `desktop / tool=android_emulator / operation=diagnostics` ; le journal privé exige toujours l'autorisation de 20 minutes.
+- Optimisation prudente de la mémoire de traduction QEMU (TCG : 256 MiB) et des options de disques ; journal série conservé dans le dossier privé de l'Android invité.
+- Ajout d'une option **Forcer l'arrêt** avec confirmation, seulement en dernier recours. Ne supprime pas l'image ni les données CHK.
+- Ajout de l'option **Importer un APK dans Android** : copie vérifiée dans le stockage d'échange du système invité, installation manuelle après redémarrage de celui-ci. Aucune installation sur Android hôte.
+- Le Play Store et la compatibilité d'applications tierces ne sont pas garantis par l'image LineageOS officielle. Le moteur reste en émulation logicielle : le démarrage réel de LineageOS et l'installation d'applications doivent être confirmés sur le téléphone.
+- Les autres modules (Web, Tor, Fichiers, Notes, Studio, Cut), les routes du serveur PC et la signature APK restent inchangés.
+
 ## Émulateur Android intégré à CHK Browser
 
 - Le nouvel espace utilise une machine virtuelle ARM64 locale, affichée dans CHK et pilotable par Local 3.
