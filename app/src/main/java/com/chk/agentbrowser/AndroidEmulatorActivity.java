@@ -1,6 +1,7 @@
 package com.chk.agentbrowser;
 
 import android.app.Activity;
+import android.app.DownloadManager;
 import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.RectF;
@@ -32,12 +33,15 @@ public final class AndroidEmulatorActivity extends Activity {
     private final ExecutorService commands = Executors.newSingleThreadExecutor();
     private final ExecutorService media = Executors.newSingleThreadExecutor();
     private final Runnable refresh = this::refreshScreen;
+    private final Runnable downloadTick = this::checkImageDownload;
+    private static final java.util.concurrent.atomic.AtomicBoolean IMAGE_IMPORT = new java.util.concurrent.atomic.AtomicBoolean();
     private ImageView screen;
     private TextView status;
     private View connect;
     private WorkspacePanel workspace;
     private WorkspaceMediaChooser picker;
     private EmulatorConnection connection;
+    private GuestDownload imageDownload;
     private EmulatorConnection.Frame frame;
     private EmulatorConnection.Frame touchedFrame;
     private RectF touchedBounds;
@@ -77,6 +81,7 @@ public final class AndroidEmulatorActivity extends Activity {
                 startActivity(new Intent(this, CutStudioHomeActivity.class)));
         screen.setOnTouchListener((view, event) -> touch(event));
         connection = EmulatorConnection.load(this);
+        imageDownload = new GuestDownload(this);
         showTab(state == null ? "android" : state.getString("emulator_tab", "android"));
         idleState();
     }
@@ -105,6 +110,7 @@ public final class AndroidEmulatorActivity extends Activity {
         visible = true;
         if (!"android".equals(tab)) workspace.refresh();
         if (!connection.running() && !starting && !importing) idleState();
+        ui.post(downloadTick);
         scheduleRefresh(0);
     }
 
@@ -112,6 +118,7 @@ public final class AndroidEmulatorActivity extends Activity {
         visible = false;
         touchedFrame = null;
         ui.removeCallbacks(refresh);
+        ui.removeCallbacks(downloadTick);
         super.onPause();
     }
 
@@ -197,15 +204,19 @@ public final class AndroidEmulatorActivity extends Activity {
         boolean installed = EmulatorConnection.engineInstalled(this);
         boolean hasImage = GuestImage.exists(this);
         button.setText(hasImage ? "Démarrer Android" : "Installer Android");
-        button.setVisibility(compatible && installed && !connection.running() ? View.VISIBLE : View.GONE);
+        boolean downloading = imageDownload.status() != null && !hasImage;
+        button.setVisibility(compatible && installed && !connection.running() && !downloading ? View.VISIBLE : View.GONE);
         status.setText(connection.running() ? "Démarrage de l’écran Android…"
                 : !compatible ? "Le moteur Android nécessite un téléphone ARM64 sous Android 8 ou supérieur."
                 : !installed ? "Le moteur Android local manque dans cette version de CHK."
-                : hasImage ? "Android est arrêté." : "Importe l’image ARM64 pour créer ton Android dans CHK.");
+                : hasImage ? "Android est arrêté."
+                : downloading ? "Téléchargement de l’image Android…"
+                : "Installe l’environnement Android dans CHK Browser.");
     }
 
     private void prepareAndroid() {
-        if (starting || importing || connection.running() || !EmulatorConnection.engineInstalled(this)) return;
+        if (starting || importing || connection.running() || !EmulatorConnection.compatible()
+                || !EmulatorConnection.engineInstalled(this)) return;
         if (GuestImage.exists(this)) {
             starting = true;
             errorDisplayed = false;
@@ -227,33 +238,87 @@ public final class AndroidEmulatorActivity extends Activity {
             });
             return;
         }
+        if (imageDownload.status() != null) {
+            checkImageDownload();
+            return;
+        }
         new AgentDialog.Builder(this).setTitle("Installer Android dans CHK")
-                .setMessage("Télécharge l’image LineageOS ARM64 (environ 1,1 Go), puis choisis le ZIP téléchargé. Le démarrage et l’affichage se font sur le téléphone.")
-                .setPositiveButton("Télécharger l’image", (dialog, which) -> {
-                    try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(GuestImage.URL))); }
-                    catch (android.content.ActivityNotFoundException error) { showMessage("Ouvre le lien LineageOS depuis le navigateur classique."); }
+                .setMessage("CHK Browser va télécharger et vérifier l’image LineageOS ARM64 (environ 1,1 Go). Prévois 6 Gio libres pour l’installation.")
+                .setPositiveButton("Télécharger et installer", (dialog, which) -> {
+                    try {
+                        imageDownload.start();
+                        checkImageDownload();
+                    } catch (Exception error) {
+                        showMessage(message(error));
+                    }
                 })
-                .setNeutralButton("Choisir le ZIP", (dialog, which) -> startActivityForResult(
+                .setNeutralButton("Choisir un ZIP", (dialog, which) -> startActivityForResult(
                         new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_SYSTEM_IMAGE))
                 .setNegativeButton("Annuler", null).show();
     }
 
-    private void importImage(Uri uri) {
-        if (importing || GuestImage.exists(this)) return;
+    private void checkImageDownload() {
+        ui.removeCallbacks(downloadTick);
+        if (!visible || isDestroyed()) return;
+        if (IMAGE_IMPORT.get()) {
+            connect.setVisibility(View.GONE);
+            status.setText("Vérification et installation de l’image Android…");
+            ui.postDelayed(downloadTick, 1000);
+            return;
+        }
+        GuestDownload.Status current = imageDownload.status();
+        if (current == null) {
+            if (!starting && !connection.running() && GuestImage.exists(this)) idleState();
+            return;
+        }
+        if (GuestImage.exists(this)) {
+            imageDownload.clear();
+            idleState();
+            return;
+        }
+        switch (current.state) {
+            case DownloadManager.STATUS_SUCCESSFUL:
+                if (current.uri != null) {
+                    importImage(current.uri, true);
+                    return;
+                }
+                break;
+            case DownloadManager.STATUS_FAILED:
+                break;
+            default:
+                connect.setVisibility(View.GONE);
+                status.setText(current.total > 0
+                        ? "Téléchargement de l’image Android · " + Math.min(100, current.received * 100 / current.total) + " %"
+                        : "Téléchargement de l’image Android…");
+                ui.postDelayed(downloadTick, 1000);
+                return;
+        }
+        imageDownload.clear();
+        idleState();
+        showMessage("Téléchargement interrompu. Appuie sur Installer Android pour réessayer.");
+    }
+
+    private void importImage(Uri uri, boolean downloaded) {
+        if (GuestImage.exists(this) || !IMAGE_IMPORT.compareAndSet(false, true)) return;
         importing = true;
         connect.setVisibility(View.GONE);
         status.setText("Vérification et installation de l’image Android…");
+        android.content.Context app = getApplicationContext();
         ENGINE.execute(() -> {
             String failure = null;
-            try { GuestImage.install(getApplicationContext(), uri); }
+            try { GuestImage.install(app, uri); }
             catch (Exception error) { failure = message(error); }
+            finally {
+                if (downloaded) imageDownload.clear();
+                IMAGE_IMPORT.set(false);
+            }
             String result = failure;
             ui.post(() -> {
                 if (isDestroyed()) return;
                 importing = false;
                 idleState();
                 if (result != null) showMessage(result);
-                else prepareAndroid();
+                else if (visible && "android".equals(tab)) prepareAndroid();
             });
         });
     }
@@ -438,7 +503,7 @@ public final class AndroidEmulatorActivity extends Activity {
         if (workspace.result(request, result, data)) return;
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         if (request == PICK_DEVICE_MEDIA) sendMedia(data.getData());
-        if (request == PICK_SYSTEM_IMAGE) importImage(data.getData());
+        if (request == PICK_SYSTEM_IMAGE) importImage(data.getData(), false);
     }
 
     private void sendMedia(Uri uri) {

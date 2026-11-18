@@ -1,8 +1,8 @@
-## Android sur le téléphone — prototype
+## Émulateur Android intégré à CHK Browser
 
 - Le nouvel espace utilise une machine virtuelle ARM64 locale, affichée dans CHK et pilotable par Local 3.
-- L’image Android LineageOS est importée et vérifiée séparément. Fichiers, Studio, Cut et Notes restent disponibles dans CHK.
-- Le workflow de prévisualisation produit une APK de test. La compatibilité des applications sociales et le démarrage sur téléphone physique restent à valider.
+- CHK télécharge et vérifie l’image LineageOS ARM64 depuis **Navigateur Android → Installer Android**. Fichiers, Studio, Cut et Notes restent disponibles dans CHK.
+- L’APK officielle embarque le moteur ARM64. La compatibilité des applications sociales et le démarrage sur le téléphone de l’utilisateur restent à valider.
 
 ## Local 3 — mode PC réel et diagnostic (14 novembre 2026)
 
