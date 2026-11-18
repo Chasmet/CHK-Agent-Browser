@@ -22,7 +22,7 @@ import java.util.UUID;
 
 final class EmulatorConnection {
     private static final EmulatorConnection INSTANCE = new EmulatorConnection();
-    private static final long MAX_MEDIA = 2L * 1024 * 1024 * 1024;
+    private static final long MAX_MEDIA = 480L * 1024 * 1024;
     private static volatile long agentUntil;
     private Process process;
     private File folder;
@@ -91,9 +91,21 @@ final class EmulatorConnection {
         }
         File exchange = new File(folder, "media");
         if (!exchange.isDirectory() && !exchange.mkdir()) throw new IOException("Dossier d’échange Android inaccessible.");
-        File[] shared = exchange.listFiles();
+        File mountedMedia = new File(folder, "mounted");
+        if (!mountedMedia.isDirectory() && !mountedMedia.mkdir()) throw new IOException("Support Android indisponible.");
+        File[] queued = exchange.listFiles();
+        if (queued == null) throw new IOException("Dossier d’échange Android inaccessible.");
+        if (queued.length > 0) {
+            File[] old = mountedMedia.listFiles();
+            if (old == null) throw new IOException("Support Android indisponible.");
+            for (File file : old) if (!file.delete()) throw new IOException("Impossible de remplacer le média échangé.");
+            for (File file : queued) {
+                if (!file.renameTo(new File(mountedMedia, file.getName()))) throw new IOException("Impossible de monter le média échangé.");
+            }
+        }
+        File[] shared = mountedMedia.listFiles();
         if (shared != null && shared.length > 0) {
-            command.addAll(Arrays.asList("-drive", "file=fat:media,format=raw,if=none,id=exchange,readonly=on",
+            command.addAll(Arrays.asList("-drive", "file=fat:mounted,format=raw,if=none,id=exchange,readonly=on",
                     "-device", "usb-storage,bus=usb.0,drive=exchange"));
         }
         ProcessBuilder builder = new ProcessBuilder(command).directory(folder);
@@ -309,7 +321,7 @@ final class EmulatorConnection {
             if (folder == null) throw new IOException("Démarre une première fois la machine virtuelle Android.");
             targetFolder = new File(folder, "media");
         }
-        if (size <= 0 || size > MAX_MEDIA) throw new IOException("Le média doit faire entre 1 octet et 2 Gio.");
+        if (size <= 0 || size > MAX_MEDIA) throw new IOException("Choisis un média de 480 Mio maximum pour le support d’échange.");
         String name = filename.replaceAll("[^A-Za-z0-9._-]", "_");
         if (!name.toLowerCase(Locale.ROOT).matches("[a-z0-9._-]{1,125}\\.(mp4|mov|m4v|webm|jpg|jpeg|png|webp|mp3|m4a|wav)")) {
             throw new IOException("Choisis un fichier vidéo, image ou audio compatible.");
@@ -321,8 +333,13 @@ final class EmulatorConnection {
                 if (GuestImage.copy(source, output, size, digest) != size) throw new IOException("Taille du média modifiée pendant la copie.");
             }
             String finalName = UUID.randomUUID().toString().substring(0, 8) + "-" + name;
-            File target = new File(targetFolder, finalName);
-            if (!staged.renameTo(target)) throw new IOException("Copie Android inaccessible.");
+            synchronized (this) {
+                File[] queued = targetFolder.listFiles();
+                if (queued == null) throw new IOException("Dossier d’échange Android inaccessible.");
+                for (File file : queued) if (!file.delete()) throw new IOException("Impossible de remplacer le média en attente.");
+                File target = new File(targetFolder, finalName);
+                if (!staged.renameTo(target)) throw new IOException("Copie Android inaccessible.");
+            }
             StringBuilder hash = new StringBuilder();
             for (byte b : digest.digest()) hash.append(String.format(Locale.ROOT, "%02x", b & 255));
             return new JSONObject().put("verified", true).put("available_in_guest", false).put("restart_required", true)

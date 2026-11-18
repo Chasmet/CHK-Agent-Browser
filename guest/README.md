@@ -9,7 +9,7 @@ Branche de validation du moteur qui tourne directement sur un téléphone ARM64.
 3. Démarrer Android. Le premier démarrage sous émulation logicielle peut durer plusieurs minutes. Le menu contient le journal du moteur. Vérifier qu’Android arrive à l’écran de configuration ou d’accueil et qu’un geste CHK provoque un changement visible.
 4. Tester une application installée dans la VM. Le Play Store et les comptes du téléphone hôte sont séparés. La compatibilité avec les services de Google et avec YouTube, Instagram ou TikTok est à vérifier sur cette image avant de connecter des comptes de production.
 5. Pour tester l’agent, configurer le connecteur CHK sur cette édition de test, activer le partage des aperçus puis **Autoriser Local 3 pendant 20 min** dans le menu de l’espace Android. Utiliser `desktop` avec `tool=android_emulator` et les opérations `status`, `observe`, `tap`, `swipe`, `key`, `text`, `send_media`, `media_status` ou `stop`. Les coordonnées des actions sont en pixels de l’image originale de l’invité et suivent un `frame_id` récent. Un geste envoyé doit ensuite être vérifié dans une nouvelle capture.
-6. **Envoyer un média** dépose une copie dans le dossier d’échange. Redémarrer l’invité pour monter le support USB virtuel en lecture seule puis vérifier que l’invité reconnaît le fichier. `media_status` indique `staged` après copie sur le téléphone.
+6. **Envoyer un média** dépose une copie dans le dossier d’échange. Le prototype échange un fichier à la fois, jusqu’à 480 Mio. Redémarrer l’invité pour monter le support USB virtuel en lecture seule puis vérifier que l’invité reconnaît le fichier. `media_status` indique `staged` après copie sur le téléphone.
 
 ## Sources
 
