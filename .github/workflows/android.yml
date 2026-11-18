@@ -42,6 +42,8 @@ jobs:
           test -s app/src/main/jniLibs/arm64-v8a/libchk_local_ai.so
       - name: Vérifier les scripts navigateur et la reconnexion
         run: bash validation/check.sh
+      - name: Tester le compagnon Android sur HTTPS
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s pc/CHK-Android-Emulator -v
       - name: Compiler APK debug
         run: ./gradlew --no-daemon assembleDebug lintDebug
       - name: Afficher les erreurs Android si la vérification échoue
@@ -72,6 +74,7 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
             ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.chk.agentbrowser.AgentKeyboardIntegrationTest,com.chk.agentbrowser.StudioLayersIntegrationTest,com.chk.agentbrowser.PrivateWebCaptureTest,com.chk.agentbrowser.Local3RecoveryTest,com.chk.agentbrowser.Local2BrowserAutomationTest,com.chk.agentbrowser.Local2SessionIntegrationTest,com.chk.agentbrowser.StudioSubtitlesTest,com.chk.agentbrowser.VideoEditorIntegrationTest#timedSubtitlesAppearAndDisappearAcrossRealExportClipBoundary
+            bash pc/CHK-Android-Emulator/run_android_smoke.sh
             bash validation/install_studio_test_model.sh
             # Full regression suite is deterministic; real Tor DNS/onion validation lives in tor-connectivity.yml.
             ./gradlew --no-daemon :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
@@ -94,7 +97,7 @@ jobs:
           retention-days: 2
           if-no-files-found: ignore
       - name: Conserver seulement 1 jour dans Actions
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.head_ref == 'feature/browser-android-emulator' || github.ref_name == 'feature/browser-android-emulator'
         uses: actions/upload-artifact@v4
         with:
           name: CHK-Agent-Browser-debug-${{ github.run_number }}

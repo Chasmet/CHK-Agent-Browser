@@ -46,6 +46,7 @@ public final class WorkspaceMediaChooser {
     private final WebChromeClient.FileChooserParams params;
     private final Selection completion;
     private final Runnable openAndroid;
+    private final boolean webUpload;
     private final List<String> types;
     private final LinkedHashSet<String> selected=new LinkedHashSet<>();
     private final ArrayDeque<String[]> history=new ArrayDeque<>();
@@ -63,8 +64,8 @@ public final class WorkspaceMediaChooser {
     private Runnable pendingSearch;
 
     private WorkspaceMediaChooser(Activity activity,WebChromeClient.FileChooserParams params,
-                                  Selection completion,Runnable openAndroid){
-        this.activity=activity;this.params=params;this.completion=completion;this.openAndroid=openAndroid;
+                                  Selection completion,Runnable openAndroid,boolean webUpload){
+        this.activity=activity;this.params=params;this.completion=completion;this.openAndroid=openAndroid;this.webUpload=webUpload;
         types=WorkspaceImportIndex.types(params.getAcceptTypes());
         dialog=AgentDialog.watch(new Dialog(activity,android.R.style.Theme_Material_Light_NoActionBar));dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         root=MobileUi.column(activity);root.setPadding(dp(10),dp(8),dp(10),dp(8));
@@ -75,7 +76,7 @@ public final class WorkspaceMediaChooser {
         TextView heading=text("Importer",20,0xff18243a);title.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
         TextView close=button("Fermer","import_cancel");title.addView(close);close.setOnClickListener(v->cancel());
         String format=types.isEmpty()||types.contains("*/*")?"Tous les formats":TextUtils.join(", ",types);
-        TextView requested=text((multiple()?"Sélection multiple":"Un fichier")+" · Formats du site : "+format,12,0xff566274);
+        TextView requested=text((multiple()?"Sélection multiple":"Un fichier")+(webUpload?" · Formats du site : ":" · Formats : ")+format,12,0xff566274);
         requested.setMaxLines(2);root.addView(requested);
         search=new EditText(activity);search.setSingleLine(true);search.setTextSize(15);
         search.setTextColor(0xff202d42);search.setHintTextColor(0xff68768a);
@@ -128,7 +129,11 @@ public final class WorkspaceMediaChooser {
     private String order="name";
     public static WorkspaceMediaChooser show(Activity activity,WebChromeClient.FileChooserParams params,
                             Selection selection,Runnable openAndroid)throws IOException{
-        WorkspaceMediaChooser picker=new WorkspaceMediaChooser(activity,params,selection,openAndroid);
+        return show(activity,params,selection,openAndroid,true);
+    }
+    static WorkspaceMediaChooser show(Activity activity,WebChromeClient.FileChooserParams params,
+                            Selection selection,Runnable openAndroid,boolean webUpload)throws IOException{
+        WorkspaceMediaChooser picker=new WorkspaceMediaChooser(activity,params,selection,openAndroid,webUpload);
         picker.dialog.show();
         Window window=picker.dialog.getWindow();if(window!=null){
             window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0xfff7f9fc));window.setLayout(-1,-1);
@@ -195,7 +200,7 @@ public final class WorkspaceMediaChooser {
                 if(!WorkspaceImportIndex.accepts(store,p,types))throw new IOException("Format refusé par le site : "+WorkspaceImportIndex.visiblePath(p));uris[i]=store.uri(p);
             }
             main.post(()->{if(!alive())return;try{
-                if(Build.VERSION.SDK_INT>=26){android.content.pm.PackageInfo pkg=WebView.getCurrentWebViewPackage();
+                if(webUpload&&Build.VERSION.SDK_INT>=26){android.content.pm.PackageInfo pkg=WebView.getCurrentWebViewPackage();
                     if(pkg!=null)for(Uri uri:uris)activity.grantUriPermission(pkg.packageName,uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}
                 finished=true;dispose();completion.finish(uris);
             }catch(Exception e){busy=false;updateSelection();status.setText("Importation impossible : "+e.getMessage());}});
