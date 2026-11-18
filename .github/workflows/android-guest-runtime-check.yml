@@ -1,0 +1,74 @@
+name: Validate embedded ARM64 Android image boot
+on:
+  push:
+    branches: [validation/embedded-android-boot]
+permissions:
+  contents: read
+jobs:
+  boot:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 24
+    steps:
+      - name: Install QEMU test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm qemu-efi-aarch64 adb tesseract-ocr
+      - name: Start the same Android image and verify its boot
+        run: |
+          mkdir proof
+          curl --fail --silent --show-error --location --retry 2 -o image.zip https://github.com/jqssun/android-lineage-qemu/releases/download/v2026.10.18/UTM-VM-lineage-23.2-20261019-jqssun-virtio_arm64only.zip
+          echo '171c0d215899d68f070fd45aea05ddb25737cf4ff16a25468e7cafbc65f4d8c9  image.zip' | sha256sum --check
+          unzip -j image.zip '*/Data/vda.qcow2' '*/Data/vdb.qcow2' '*/Data/efi_vars.fd'
+          rm image.zip
+          FIRMWARE=/usr/share/AAVMF/AAVMF_CODE.fd
+          test -s "$FIRMWARE"
+          qemu-system-aarch64 -machine virt -cpu max,pauth-impdef=on -accel tcg,thread=multi,tb-size=128 \
+            -m 2048 -smp 2 -display none -monitor none -serial file:proof/serial.log -qmp unix:qmp.sock,server=on,wait=off \
+            -device virtio-gpu-pci -device qemu-xhci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0 \
+            -device virtio-rng-pci -device virtio-serial -device virtio-net-pci,netdev=net0 \
+            -netdev user,id=net0,hostfwd=tcp:127.0.0.1:5655-:5555 \
+            -drive if=pflash,unit=0,format=raw,readonly=on,file="$FIRMWARE" \
+            -drive if=pflash,unit=1,format=raw,file=efi_vars.fd \
+            -drive file=vda.qcow2,if=none,id=vda,format=qcow2 -device virtio-blk-pci,drive=vda,bootindex=0 \
+            -drive file=vdb.qcow2,if=none,id=vdb,format=qcow2 -device virtio-blk-pci,drive=vdb,bootindex=1 \
+            > proof/qemu.log 2>&1 &
+          vm_pid=$!
+          trap 'kill "$vm_pid" 2>/dev/null || true' EXIT
+          adb start-server
+          for attempt in $(seq 1 50); do
+            kill -0 "$vm_pid" 2>/dev/null || { cat proof/qemu.log; exit 1; }
+            if test -S qmp.sock; then
+              python3 - <<'PY'
+          import json, socket
+          with socket.socket(socket.AF_UNIX) as qmp:
+              qmp.settimeout(5)
+              qmp.connect('qmp.sock')
+              reply = qmp.makefile('rb')
+              assert 'QMP' in json.loads(reply.readline())
+              for number, command in enumerate([{'execute':'qmp_capabilities'},{'execute':'screendump','arguments':{'filename':'proof/frame.png','format':'png'}}]):
+                  command['id']=number
+                  qmp.sendall(json.dumps(command).encode()+b'\n')
+                  while True:
+                      result = json.loads(reply.readline())
+                      if result.get('id') == number:
+                          print(json.dumps(result))
+                          break
+          PY
+            fi
+            timeout 4 adb connect 127.0.0.1:5655 || true
+            progress=$(timeout 4 adb -s 127.0.0.1:5655 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
+            tesseract proof/frame.png stdout >proof/screen.txt 2>/dev/null || true
+            cat proof/screen.txt
+            if [ "$progress" = 1 ] || grep -Eiq 'welcome to lineageos|start setup|finishing system update|tap to unlock|initial setup|getting your phone ready' proof/screen.txt; then
+              echo "Android guest boot verified"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Android guest boot was not confirmed'
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-guest-boot-evidence
+          path: proof/
