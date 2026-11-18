@@ -10,7 +10,7 @@ permissions:
   id-token: write
   actions: read
 concurrency:
-  group: chk-agent-browser-${{ github.ref_name }}
+  group: chk-agent-browser-${{ github.ref_name == 'main' && github.sha || github.ref_name }}
   cancel-in-progress: true
 jobs:
   build:
