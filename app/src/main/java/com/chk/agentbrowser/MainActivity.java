@@ -142,7 +142,7 @@ public class MainActivity extends Activity {
         }else restoreTabs(state);
         showSpace(state==null?"browser":state.getString("space","browser"));
         if(state==null)openIntent(getIntent());
-        autoUpdate();
+        checkForUpdate(this);
     }
     private void openIntent(Intent intent){
         String launch=intent.getStringExtra("open_url"),cut=intent.getStringExtra("cutstudio_url");
@@ -156,20 +156,20 @@ public class MainActivity extends Activity {
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);openIntent(intent);}
     private void toast(String value){Toast.makeText(this,value,Toast.LENGTH_SHORT).show();}
     private int dp(float p){return (int)(getResources().getDisplayMetrics().density*p+0.5f);}
-    private void autoUpdate(){
-        android.content.SharedPreferences pref=getSharedPreferences("update_monitor",MODE_PRIVATE);
+    static void checkForUpdate(Activity activity){
+        android.content.SharedPreferences pref=activity.getSharedPreferences("update_monitor",MODE_PRIVATE);
         if(!pref.getBoolean("enabled",true))return;
         long now=System.currentTimeMillis();
         if(now-pref.getLong("last_check",0)<86400000L||now-pref.getLong("last_attempt",0)<600000L)return;
         pref.edit().putLong("last_attempt",now).apply();
-        new UpdateManager(this).check((message,release)->{
-            if(isFinishing()||isDestroyed()||release==null)return;
-            new AgentDialog.Builder(this).setTitle("Nouvelle version "+release.version)
+        new UpdateManager(activity).check((message,release)->{
+            if(activity.isFinishing()||activity.isDestroyed()||release==null)return;
+            new AgentDialog.Builder(activity).setTitle("Nouvelle version "+release.version)
                 .setMessage("Télécharger une mise à jour officielle depuis GitHub ?")
                 .setNegativeButton("Plus tard",null)
                 .setPositiveButton("Télécharger",(d,w)->{
-                    try{new UpdateManager(this).download(release);toast("Téléchargement lancé. Une notification proposera l’installation sur ce téléphone.");}
-                    catch(Exception e){toast(e.getMessage());}
+                    try{new UpdateManager(activity).download(release);Toast.makeText(activity,"Téléchargement lancé. Une notification proposera l’installation sur ce téléphone.",Toast.LENGTH_SHORT).show();}
+                    catch(Exception e){Toast.makeText(activity,e.getMessage(),Toast.LENGTH_SHORT).show();}
                 }).show();
         });
     }
@@ -1029,7 +1029,7 @@ public class MainActivity extends Activity {
             store.hasFavorite(current==null?"":current.getUrl())?"Retirer le favori":"Ajouter aux favoris",
             "Favoris et historique","Rechercher dans la page","Partager le lien",
             "Enregistrer dans Notes","Lire / copier le texte","Taille du texte",
-            "Mode lecture plein écran","Reprendre la page MCP","Réglages","Compatibilité du site","Ouvrir dans le navigateur externe","Mode Mobile / Ordinateur"},(d,i)->{
+            "Mode lecture plein écran","Reprendre la page MCP","Réglages","Compatibilité du site","Ouvrir dans le navigateur externe","Mode Mobile / Ordinateur","Accueil des navigateurs"},(d,i)->{
             switch(i){
                 case 0:newTab(HOME);break;
                 case 1:tabOverview();break;
@@ -1050,6 +1050,7 @@ public class MainActivity extends Activity {
                 case 16:BrowserSiteSettings.show(this,current);break;
                 case 17:if(current!=null)BrowserSiteSettings.external(this,current.getUrl());break;
                 case 18:desktopModeMenu();break;
+                case 19:startActivity(new Intent(this,BrowserChooserActivity.class).putExtra(BrowserChooserActivity.RETURN_TO_CLASSIC,true));break;
             }
         }).setNegativeButton("Fermer",null).show();
     }

@@ -81,7 +81,9 @@
         <activity android:name=".ExternalFilesActivity" android:exported="false" />
         <activity android:name=".DiagnosticActivity" android:exported="false" />
         <activity android:name=".SettingsActivity" android:exported="false" />
-        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".AndroidEmulatorActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".BrowserChooserActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
         <provider android:name=".ApkProvider" android:authorities="${applicationId}.apks"
