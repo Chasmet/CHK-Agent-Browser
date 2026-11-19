@@ -3,7 +3,6 @@ package com.chk.agentbrowser.nativeview;
 import android.content.Context;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
-import android.os.PowerManager;
 import android.os.Process;
 import android.os.SystemClock;
 import android.util.Log;
@@ -31,7 +30,6 @@ final class DisplayEngine {
 
     private VirtualDisplaySession display;
     private InputBridge input;
-    private PowerManager.WakeLock wakeLock;
     private String lastError = "";
     private final long createdUptime = SystemClock.uptimeMillis();
 
@@ -118,7 +116,6 @@ final class DisplayEngine {
                 display = VirtualDisplaySession.create(context, safeWidth, safeHeight, safeDpi);
                 boolean on = display.ensureOn();
                 ensureInput();
-                acquireWakeLock();
                 lastError = "";
                 log("display created id=" + display.displayId
                         + " " + safeWidth + "x" + safeHeight + " @" + safeDpi
@@ -162,47 +159,6 @@ final class DisplayEngine {
             }
             display = null;
         }
-        releaseWakeLock();
-    }
-
-    /**
-     * Keeps the physical screen on while the virtual display exists. HyperOS
-     * suspends virtual displays together with the phone screen; without this
-     * the clone freezes as soon as the screen times out.
-     */
-    private void acquireWakeLock() {
-        if (wakeLock != null) {
-            return;
-        }
-        try {
-            PowerManager power = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-            if (power == null) {
-                return;
-            }
-            wakeLock = power.newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK,
-                    "HeadlessAndroid:display");
-            wakeLock.setReferenceCounted(false);
-            wakeLock.acquire(20L * 60_000L);
-            log("wake lock acquired (screen stays on while the display exists)");
-        } catch (Throwable e) {
-            wakeLock = null;
-            log("wake lock failed: " + e);
-        }
-    }
-
-    private void releaseWakeLock() {
-        if (wakeLock == null) {
-            return;
-        }
-        try {
-            if (wakeLock.isHeld()) {
-                wakeLock.release();
-            }
-        } catch (Throwable ignored) {
-        }
-        wakeLock = null;
-        log("wake lock released");
     }
 
     private void ensureInput() {
