@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#17181C">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+        <Button android:id="@+id/emulator_exit" style="?android:attr/borderlessButtonStyle"
+            android:layout_width="48dp" android:layout_height="48dp" android:minWidth="0dp" android:text="‹"
+            android:textSize="24sp" android:contentDescription="Accueil des navigateurs" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="Android invité · CHK" android:textStyle="bold" android:textSize="18sp" android:textColor="#F2F2FA" />
+        <Button android:id="@+id/emulator_menu" style="?android:attr/borderlessButtonStyle"
+            android:layout_width="48dp" android:layout_height="48dp" android:minWidth="0dp" android:text="⋮"
+            android:textSize="20sp" android:contentDescription="Outils du navigateur Android" />
+    </LinearLayout>
+    <TextView android:id="@+id/emulator_status" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingBottom="6dp"
+        android:textColor="#BDB6E0" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <FrameLayout android:id="@+id/emulator_screen" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:background="#101114">
+            <ImageView android:id="@+id/emulator_frame" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:scaleType="fitCenter" android:contentDescription="Écran de l’émulateur Android" />
+            <Button android:id="@+id/emulator_connect" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_gravity="center" android:layout_margin="20dp" android:text="Installer Android"
+                android:textAllCaps="false" />
+        </FrameLayout>
+        <FrameLayout android:id="@+id/emulator_workspace" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:visibility="gone" />
+    </FrameLayout>
+    <HorizontalScrollView android:id="@+id/emulator_controls" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:fillViewport="true" android:scrollbars="none">
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center">
+            <Button android:id="@+id/emulator_back" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content"
+                android:layout_height="48dp" android:minWidth="0dp" android:text="Retour" android:textAllCaps="false" />
+            <Button android:id="@+id/emulator_home" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content"
+                android:layout_height="48dp" android:minWidth="0dp" android:text="Accueil" android:textAllCaps="false" />
+            <Button android:id="@+id/emulator_keyboard" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content"
+                android:layout_height="48dp" android:minWidth="0dp" android:text="Clavier" android:textAllCaps="false" />
+            <Button android:id="@+id/emulator_media" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content"
+                android:layout_height="48dp" android:minWidth="0dp" android:text="Envoyer un média" android:textAllCaps="false" />
+        </LinearLayout>
+    </HorizontalScrollView>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#222226">
+        <Button android:id="@+id/emulator_nav_android" style="?android:attr/borderlessButtonStyle" android:layout_width="0dp"
+            android:layout_height="52dp" android:layout_weight="1.25" android:minWidth="0dp" android:padding="0dp" android:text="Android" android:textAllCaps="false" />
+        <Button android:id="@+id/emulator_nav_files" style="?android:attr/borderlessButtonStyle" android:layout_width="0dp"
+            android:layout_height="52dp" android:layout_weight="1.25" android:minWidth="0dp" android:padding="0dp" android:text="Fichiers" android:textAllCaps="false" />
+        <Button android:id="@+id/emulator_nav_studio" style="?android:attr/borderlessButtonStyle" android:layout_width="0dp"
+            android:layout_height="52dp" android:layout_weight="1" android:minWidth="0dp" android:padding="0dp" android:text="Studio" android:textAllCaps="false" />
+        <Button android:id="@+id/emulator_nav_cut" style="?android:attr/borderlessButtonStyle" android:layout_width="0dp"
+            android:layout_height="52dp" android:layout_weight="0.8" android:minWidth="0dp" android:padding="0dp" android:text="Cut" android:textAllCaps="false" />
+        <Button android:id="@+id/emulator_nav_notes" style="?android:attr/borderlessButtonStyle" android:layout_width="0dp"
+            android:layout_height="52dp" android:layout_weight="1" android:minWidth="0dp" android:padding="0dp" android:text="Notes" android:textAllCaps="false" />
+    </LinearLayout>
+</LinearLayout>

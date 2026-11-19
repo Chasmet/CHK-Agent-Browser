@@ -49,12 +49,12 @@
         <Button
             android:id="@+id/open_native_android"
             android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:minHeight="60dp" android:text="Android intégré · applications réelles"
+            android:minHeight="60dp" android:text="Android invité · véritable système indépendant"
             android:textAllCaps="false" android:textSize="18sp" android:backgroundTint="#393548" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:paddingStart="8dp" android:paddingEnd="8dp"
             android:layout_marginTop="2dp" android:layout_marginBottom="16dp"
-            android:text="Affiche et pilote les applications Android dans CHK. Play Store et TikTok sous réserve de compatibilité. Shizuku requis."
+            android:text="Véritable Android ARM64 exécuté dans CHK, indépendant du téléphone. Image système à télécharger une seule fois (~1,1 Go). Pas de Shizuku. Play Store non préinstallé."
             android:textColor="#C1BECC" android:textSize="14sp" />
         <Button
             android:id="@+id/browser_chooser_settings"

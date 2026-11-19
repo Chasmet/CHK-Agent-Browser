@@ -15,8 +15,8 @@ public final class BrowserChooserActivity extends Activity {
             else startActivity(new Intent(this, MainActivity.class));
         });
         findViewById(R.id.open_native_android).setOnClickListener(view ->
-                startActivity(new Intent(this, NativeAndroidActivity.class)));
-findViewById(R.id.browser_chooser_settings).setOnClickListener(view ->
+                startActivity(new Intent(this, AndroidEmulatorActivity.class)));
+        findViewById(R.id.browser_chooser_settings).setOnClickListener(view ->
                 startActivity(new Intent(this, SettingsActivity.class)));
         WorkspaceHealth.ensure(this);
         MainActivity.checkForUpdate(this);
