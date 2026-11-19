@@ -1,3 +1,8 @@
+## Retrait des modes Android
+
+- CHK Agent Browser s’ouvre directement sur le navigateur Web. Les entrées Émulateur Android et Android direct ont été retirées, ainsi que QEMU et l’intégration Shizuku.
+- Cette mise à jour conserve les données locales et les connexions existantes. Elle n’efface pas les images Android déjà téléchargées.
+
 ## Nouveau mode : Android direct (Shizuku) — 19 novembre 2026
 
 - Ajout **dans CHK Agent Browser existant** d'un mode Android direct, sans QEMU ni image LineageOS. Il utilise un second écran Android véritable pour afficher et piloter des applications déjà installées sur le téléphone.
