@@ -135,6 +135,36 @@ public final class AndroidEmulatorWorkspaceTest {
         }
     }
 
+
+    @Test public void colorfulGuestScreenIsAdaptivelyCompressedInsteadOfRejected() throws Exception {
+        android.graphics.Bitmap original = android.graphics.Bitmap.createBitmap(1280, 800,
+                android.graphics.Bitmap.Config.ARGB_8888);
+        java.util.Random random = new java.util.Random(73019L);
+        int[] pixels = new int[1280];
+        try {
+            for (int y = 0; y < original.getHeight(); y++) {
+                for (int x = 0; x < pixels.length; x++)
+                    pixels[x] = 0xff000000 | random.nextInt(0x1000000);
+                original.setPixels(pixels, 0, pixels.length, 0, y, pixels.length, 1);
+            }
+            EmulatorMcp.Preview preview = EmulatorMcp.encodePreview(original);
+            assertTrue(preview.jpeg.length > 0 && preview.jpeg.length <= 40000);
+            assertTrue(preview.width <= 800 && preview.height <= 800);
+            assertEquals(1280 * preview.height, 800 * preview.width);
+            android.graphics.Bitmap decoded = android.graphics.BitmapFactory.decodeByteArray(
+                    preview.jpeg, 0, preview.jpeg.length);
+            assertNotNull(decoded);
+            try {
+                assertEquals(preview.width, decoded.getWidth());
+                assertEquals(preview.height, decoded.getHeight());
+            } finally {
+                decoded.recycle();
+            }
+        } finally {
+            original.recycle();
+        }
+    }
+
     @Test public void guestScreenDecodesQemuPpmWithoutDroppingLeadingPixelBytes() throws Exception {
         Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
         java.io.File screen = java.io.File.createTempFile("guest-screen", ".ppm", app.getCacheDir());
