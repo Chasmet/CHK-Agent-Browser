@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#17181C"
+    android:fillViewport="true">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp">
+        <ImageView
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_browser"
+            android:importantForAccessibility="no" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="24dp"
+            android:text="CHK Agent Browser"
+            android:textColor="#F2F2FA"
+            android:textStyle="bold"
+            android:textSize="28sp" />
+        <Button
+            android:id="@+id/open_classic"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="60dp"
+            android:text="Navigateur classique"
+            android:textAllCaps="false"
+            android:textSize="18sp"
+            android:backgroundTint="#393548" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="16dp"
+            android:text="Tes onglets Web, Tor et ton espace de travail."
+            android:textColor="#C1BECC"
+            android:textSize="14sp" />
+        <Button
+            android:id="@+id/open_native_android"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:minHeight="60dp" android:text="Android direct · rapide (Shizuku)"
+            android:textAllCaps="false" android:textSize="18sp" android:backgroundTint="#393548" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingStart="8dp" android:paddingEnd="8dp"
+            android:layout_marginTop="2dp" android:layout_marginBottom="16dp"
+            android:text="Affiche et pilote dans CHK des applications installées sur le téléphone, sans QEMU. Autorisation Shizuku requise."
+            android:textColor="#C1BECC" android:textSize="14sp" />
+        <Button
+            android:id="@+id/open_emulator"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="60dp"
+            android:text="Ancien émulateur Android · expérimental"
+            android:textAllCaps="false"
+            android:textSize="18sp"
+            android:backgroundTint="#393548" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:layout_marginTop="2dp"
+            android:text="Machine virtuelle QEMU (très lente) conservée sans supprimer ses données."
+            android:textColor="#C1BECC"
+            android:textSize="14sp" />
+        <Button
+            android:id="@+id/browser_chooser_settings"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_gravity="start"
+            android:text="Réglages"
+            android:textAllCaps="false"
+            android:textColor="#C5BFFF" />
+    </LinearLayout>
+</ScrollView>
