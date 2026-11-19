@@ -14,6 +14,8 @@ public final class BrowserChooserActivity extends Activity {
             if (getIntent().getBooleanExtra(RETURN_TO_CLASSIC, false)) finish();
             else startActivity(new Intent(this, MainActivity.class));
         });
+        findViewById(R.id.open_native_android).setOnClickListener(view ->
+                startActivity(new Intent(this, NativeAndroidActivity.class)));
         findViewById(R.id.open_emulator).setOnClickListener(view ->
                 startActivity(new Intent(this, AndroidEmulatorActivity.class)));
         findViewById(R.id.browser_chooser_settings).setOnClickListener(view ->
