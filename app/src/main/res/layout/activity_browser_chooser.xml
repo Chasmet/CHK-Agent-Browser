@@ -49,31 +49,13 @@
         <Button
             android:id="@+id/open_native_android"
             android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:minHeight="60dp" android:text="Android direct · rapide (Shizuku)"
+            android:minHeight="60dp" android:text="Android intégré · applications réelles"
             android:textAllCaps="false" android:textSize="18sp" android:backgroundTint="#393548" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:paddingStart="8dp" android:paddingEnd="8dp"
             android:layout_marginTop="2dp" android:layout_marginBottom="16dp"
-            android:text="Affiche et pilote dans CHK des applications installées sur le téléphone, sans QEMU. Autorisation Shizuku requise."
+            android:text="Affiche et pilote les applications Android dans CHK. Play Store et TikTok sous réserve de compatibilité. Shizuku requis."
             android:textColor="#C1BECC" android:textSize="14sp" />
-        <Button
-            android:id="@+id/open_emulator"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="60dp"
-            android:text="Ancien émulateur Android · expérimental"
-            android:textAllCaps="false"
-            android:textSize="18sp"
-            android:backgroundTint="#393548" />
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:layout_marginTop="2dp"
-            android:text="Machine virtuelle QEMU (très lente) conservée sans supprimer ses données."
-            android:textColor="#C1BECC"
-            android:textSize="14sp" />
         <Button
             android:id="@+id/browser_chooser_settings"
             style="?android:attr/borderlessButtonStyle"
