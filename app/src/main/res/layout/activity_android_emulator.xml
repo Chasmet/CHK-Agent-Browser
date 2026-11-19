@@ -17,6 +17,10 @@
     <TextView android:id="@+id/emulator_status" android:layout_width="match_parent" android:layout_height="wrap_content"
         android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingBottom="6dp"
         android:textColor="#BDB6E0" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
+    <Button android:id="@+id/emulator_native_mode"
+        android:layout_width="match_parent" android:layout_height="48dp"
+        android:text="Android direct rapide · sans QEMU"
+        android:textAllCaps="false" android:backgroundTint="#393548" />
     <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
         <FrameLayout android:id="@+id/emulator_screen" android:layout_width="match_parent" android:layout_height="match_parent"
             android:background="#101114">

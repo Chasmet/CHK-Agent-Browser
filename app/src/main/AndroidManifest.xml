@@ -1,9 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <!-- Only the isolated, API-29-gated Tor component requires Android 10. The main app keeps minSdk 23. -->
-    <uses-sdk tools:overrideLibrary="org.torproject.jni" />
+    <uses-sdk tools:overrideLibrary="org.torproject.jni,rikka.shizuku.api,rikka.shizuku.provider" />
     <uses-permission android:name="android.permission.INTERNET" />
     <queries>
         <package android:name="org.torproject.torbrowser" />
+        <package android:name="moe.shizuku.privileged.api" />
+        <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
     </queries>
     <uses-permission android:name="android.permission.CAMERA" />
@@ -17,6 +19,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application android:name=".AgentApplication" android:label="CHK Agent Browser" android:icon="@drawable/ic_browser"
@@ -83,9 +86,17 @@
         <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".AndroidEmulatorActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".NativeAndroidActivity" tools:targetApi="29" android:exported="false" android:enabled="@bool/chk_native_display_supported" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".BrowserChooserActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
+        <!-- Shizuku user service: the shell process is launched only after owner permission. -->
+        <provider android:name="rikka.shizuku.ShizukuProvider"
+            android:enabled="@bool/chk_native_display_supported"
+            android:authorities="${applicationId}.shizuku" android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
+            android:multiprocess="false" />
+        <meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" />
         <provider android:name=".ApkProvider" android:authorities="${applicationId}.apks"
             android:exported="false" android:grantUriPermissions="true" />
         <provider android:name=".BrowserFileProvider" android:authorities="${applicationId}.browserfiles"

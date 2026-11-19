@@ -47,11 +47,21 @@
             android:textColor="#C1BECC"
             android:textSize="14sp" />
         <Button
+            android:id="@+id/open_native_android"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:minHeight="60dp" android:text="Android direct · rapide (Shizuku)"
+            android:textAllCaps="false" android:textSize="18sp" android:backgroundTint="#393548" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingStart="8dp" android:paddingEnd="8dp"
+            android:layout_marginTop="2dp" android:layout_marginBottom="16dp"
+            android:text="Affiche et pilote dans CHK des applications installées sur le téléphone, sans QEMU. Autorisation Shizuku requise."
+            android:textColor="#C1BECC" android:textSize="14sp" />
+        <Button
             android:id="@+id/open_emulator"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:minHeight="60dp"
-            android:text="Navigateur Android"
+            android:text="Ancien émulateur Android · expérimental"
             android:textAllCaps="false"
             android:textSize="18sp"
             android:backgroundTint="#393548" />
@@ -61,7 +71,7 @@
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
             android:layout_marginTop="2dp"
-            android:text="Un Android virtuel qui s’exécute sur ce téléphone."
+            android:text="Machine virtuelle QEMU (très lente) conservée sans supprimer ses données."
             android:textColor="#C1BECC"
             android:textSize="14sp" />
         <Button
