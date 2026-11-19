@@ -26,7 +26,7 @@ public final class NativeAndroidDisplayTest {
         assertFalse(NativeDisplayMcp.validPackage(null));
     }
 
-    @Test public void originalChkLauncherContainsBothNativeAndLegacyAndroidModes() {
+    @Test public void chkLauncherKeepsClassicAndIntegratedWithoutQemu() {
         Instrumentation instrument = InstrumentationRegistry.getInstrumentation();
         Context app = instrument.getTargetContext();
         Intent intent = new Intent(app, BrowserChooserActivity.class);
@@ -36,7 +36,7 @@ public final class NativeAndroidDisplayTest {
         Activity launcher = instrument.startActivitySync(intent);
         try {
             assertNotNull(launcher.findViewById(R.id.open_classic));
-            assertNotNull(launcher.findViewById(R.id.open_emulator));
+            assertNull(launcher.findViewById(R.id.open_emulator));
             View nativeButton = launcher.findViewById(R.id.open_native_android);
             assertNotNull(nativeButton);
             instrument.runOnMainSync(nativeButton::performClick);
