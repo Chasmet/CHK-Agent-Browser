@@ -194,11 +194,48 @@ public final class NativeAndroidActivity extends Activity {
                 ui.post(() -> {
                     if (isDestroyed()) return;
                     if (list.isEmpty()) { message("Aucune application de téléphone détectée."); return; }
-                    String[] titles = new String[list.size()];
-                    for (int i = 0; i < list.size(); i++) titles[i] = list.get(i)[0];
-                    new AgentDialog.Builder(this).setTitle("Ouvrir sur l'écran CHK (sans QEMU)")
-                            .setItems(titles, (d,which) -> action(() -> engine.launchApp(list.get(which)[1], false)))
-                            .setNegativeButton("Annuler", null).show();
+                    android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+                    android.widget.GridLayout grid = new android.widget.GridLayout(this);
+                    grid.setColumnCount(4);
+                    scroll.addView(grid);
+                    float density = getResources().getDisplayMetrics().density;
+                    int cellWidth = Math.max((int)(70*density),
+                            (getResources().getDisplayMetrics().widthPixels-(int)(48*density))/4);
+                    android.app.AlertDialog chooser = new AgentDialog.Builder(this)
+                            .setTitle("Applications Android · CHK")
+                            .setView(scroll)
+                            .setNegativeButton("Fermer",null)
+                            .create();
+                    for (String[] item : list) {
+                        android.widget.LinearLayout tile = new android.widget.LinearLayout(this);
+                        tile.setOrientation(android.widget.LinearLayout.VERTICAL);
+                        tile.setGravity(android.view.Gravity.CENTER);
+                        tile.setPadding(4,8,4,8);
+                        android.widget.ImageView icon = new android.widget.ImageView(this);
+                        try { icon.setImageDrawable(getPackageManager().getApplicationIcon(item[1])); }
+                        catch (Exception ignored) { icon.setImageResource(R.drawable.ic_browser); }
+                        tile.addView(icon,new android.widget.LinearLayout.LayoutParams((int)(46*density),(int)(46*density)));
+                        android.widget.TextView name = new android.widget.TextView(this);
+                        name.setText(item[0]);
+                        name.setTextColor(0xffEDEAF5);
+                        name.setTextSize(11);
+                        name.setGravity(android.view.Gravity.CENTER);
+                        name.setMaxLines(2);
+                        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                        tile.addView(name,new android.widget.LinearLayout.LayoutParams(-1,(int)(38*density)));
+                        android.widget.GridLayout.LayoutParams pos = new android.widget.GridLayout.LayoutParams();
+                        pos.width = cellWidth;
+                        pos.height = (int)(112*density);
+                        grid.addView(tile,pos);
+                        tile.setContentDescription("Ouvrir "+item[0]+" dans CHK");
+                        tile.setOnClickListener(v -> {
+                            chooser.dismiss();
+                            action(() -> engine.launchApp(item[1], false));
+                        });
+                    }
+                    chooser.show();
+                    if (chooser.getWindow()!=null) chooser.getWindow().setLayout(-1,(int)(
+                            getResources().getDisplayMetrics().heightPixels*0.82f));
                 });
             } catch (Exception e) {
                 ui.post(() -> message("Liste inaccessible : " + e.getClass().getSimpleName()));
