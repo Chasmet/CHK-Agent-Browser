@@ -38,7 +38,7 @@ final class NativeDisplayMcp {
                     .put("shizuku_running", client.isBinderAlive())
                     .put("shizuku_permission", client.hasPermission())
                     .put("service_connected", client.isServiceConnected())
-                    .put("local3_authorized", EmulatorConnection.agentAllowed());
+                    .put("local3_authorized", NativeDisplayAccess.agentAllowed());
             if (client.isServiceConnected()) {
                 try {
                     JSONObject status = new JSONObject(client.status());
@@ -47,12 +47,12 @@ final class NativeDisplayMcp {
             }
             return report;
         }
-        if (!EmulatorConnection.agentAllowed())
+        if (!NativeDisplayAccess.agentAllowed())
             throw new IOException("Autorise Local 3 pendant 20 min depuis Android direct dans CHK.");
         if (!client.isServiceConnected()) throw new IOException("Shizuku non connecté. Ouvre Android direct dans CHK.");
         switch (operation) {
             case "native_create":
-                return confirmed(client.createDisplay(720,1280,320));
+                return confirmed(client.createDisplay(540,960,240));
             case "native_release":
                 recentFrameId = null;
                 return confirmed(client.releaseDisplay());
@@ -110,7 +110,7 @@ final class NativeDisplayMcp {
         Bitmap original = BitmapFactory.decodeByteArray(frame.jpeg,0,frame.jpeg.length);
         if (original == null) throw new IOException("Capture Android illisible.");
         try {
-            EmulatorMcp.Preview preview = EmulatorMcp.encodePreview(original);
+            Preview preview = encodePreview(original);
             width = info.optInt("display_width",original.getWidth());
             height = info.optInt("display_height",original.getHeight());
             recentFrameId = UUID.randomUUID().toString().replace("-","");
@@ -123,6 +123,29 @@ final class NativeDisplayMcp {
                     .put("image_base64",android.util.Base64.encodeToString(
                             preview.jpeg,android.util.Base64.NO_WRAP));
         } finally { original.recycle(); }
+    }
+
+
+    private static final class Preview {
+        final byte[] jpeg; final int width, height;
+        Preview(byte[] data,int w,int h){jpeg=data;width=w;height=h;}
+    }
+    /** JPEG bound to Local 3 limits, from real display pixels only. */
+    private static Preview encodePreview(Bitmap source) throws IOException {
+        int w=Math.min(340,source.getWidth());
+        int h=Math.max(1,Math.round(source.getHeight()*(w/(float)source.getWidth())));
+        Bitmap scaled=Bitmap.createScaledBitmap(source,w,h,true);
+        try {
+            byte[] bytes=null;
+            for(int quality=65;quality>=25;quality-=10) {
+                java.io.ByteArrayOutputStream stream=new java.io.ByteArrayOutputStream();
+                if(!scaled.compress(Bitmap.CompressFormat.JPEG,quality,stream))throw new IOException("Capture JPEG impossible.");
+                bytes=stream.toByteArray();
+                if(bytes.length<=40000)break;
+            }
+            if(bytes==null||bytes.length>50000)throw new IOException("Capture Android trop volumineuse.");
+            return new Preview(bytes,w,h);
+        }finally{if(scaled!=source)scaled.recycle();}
     }
 
     private static void checkFrame(JSONObject args) throws IOException {
