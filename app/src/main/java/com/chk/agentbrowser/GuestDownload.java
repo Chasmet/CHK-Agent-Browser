@@ -13,7 +13,7 @@ import java.io.IOException;
 
 /** DownloadManager owns the image download so it can resume when CHK is closed. */
 final class GuestDownload {
-    private static final String NAME = "chk-android-lineage-23.2-arm64.zip";
+    private static final String NAME = "chk-android-lineage-22.2-gms-arm64.zip";
     private final Context app;
     private final SharedPreferences preferences;
     private final DownloadManager manager;
