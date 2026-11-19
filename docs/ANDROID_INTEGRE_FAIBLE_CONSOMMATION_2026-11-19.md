@@ -41,6 +41,17 @@ Cette option est **un affichage Android natif**, pas une émulation d'un OS dist
 
 Un véritable Android distant avec image Google Play adaptée pourrait être diffusé par vidéo interactive dans CHK et piloté par Local 3, avec consommation locale réduite. Mais cela nécessite un hébergement compatible VM/accélération (généralement payant), distinct du simple relais Render actuel, et des garanties sur la protection des comptes. Il **ne tourne pas sur le téléphone** : ce n'est donc pas la solution retenue pour cette demande.
 
+## Précision bloquante — TikTok reste affiché et pilotable DANS CHK
+
+Exemple utilisateur non négociable : depuis l'écran d'accueil **Android intégré** dans CHK Agent Browser, toucher l'icône **TikTok** ouvre l'application Android TikTok réelle **dans la zone d'affichage intérieure de CHK**. Les écrans TikTok, menus, vidéos, champs, connexion, boutons de publication et navigation doivent rester visibles et actionnables **dans la même fenêtre CHK Agent Browser**, comme sur l'illustration d'un Android invité. Le téléphone ne doit **jamais basculer vers l'activité TikTok sur son écran principal**. Cela s'applique aussi à Play Store et aux autres applications que l'utilisateur veut piloter.
+
+**Tests éliminatoires :**
+- Lancer TikTok depuis l'environnement intérieur CHK ; vérifier visuellement que TikTok reste dedans, pendant l'ouverture, la connexion, le défilement et les dialogues d'upload.
+- Vérifier la même chose en pilotant par Local 3 : capture réelle dans la zone CHK, clic, saisie, vérification, puis Retour et Accueil renvoyés à l'environnement Android intérieur.
+- Tester les intents et liens externes : ils ne doivent pas provoquer de sortie silencieuse hors de CHK. Si Android interdit de les afficher sur l'écran secondaire, afficher **« application incompatible avec cet écran intégré »**, et ne jamais afficher une réussite fictive.
+- La fermeture de l'environnement intégré restitue CHK navigateur classique et libère les ressources.
+- Le fait que l'application TikTok existe déjà sur l'hôte ne constitue **pas une preuve** qu'elle se lance dans CHK : seul un rendu/contrôle réellement vérifié est une réussite.
+
 ## Plan d'intégration conditionné par la preuve
 
 1. Créer un écran d'essai **dans le dépôt existant** avec arrêt immédiat, aucune activation au démarrage, *sans retirer* le navigateur classique.
