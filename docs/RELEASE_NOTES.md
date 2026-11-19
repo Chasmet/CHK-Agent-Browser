@@ -1,3 +1,10 @@
+## Capture de l'Android virtuel plus robuste (19 novembre 2026)
+
+- Corrige l'erreur "Aperçu Android trop volumineux" rencontrée en direct via CHK Browser Local 3. La capture réelle QEMU est maintenant compressée progressivement (qualité JPEG et résolution) jusqu'à respecter la limite MCP de 40 Ko, sans simuler l'écran.
+- Les dimensions originales restent disponibles pour les gestes de Local 3 ; les dimensions de prévisualisation correspondent précisément au JPEG réellement envoyé.
+- La capture ne modifie ni le système Android invité ni ses données ; elle conserve le contrôle d'autorisation local de 20 minutes.
+- Nouveau test instrumenté avec capture synthétique bruitée pour vérifier qu'un écran coloré n'est plus refusé. Le démarrage complet de LineageOS reste à valider sur le téléphone.
+
 ## Correctifs de diagnostic Android invité (18 novembre 2026)
 
 - L'animation blanche sur fond noir (LineageOS) ne constitue plus une preuve de démarrage complet : l'écran indique le temps de lancement et propose un diagnostic après 5 minutes.
