@@ -91,6 +91,80 @@ public final class AndroidEmulatorWorkspaceTest {
         }
     }
 
+    @Test public void onlyAcceptedMediaAndApksCanBeStagedForIsolatedAndroid() {
+        assertTrue(EmulatorConnection.acceptedGuestFile("app-v2.apk"));
+        assertTrue(EmulatorConnection.acceptedGuestFile("clip.mp4"));
+        assertTrue(EmulatorConnection.acceptedGuestFile("photo.JPG"));
+        assertFalse(EmulatorConnection.acceptedGuestFile("../outside.apk"));
+        assertFalse(EmulatorConnection.acceptedGuestFile("file.sh"));
+        assertFalse(EmulatorConnection.acceptedGuestFile("malware.apk.exe"));
+        assertFalse(EmulatorConnection.acceptedGuestFile(""));
+    }
+
+    @Test public void bootStatusNeverClaimsOperatingSystemBootWasVerifiedByQemuDisplay() throws Exception {
+        Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        JSONObject status = EmulatorConnection.load(app).status();
+        assertFalse(status.getBoolean("guest_boot_verified"));
+        assertTrue(status.has("display_ready"));
+        assertEquals(0L, status.getLong("boot_elapsed_seconds"));
+        JSONObject diagnostic = EmulatorConnection.load(app).diagnostics(app);
+        assertTrue(diagnostic.getBoolean("display_does_not_prove_boot"));
+        assertTrue(diagnostic.has("image_present"));
+        assertTrue(diagnostic.has("engine_present"));
+    }
+
+    @Test public void virtualDisplayDetectsLineageThreeDotStartupButNotARealScreen() {
+        android.graphics.Bitmap image = android.graphics.Bitmap.createBitmap(320, 200,
+                android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(image);
+        android.graphics.Paint paint = new android.graphics.Paint();
+        try {
+            image.eraseColor(android.graphics.Color.BLACK);
+            paint.setColor(android.graphics.Color.WHITE);
+            paint.setStrokeWidth(3);
+            paint.setStyle(android.graphics.Paint.Style.STROKE);
+            canvas.drawCircle(145, 97, 8, paint);
+            canvas.drawCircle(175, 97, 8, paint);
+            canvas.drawCircle(160, 120, 8, paint);
+            assertTrue(GuestFrame.looksLikeBootAnimation(image));
+            paint.setStyle(android.graphics.Paint.Style.FILL);
+            canvas.drawRect(0, 0, 320, 38, paint);
+            assertFalse(GuestFrame.looksLikeBootAnimation(image));
+        } finally {
+            image.recycle();
+        }
+    }
+
+
+    @Test public void colorfulGuestScreenIsAdaptivelyCompressedInsteadOfRejected() throws Exception {
+        android.graphics.Bitmap original = android.graphics.Bitmap.createBitmap(1280, 800,
+                android.graphics.Bitmap.Config.ARGB_8888);
+        java.util.Random random = new java.util.Random(73019L);
+        int[] pixels = new int[1280];
+        try {
+            for (int y = 0; y < original.getHeight(); y++) {
+                for (int x = 0; x < pixels.length; x++)
+                    pixels[x] = 0xff000000 | random.nextInt(0x1000000);
+                original.setPixels(pixels, 0, pixels.length, 0, y, pixels.length, 1);
+            }
+            EmulatorMcp.Preview preview = EmulatorMcp.encodePreview(original);
+            assertTrue(preview.jpeg.length > 0 && preview.jpeg.length <= 40000);
+            assertTrue(preview.width <= 800 && preview.height <= 800);
+            assertEquals(1280 * preview.height, 800 * preview.width);
+            android.graphics.Bitmap decoded = android.graphics.BitmapFactory.decodeByteArray(
+                    preview.jpeg, 0, preview.jpeg.length);
+            assertNotNull(decoded);
+            try {
+                assertEquals(preview.width, decoded.getWidth());
+                assertEquals(preview.height, decoded.getHeight());
+            } finally {
+                decoded.recycle();
+            }
+        } finally {
+            original.recycle();
+        }
+    }
+
     @Test public void guestScreenDecodesQemuPpmWithoutDroppingLeadingPixelBytes() throws Exception {
         Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
         java.io.File screen = java.io.File.createTempFile("guest-screen", ".ppm", app.getCacheDir());

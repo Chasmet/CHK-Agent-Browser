@@ -43,6 +43,9 @@ final class EmulatorMcp {
 
     private static JSONObject command(Context app, JSONObject args) throws Exception {
         String operation = args.optString("operation", "status");
+        if (operation.startsWith("native_")) {
+            return NativeDisplayMcp.command(app, args);
+        }
         if ("status".equals(operation)) {
             JSONObject result = new JSONObject().put("source", "android_emulator").put("authorized", EmulatorConnection.agentAllowed())
                     .put("preview_allowed", AgentClient.get(app).isPreviewAllowed());
@@ -55,6 +58,7 @@ final class EmulatorMcp {
             return new JSONObject().put("authorized", false);
         }
         requireAccess();
+        if ("diagnostics".equals(operation)) return EmulatorConnection.load(app).diagnostics(app);
         if ("media_status".equals(operation)) return transferStatus(args.getString("id"));
         EmulatorConnection connection = EmulatorConnection.load(app);
         switch (operation) {
@@ -78,27 +82,51 @@ final class EmulatorMcp {
         if (!EmulatorConnection.agentAllowed()) throw new IOException("Autorise Local 3 depuis le menu Navigateur Android.");
     }
 
+
+    static final class Preview {
+        final byte[] jpeg;
+        final int width, height;
+        Preview(byte[] jpeg, int width, int height) {
+            this.jpeg = jpeg; this.width = width; this.height = height;
+        }
+    }
+
+    // Keep genuine, full-frame Android previews below the MCP payload budget.
+    static Preview encodePreview(Bitmap original) throws IOException {
+        if (original == null || original.isRecycled()) throw new IOException("Image Android invalide.");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        for (int edge : new int[]{800, 640, 512, 400, 320, 240}) {
+            float scale = Math.min(1f, edge / (float)Math.max(original.getWidth(), original.getHeight()));
+            Bitmap preview = Bitmap.createScaledBitmap(original,
+                    Math.max(1, Math.round(original.getWidth() * scale)),
+                    Math.max(1, Math.round(original.getHeight() * scale)), true);
+            try {
+                for (int quality : new int[]{62, 42, 28, 20}) {
+                    output.reset();
+                    if (!preview.compress(Bitmap.CompressFormat.JPEG, quality, output))
+                        throw new IOException("Impossible d'encoder l'ecran Android.");
+                    if (output.size() <= 40000)
+                        return new Preview(output.toByteArray(), preview.getWidth(), preview.getHeight());
+                }
+            } finally {
+                if (preview != original) preview.recycle();
+            }
+        }
+        throw new IOException("Capture Android impossible meme apres reduction.");
+    }
+
     private static JSONObject screenshot(EmulatorConnection connection) throws Exception {
         EmulatorConnection.Frame frame = connection.screen();
         Bitmap original = frame.bitmap;
-        float scale = Math.min(1f, 800f / Math.max(original.getWidth(), original.getHeight()));
-        Bitmap preview = Bitmap.createScaledBitmap(original, Math.max(1, Math.round(original.getWidth() * scale)),
-                Math.max(1, Math.round(original.getHeight() * scale)), true);
         try {
-            ByteArrayOutputStream data = new ByteArrayOutputStream();
-            preview.compress(Bitmap.CompressFormat.JPEG, 62, data);
-            if (data.size() > 40_000) {
-                data.reset();
-                preview.compress(Bitmap.CompressFormat.JPEG, 35, data);
-            }
-            if (data.size() > 42_000) throw new IOException("Aperçu Android trop volumineux.");
+            Preview preview = encodePreview(original);
             requireAccess();
             return new JSONObject().put("source", "android_emulator").put("frame_id", frame.id)
                     .put("width", original.getWidth()).put("height", original.getHeight())
-                    .put("preview_width", preview.getWidth()).put("preview_height", preview.getHeight())
-                    .put("mime_type", "image/jpeg").put("image_base64", Base64.encodeToString(data.toByteArray(), Base64.NO_WRAP));
+                    .put("preview_width", preview.width).put("preview_height", preview.height)
+                    .put("mime_type", "image/jpeg")
+                    .put("image_base64", Base64.encodeToString(preview.jpeg, Base64.NO_WRAP));
         } finally {
-            if (preview != original) preview.recycle();
             original.recycle();
         }
     }
