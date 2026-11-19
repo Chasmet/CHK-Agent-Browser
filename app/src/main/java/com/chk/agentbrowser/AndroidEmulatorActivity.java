@@ -68,7 +68,6 @@ public final class AndroidEmulatorActivity extends Activity {
         workspace.restoreState(state);
         findViewById(R.id.emulator_exit).setOnClickListener(view -> finish());
         findViewById(R.id.emulator_menu).setOnClickListener(view -> menu());
-        findViewById(R.id.emulator_native_mode).setOnClickListener(view -> openNativeMode());
         connect.setOnClickListener(view -> prepareAndroid());
         findViewById(R.id.emulator_home).setOnClickListener(view -> key("home"));
         findViewById(R.id.emulator_back).setOnClickListener(view -> key("back"));
@@ -255,7 +254,7 @@ public final class AndroidEmulatorActivity extends Activity {
             return;
         }
         new AgentDialog.Builder(this).setTitle("Installer Android dans CHK")
-                .setMessage("CHK Browser va télécharger et vérifier l’image LineageOS ARM64 (environ 1,1 Go). Prévois 6 Gio libres pour l’installation.")
+                .setMessage("CHK va télécharger une image Android ARM64 indépendante avec Google Mobile Services (environ 1,2 Go), puis vérifier son SHA-256. Prévois 6 Gio libres. Le Play Store devra être vérifié au premier démarrage.")
                 .setPositiveButton("Télécharger et installer", (dialog, which) -> {
                     try {
                         imageDownload.start();
@@ -365,28 +364,6 @@ public final class AndroidEmulatorActivity extends Activity {
                 ui.post(() -> { if (!isDestroyed()) showMessage(message(error)); });
             }
         });
-    }
-
-    private void openNativeMode() {
-        if (!connection.running()) {
-            startActivity(new Intent(this, NativeAndroidActivity.class));
-            return;
-        }
-        new AgentDialog.Builder(this).setTitle("Passer à Android direct ?")
-                .setMessage("QEMU est toujours actif et consomme de la batterie. Tu peux l'arrêter avant de passer au mode natif. L'arrêt forcé peut perdre le travail en cours dans la machine virtuelle, mais ne supprime pas tes fichiers CHK.")
-                .setNegativeButton("Garder QEMU et ouvrir", (d,w) ->
-                        startActivity(new Intent(this, NativeAndroidActivity.class)))
-                .setPositiveButton("Arrêter QEMU et ouvrir", (d,w) -> ENGINE.execute(() -> {
-                    String error = null;
-                    try { connection.forceStop(); }
-                    catch (Exception e) { error = message(e); }
-                    String failure = error;
-                    ui.post(() -> {
-                        if (isDestroyed()) return;
-                        if (failure != null) showMessage(failure);
-                        else startActivity(new Intent(this, NativeAndroidActivity.class));
-                    });
-                })).show();
     }
 
     private void showBootDiagnostic() {
