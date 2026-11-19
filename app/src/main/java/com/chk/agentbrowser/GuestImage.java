@@ -17,8 +17,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 final class GuestImage {
-    static final String URL = "https://github.com/jqssun/android-lineage-qemu/releases/download/v2026.10.18/UTM-VM-lineage-23.2-20261019-jqssun-virtio_arm64only.zip";
-    private static final String SHA256 = "171c0d215899d68f070fd45aea05ddb25737cf4ff16a25468e7cafbc65f4d8c9";
+    static final String URL = "https://github.com/jqssun/android-ci/releases/download/lineage-22.2/UTM-VM-lineage-22.2-virtio_arm64only.zip";
+    private static final String SHA256 = "eecce6851943173facc640fc58588d9a6bd30d51e08abd67c03215453449a468";
     private static final long GIB = 1024L * 1024L * 1024L;
     private static final Set<String> FILES = new HashSet<>(Arrays.asList("efi_vars.fd", "vda.qcow2", "vdb.qcow2"));
 
