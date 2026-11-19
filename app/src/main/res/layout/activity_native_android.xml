@@ -8,7 +8,7 @@
             style="?android:attr/borderlessButtonStyle" android:layout_width="48dp"
             android:layout_height="48dp" android:contentDescription="Retour CHK" />
         <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
-            android:text="Android direct · CHK" android:textSize="18sp" android:textStyle="bold"
+            android:text="Android intégré · CHK" android:textSize="18sp" android:textStyle="bold"
             android:textColor="#F2F2FA"/>
         <Button android:id="@+id/native_help" android:text="Aide" android:textAllCaps="false"
             style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content"
