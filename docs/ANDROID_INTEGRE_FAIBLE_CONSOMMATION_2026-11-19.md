@@ -1,5 +1,5 @@
 # CHK Agent Browser — Android intégré, Play Store réel et faible consommation
-Date : 19 novembre 2026 — statut : **étude de faisabilité, pas de fonctionnalité livrée**.
+Date : 19 novembre 2026 — statut : **prototype intégré en branche de test, non validé sur téléphone réel**.
 
 ## Demande utilisateur et critères non négociables
 
