@@ -131,9 +131,20 @@ final class AppCatalog {
                 output.append(line).append('\n');
             }
         }
-        boolean finished = process.waitFor(Math.max(1, timeoutSeconds), TimeUnit.SECONDS);
+        // java.lang.Process.waitFor(long, TimeUnit) requires API 26; CHK keeps minSdk 23.
+        long deadline = android.os.SystemClock.uptimeMillis() + Math.max(1, timeoutSeconds) * 1000L;
+        boolean finished = false;
+        while (android.os.SystemClock.uptimeMillis() < deadline) {
+            try {
+                process.exitValue();
+                finished = true;
+                break;
+            } catch (IllegalThreadStateException stillRunning) {
+                android.os.SystemClock.sleep(60);
+            }
+        }
         if (!finished) {
-            process.destroyForcibly();
+            process.destroy();
             return new CommandResult(-1, output.append("[timeout]").toString());
         }
         return new CommandResult(process.exitValue(), output.toString().trim());
