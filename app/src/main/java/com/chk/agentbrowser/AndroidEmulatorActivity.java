@@ -34,6 +34,17 @@ public final class AndroidEmulatorActivity extends Activity {
     private final ExecutorService commands = Executors.newSingleThreadExecutor();
     private final ExecutorService media = Executors.newSingleThreadExecutor();
     private final Runnable refresh = this::refreshScreen;
+    // The guest is private to CHK. Keep it running in background only during a
+    // deliberate, time-bounded Local 3 control session.
+    private final Runnable backgroundShutdown = () -> {
+        if (!visible && connection != null && connection.running()
+                && !EmulatorConnection.agentAllowed()) {
+            ENGINE.execute(() -> {
+                try { connection.stop(); }
+                catch (Exception ignored) { /* diagnostic remains in the emulator menu */ }
+            });
+        }
+    };
     private final Runnable downloadTick = this::checkImageDownload;
     private static final java.util.concurrent.atomic.AtomicBoolean IMAGE_IMPORT = new java.util.concurrent.atomic.AtomicBoolean();
     private ImageView screen;
@@ -108,6 +119,7 @@ public final class AndroidEmulatorActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        ui.removeCallbacks(backgroundShutdown);
         visible = true;
         if (!"android".equals(tab)) workspace.refresh();
         if (!connection.running() && !starting && !importing) idleState();
@@ -123,6 +135,11 @@ public final class AndroidEmulatorActivity extends Activity {
         super.onPause();
     }
 
+    @Override protected void onStop() {
+        super.onStop();
+        if (!EmulatorConnection.agentAllowed()) ui.postDelayed(backgroundShutdown, 20_000L);
+    }
+
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
         state.putString("emulator_tab", tab);
@@ -130,6 +147,10 @@ public final class AndroidEmulatorActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (!EmulatorConnection.agentAllowed() && connection != null && connection.running())
+            ENGINE.execute(() -> {
+                try { connection.stop(); } catch (Exception ignored) { }
+            });
         if (picker != null) picker.cancel();
         workspace.destroy();
         commands.shutdownNow();
@@ -254,7 +275,7 @@ public final class AndroidEmulatorActivity extends Activity {
             return;
         }
         new AgentDialog.Builder(this).setTitle("Installer Android dans CHK")
-                .setMessage("CHK va télécharger une image Android ARM64 indépendante avec Google Mobile Services (environ 1,2 Go), puis vérifier son SHA-256. Prévois 6 Gio libres. Le Play Store devra être vérifié au premier démarrage.")
+                .setMessage("CHK va télécharger une image Android ARM64 indépendante avec Google Mobile Services (environ 1,2 Go), puis vérifier son SHA-256. Prévois 6 Gio libres. Cette image communautaire n’est pas certifiée Google et inclut Magisk. Utilise d’abord un compte de test. Le Play Store devra être vérifié au premier démarrage.")
                 .setPositiveButton("Télécharger et installer", (dialog, which) -> {
                     try {
                         imageDownload.start();
