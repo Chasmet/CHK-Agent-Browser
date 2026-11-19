@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 120
     steps:
       - name: Télécharger les sources
         uses: actions/checkout@v4
@@ -36,6 +36,25 @@ jobs:
           gradle-version: '8.11.1'
       - name: Générer le wrapper Gradle
         run: gradle wrapper --gradle-version 8.11.1
+      - uses: actions/cache@v4
+        id: real_android_engine
+        with:
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libqemu-system-aarch64.so
+            app/src/main/jniLibs/arm64-v8a/libpodroid-launcher.so
+            app/src/main/jniLibs/arm64-v8a/libslirp.so
+            app/src/main/assets/android-guest/
+          key: chk-real-qemu-arm64-${{ hashFiles('guest/build-engine.sh') }}-v2
+      - name: Compiler le véritable moteur Android ARM64 embarqué (QEMU)
+        if: steps.real_android_engine.outputs.cache-hit != 'true'
+        run: bash guest/build-engine.sh
+      - name: Interdire toute APK sans son véritable moteur Android
+        run: |
+          test -s app/src/main/jniLibs/arm64-v8a/libqemu-system-aarch64.so
+          test -s app/src/main/jniLibs/arm64-v8a/libpodroid-launcher.so
+          test -s app/src/main/jniLibs/arm64-v8a/libslirp.so
+          test -s app/src/main/assets/android-guest/edk2-aarch64-code.fd
+          test -s app/src/main/assets/android-guest/efi-virtio.rom
       - name: Compiler le moteur IA local ARM64 (llama.cpp, code source figé)
         run: |
           bash scripts/build_local_ai_android.sh
@@ -43,7 +62,9 @@ jobs:
       - name: Vérifier les scripts navigateur et la reconnexion
         run: bash validation/check.sh
       - name: Compiler APK debug
-        run: ./gradlew --no-daemon assembleDebug lintDebug
+        run: |
+          ./gradlew --no-daemon assembleDebug lintDebug
+          python3 guest/check-apk.py app/build/outputs/apk/debug/app-debug.apk
       - name: Afficher les erreurs Android si la vérification échoue
         if: failure()
         run: |
@@ -141,16 +162,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           APK=app/build/outputs/apk/release/app-release.apk
-          python3 - "$APK" <<'PYAPK'
-          import sys, zipfile
-          with zipfile.ZipFile(sys.argv[1]) as apk:
-              names = apk.namelist()
-              removed = ("libqemu", "libpodroid", "libslirp", "assets/android-guest/")
-              unexpected = [name for name in names if any(part in name for part in removed)]
-              if unexpected:
-                  raise SystemExit(f"Composants de l’ancien émulateur présents : {unexpected}")
-          print("APK vérifiée sans moteur ni image de l’émulateur")
-          PYAPK
+          python3 guest/check-apk.py "$APK"
           SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
           "$SIGNER" verify --verbose --print-certs "$APK"
           curl --fail --silent --show-error --location --retry 2 -o previous-release.apk https://github.com/Chasmet/CHK-Agent-Browser/releases/download/v1.0.739/CHK-Agent-Browser-1.0.739.apk
