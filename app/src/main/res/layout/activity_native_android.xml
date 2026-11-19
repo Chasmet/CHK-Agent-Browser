@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="#17181C" android:padding="8dp">
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <Button android:id="@+id/native_exit" android:text="‹" android:textSize="24sp"
+            style="?android:attr/borderlessButtonStyle" android:layout_width="48dp"
+            android:layout_height="48dp" android:contentDescription="Retour CHK" />
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:text="Android intégré · CHK" android:textSize="18sp" android:textStyle="bold"
+            android:textColor="#F2F2FA"/>
+        <Button android:id="@+id/native_help" android:text="Aide" android:textAllCaps="false"
+            style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content"
+            android:layout_height="48dp"/>
+    </LinearLayout>
+    <TextView android:id="@+id/native_status" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:minHeight="48dp"
+        android:text="Démarrage de l'espace Android natif…" android:textColor="#C5BFFF"
+        android:textSize="13sp" android:padding="10dp"/>
+    <HorizontalScrollView android:fillViewport="true" android:scrollbars="none"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_width="wrap_content" android:layout_height="wrap_content">
+            <Button android:id="@+id/native_shizuku" android:text="Autoriser Shizuku"
+                android:textAllCaps="false" android:layout_width="wrap_content" android:layout_height="48dp"/>
+            <Button android:id="@+id/native_start" android:text="Créer l'écran"
+                android:textAllCaps="false" android:layout_width="wrap_content" android:layout_height="48dp"/>
+            <Button android:id="@+id/native_apps" android:text="Applications"
+                android:textAllCaps="false" android:layout_width="wrap_content" android:layout_height="48dp"/>
+            <Button android:id="@+id/native_release" android:text="Arrêter"
+                android:textAllCaps="false" android:layout_width="wrap_content" android:layout_height="48dp"/>
+        </LinearLayout>
+    </HorizontalScrollView>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:background="#08090C">
+        <ImageView android:id="@+id/native_screen" android:layout_width="match_parent"
+            android:layout_height="match_parent" android:scaleType="fitCenter"
+            android:contentDescription="Capture de l'application Android sur écran virtuel"/>
+        <TextView android:id="@+id/native_placeholder" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_gravity="center"
+            android:padding="24dp" android:textColor="#B9B4CB" android:textSize="15sp"
+            android:text="Écran virtuel natif · sans QEMU.\nActive Shizuku, puis Créer l'écran et Applications."
+            android:gravity="center"/>
+    </FrameLayout>
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <Button android:id="@+id/native_back" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="48dp" android:text="Retour" android:textAllCaps="false"/>
+        <Button android:id="@+id/native_home" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="48dp" android:text="Accueil" android:textAllCaps="false"/>
+        <Button android:id="@+id/native_keyboard" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="48dp" android:text="Clavier" android:textAllCaps="false"/>
+    </LinearLayout>
+    <Button android:id="@+id/native_agent" android:layout_width="match_parent"
+        android:layout_height="48dp" android:textAllCaps="false"
+        android:text="Autoriser Local 3 à piloter l'écran pendant 20 min"/>
+</LinearLayout>
