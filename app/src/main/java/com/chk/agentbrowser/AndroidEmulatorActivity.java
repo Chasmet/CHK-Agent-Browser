@@ -34,17 +34,6 @@ public final class AndroidEmulatorActivity extends Activity {
     private final ExecutorService commands = Executors.newSingleThreadExecutor();
     private final ExecutorService media = Executors.newSingleThreadExecutor();
     private final Runnable refresh = this::refreshScreen;
-    // The guest is private to CHK. Keep it running in background only during a
-    // deliberate, time-bounded Local 3 control session.
-    private final Runnable backgroundShutdown = () -> {
-        if (!visible && connection != null && connection.running()
-                && !EmulatorConnection.agentAllowed()) {
-            ENGINE.execute(() -> {
-                try { connection.stop(); }
-                catch (Exception ignored) { /* diagnostic remains in the emulator menu */ }
-            });
-        }
-    };
     private final Runnable downloadTick = this::checkImageDownload;
     private static final java.util.concurrent.atomic.AtomicBoolean IMAGE_IMPORT = new java.util.concurrent.atomic.AtomicBoolean();
     private ImageView screen;
@@ -68,6 +57,18 @@ public final class AndroidEmulatorActivity extends Activity {
     private boolean externalPickerOpen;
     private boolean importing;
     private String tab = "android";
+
+    // The guest is private to CHK. Keep it running in background only during a
+    // deliberate, time-bounded Local 3 control session.
+    private final Runnable backgroundShutdown = () -> {
+        if (!visible && connection != null && connection.running()
+                && !EmulatorConnection.agentAllowed()) {
+            ENGINE.execute(() -> {
+                try { connection.stop(); }
+                catch (Exception ignored) { /* diagnostic remains in the emulator menu */ }
+            });
+        }
+    };
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
