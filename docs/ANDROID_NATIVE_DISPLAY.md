@@ -55,8 +55,7 @@ réussie sans une image transmise et décodée.
   ne pas accorder cet accès à d'autres applications non fiables.
 - Les applications externes ne sont **pas copiées, modifiées, resignées ni clonées**.
 - Pas d'import d'APK dans ce mode ; installer les applications normalement sur le téléphone.
-- L'écran virtuel est privé au service CHK, mais les applis peuvent utiliser les mêmes
-  comptes et données que sur l'écran principal. Les actions MCP restent réelles.
+- L'écran virtuel est créé avec les indicateurs `PUBLIC` et `OWN_CONTENT_ONLY` requis par Android ; **il n'offre pas l'isolation d'un système d'exploitation invité**. Les applications partagent les mêmes comptes et données que sur l'écran principal. Il faut éviter les comptes sensibles avant vérification sur le téléphone. Les actions MCP restent réelles.
 - Le contenu DRM, les protections Play Integrity, les authentifications fortes et certaines
   applications sociales peuvent bloquer l'affichage ou le contrôle.
 - Test réel du secondaire HONOR Android 16, du clavier, des captures et des gestes requis
