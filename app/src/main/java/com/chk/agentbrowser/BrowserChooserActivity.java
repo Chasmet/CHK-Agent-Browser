@@ -14,14 +14,9 @@ public final class BrowserChooserActivity extends Activity {
             if (getIntent().getBooleanExtra(RETURN_TO_CLASSIC, false)) finish();
             else startActivity(new Intent(this, MainActivity.class));
         });
-        findViewById(R.id.open_native_android).setVisibility(
-                getResources().getBoolean(R.bool.chk_native_display_supported)
-                        ? android.view.View.VISIBLE : android.view.View.GONE);
         findViewById(R.id.open_native_android).setOnClickListener(view ->
                 startActivity(new Intent(this, NativeAndroidActivity.class)));
-        findViewById(R.id.open_emulator).setOnClickListener(view ->
-                startActivity(new Intent(this, AndroidEmulatorActivity.class)));
-        findViewById(R.id.browser_chooser_settings).setOnClickListener(view ->
+findViewById(R.id.browser_chooser_settings).setOnClickListener(view ->
                 startActivity(new Intent(this, SettingsActivity.class)));
         WorkspaceHealth.ensure(this);
         MainActivity.checkForUpdate(this);
