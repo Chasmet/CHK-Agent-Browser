@@ -41,7 +41,7 @@ public final class AndroidEmulatorWorkspaceTest {
                 classic.finish();
             });
             instrument.waitForIdleSync();
-            instrument.runOnMainSync(() -> home.findViewById(R.id.open_emulator).performClick());
+            instrument.runOnMainSync(() -> home.findViewById(R.id.open_native_android).performClick());
             Activity android = androidMonitor.waitForActivityWithTimeout(8000);
             assertNotNull(android);
             instrument.runOnMainSync(() -> {
