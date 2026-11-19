@@ -65,6 +65,7 @@ public final class AndroidEmulatorActivity extends Activity {
     private boolean sendingMedia;
     private boolean errorDisplayed;
     private boolean starting;
+    private boolean externalPickerOpen;
     private boolean importing;
     private String tab = "android";
 
@@ -137,7 +138,7 @@ public final class AndroidEmulatorActivity extends Activity {
 
     @Override protected void onStop() {
         super.onStop();
-        if (!EmulatorConnection.agentAllowed()) ui.postDelayed(backgroundShutdown, 20_000L);
+        if (!externalPickerOpen && !EmulatorConnection.agentAllowed()) ui.postDelayed(backgroundShutdown, 20_000L);
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
@@ -147,7 +148,7 @@ public final class AndroidEmulatorActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
-        if (!EmulatorConnection.agentAllowed() && connection != null && connection.running())
+        if (!externalPickerOpen && !EmulatorConnection.agentAllowed() && connection != null && connection.running())
             ENGINE.execute(() -> {
                 try { connection.stop(); } catch (Exception ignored) { }
             });
@@ -284,7 +285,7 @@ public final class AndroidEmulatorActivity extends Activity {
                         showMessage(message(error));
                     }
                 })
-                .setNeutralButton("Choisir un ZIP", (dialog, which) -> startActivityForResult(
+                .setNeutralButton("Choisir un ZIP", (dialog, which) -> openGuestPicker(
                         new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_SYSTEM_IMAGE))
                 .setNegativeButton("Annuler", null).show();
     }
@@ -432,7 +433,7 @@ public final class AndroidEmulatorActivity extends Activity {
                     Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                     picker.setType("*/*");
                     picker.addCategory(Intent.CATEGORY_OPENABLE);
-                    startActivityForResult(picker, PICK_GUEST_APK);
+                    openGuestPicker(picker, PICK_GUEST_APK);
                 }).show();
     }
 
@@ -593,7 +594,7 @@ public final class AndroidEmulatorActivity extends Activity {
                 if (uris != null && uris.length > 0) sendMedia(uris[0]);
             }, () -> {
                 picker = null;
-                startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
+                openGuestPicker(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
                         .addCategory(Intent.CATEGORY_OPENABLE)
                         .putExtra(Intent.EXTRA_MIME_TYPES, new String[] {"video/*", "image/*", "audio/*"}), PICK_DEVICE_MEDIA);
             }, false);
@@ -602,8 +603,19 @@ public final class AndroidEmulatorActivity extends Activity {
         }
     }
 
+    private void openGuestPicker(Intent intent, int request) {
+        externalPickerOpen = true;
+        try { startActivityForResult(intent, request); }
+        catch (RuntimeException error) {
+            externalPickerOpen = false;
+            showMessage("Sélecteur de fichiers indisponible : " + message(error));
+        }
+    }
+
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == PICK_SYSTEM_IMAGE || request == PICK_GUEST_APK || request == PICK_DEVICE_MEDIA)
+            externalPickerOpen = false;
         if (workspace.result(request, result, data)) return;
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         if (request == PICK_DEVICE_MEDIA || request == PICK_GUEST_APK) sendMedia(data.getData());
