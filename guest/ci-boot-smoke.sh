@@ -50,7 +50,7 @@ QEMU=qemu-system-aarch64
   -device virtio-net-pci,netdev=net0,romfile= \
   -netdev user,id=net0,hostfwd=tcp:127.0.0.1:15555-:5555 \
   -drive if=pflash,unit=0,format=raw,readonly=on,file=code.fd \
-  -drive if=pflash,unit=1,format=qcow2,file=efi_vars.fd \
+  -drive if=pflash,unit=1,format=raw,file=efi_vars.fd \
   -drive file=vda.qcow2,if=none,id=vda,format=qcow2 \
   -device virtio-blk-pci,drive=vda,bootindex=0,romfile= \
   -drive file=vdb.qcow2,if=none,id=vdb,format=qcow2 \
