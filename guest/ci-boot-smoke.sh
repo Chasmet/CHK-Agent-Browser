@@ -34,7 +34,11 @@ FW=$(find /usr/share -type f \( -name 'QEMU_EFI.fd' -o -name 'edk2-aarch64-code.
 test -n "$FW"
 cp "$FW" code.fd
 truncate -s 67108864 code.fd
-echo "Firmware: $FW"
+# The vendor EFI vars image enables Secure Boot using keys not trusted by
+# the host Ubuntu EDK2 firmware. Preserve it and start with fresh variables.
+mv efi_vars.fd vendor_efi_vars.qcow2
+truncate -s 67108864 efi_vars.fd
+echo "Firmware: $FW (fresh, unsigned/unenrolled UEFI variables)"
 
 QEMU=qemu-system-aarch64
 "$QEMU" -machine virt -cpu max,pauth-impdef=on -accel tcg,thread=multi,tb-size=256 \
@@ -86,9 +90,14 @@ s.close()
 PY
 
 echo "Boot probe: request actual Android property over the guest's ADB port."
-DEADLINE=$((SECONDS+1000))
+DEADLINE=$((SECONDS+420))
 BOOT=0
 while ((SECONDS < DEADLINE)); do
+    if grep -qiE "No bootable option or device|Security Violation" serial.log 2>/dev/null; then
+        echo "UEFI firmware refused the guest loader:" >&2
+        tail -n 45 serial.log || true
+        break
+    fi
     if ! kill -0 "$PID" 2>/dev/null; then
         echo "QEMU process exited before guest boot" >&2
         tail -n 80 qemu.log || true
