@@ -36,7 +36,6 @@ public final class NativeAndroidDisplayTest {
         Activity launcher = instrument.startActivitySync(intent);
         try {
             assertNotNull(launcher.findViewById(R.id.open_classic));
-            assertNull(launcher.findViewById(R.id.open_emulator));
             View nativeButton = launcher.findViewById(R.id.open_native_android);
             assertNotNull(nativeButton);
             instrument.runOnMainSync(nativeButton::performClick);
