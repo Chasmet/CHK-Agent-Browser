@@ -15,6 +15,10 @@ import java.io.FileOutputStream;
 import java.security.SecureRandom;
 import java.util.ArrayDeque;
 import java.util.Locale;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Shell-side state machine: owns the virtual display, the input bridge and the
@@ -30,6 +34,15 @@ final class DisplayEngine {
 
     private VirtualDisplaySession display;
     private InputBridge input;
+    // Backup expiry in the isolated Shizuku process, even if CHK's Activity dies.
+    private static final long MAX_DISPLAY_MINUTES = 20;
+    private final ScheduledExecutorService expiryWorker = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "chk-native-display-expiry");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private ScheduledFuture<?> displayExpiry;
+    private long displayGeneration;
     private String lastError = "";
     private final long createdUptime = SystemClock.uptimeMillis();
 
@@ -116,6 +129,7 @@ final class DisplayEngine {
                 display = VirtualDisplaySession.create(context, safeWidth, safeHeight, safeDpi);
                 boolean on = display.ensureOn();
                 ensureInput();
+                scheduleExpiryLocked();
                 lastError = "";
                 log("display created id=" + display.displayId
                         + " " + safeWidth + "x" + safeHeight + " @" + safeDpi
@@ -151,7 +165,24 @@ final class DisplayEngine {
         }
     }
 
+    private void scheduleExpiryLocked() {
+        long generation = ++displayGeneration;
+        if (displayExpiry != null) displayExpiry.cancel(false);
+        displayExpiry = expiryWorker.schedule(() -> {
+            synchronized (lock) {
+                if (generation != displayGeneration || display == null) return;
+                log("Automatic display shutdown after 20 minutes");
+                releaseLocked();
+            }
+        }, MAX_DISPLAY_MINUTES, TimeUnit.MINUTES);
+    }
+
     private void releaseLocked() {
+        displayGeneration++;
+        if (displayExpiry != null) {
+            displayExpiry.cancel(false);
+            displayExpiry = null;
+        }
         if (display != null) {
             try {
                 display.release();
