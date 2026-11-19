@@ -1,3 +1,12 @@
+## Nouveau mode : Android direct (Shizuku) — 19 novembre 2026
+
+- Ajout **dans CHK Agent Browser existant** d'un mode Android direct, sans QEMU ni image LineageOS. Il utilise un second écran Android véritable pour afficher et piloter des applications déjà installées sur le téléphone.
+- Configuration explicite de Shizuku par débogage sans fil (sans PC). La permission est gérée par l'app Shizuku et accordée volontairement par le propriétaire.
+- L'agent Local 3 peut lire l'état, afficher l'écran réel, cliquer, défiler et saisir uniquement après autorisation pendant 20 minutes. Même serveur MCP et mêmes règles d'autorisation ; aucune route PC/Render modifiée.
+- Aucun clonage, import ni ressignature d'APK ; les applications affichées partagent leurs données existantes. Un arrêt libère seulement le second écran, sans détruire d'application.
+- L'ancien émulateur et son image QEMU restent disponibles sous « Ancien émulateur Android · expérimental » pour ne perdre aucune donnée.
+- **Limites :** Shizuku est nécessaire et peut devoir être redémarré après un redémarrage du téléphone. Certaines applications refusent l'écran secondaire ou masquent le DRM. Fonctionnement réel à confirmer sur Honor Android 16 ; le build ne vaut pas test de bout en bout.
+
 ## Capture de l'Android virtuel plus robuste (19 novembre 2026)
 
 - Corrige l'erreur "Aperçu Android trop volumineux" rencontrée en direct via CHK Browser Local 3. La capture réelle QEMU est maintenant compressée progressivement (qualité JPEG et résolution) jusqu'à respecter la limite MCP de 40 Ko, sans simuler l'écran.
