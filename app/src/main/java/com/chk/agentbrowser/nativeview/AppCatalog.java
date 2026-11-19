@@ -69,7 +69,7 @@ final class AppCatalog {
             }
             result.add(new AppInfo(label, application.packageName));
         }
-        result.sort(Comparator.comparing(a -> a.label.toLowerCase(Locale.US)));
+        java.util.Collections.sort(result, (a, b) -> a.label.compareToIgnoreCase(b.label));
         return result;
     }
 
