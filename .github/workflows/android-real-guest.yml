@@ -1,0 +1,76 @@
+name: CHK - Android guest ARM64 real VM smoke and APK
+on:
+  push:
+    branches: [feature/real-android-guest-qemu-20261119]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: chk-real-android-guest-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  engine-and-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK 36
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager | head -n 1)
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Wrapper
+        run: gradle wrapper --gradle-version 8.11.1
+      - uses: actions/cache@v4
+        id: engine
+        with:
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libqemu-system-aarch64.so
+            app/src/main/jniLibs/arm64-v8a/libpodroid-launcher.so
+            app/src/main/jniLibs/arm64-v8a/libslirp.so
+            app/src/main/assets/android-guest/
+          key: chk-real-qemu-arm64-${{ hashFiles('guest/build-engine.sh') }}-v2
+      - name: Build actual Android QEMU engine ARM64
+        if: steps.engine.outputs.cache-hit != 'true'
+        run: bash guest/build-engine.sh
+      - name: Refuse a placeholder engine
+        run: |
+          test -s app/src/main/jniLibs/arm64-v8a/libqemu-system-aarch64.so
+          test -s app/src/main/jniLibs/arm64-v8a/libpodroid-launcher.so
+          test -s app/src/main/jniLibs/arm64-v8a/libslirp.so
+          test -s app/src/main/assets/android-guest/edk2-aarch64-code.fd
+          test -s app/src/main/assets/android-guest/efi-virtio.rom
+      - name: Build actual APK and test sources
+        run: |
+          bash validation/check.sh
+          ./gradlew --no-daemon assembleDebug lintDebug :app:assembleDebugAndroidTest
+          python3 guest/check-apk.py app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CHK-Real-Android-QEMU-Debug-${{ github.run_number }}
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+          if-no-files-found: error
+  verify-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the genuine LineageOS GMS VM image
+        run: |
+          curl --fail --show-error --silent --location --retry 2 -o guest-image.zip https://github.com/jqssun/android-ci/releases/download/lineage-22.2/UTM-VM-lineage-22.2-virtio_arm64only.zip
+          echo 'eecce6851943173facc640fc58588d9a6bd30d51e08abd67c03215453449a468  guest-image.zip' | sha256sum --check
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile("guest-image.zip") as f:
+              names={i.filename.rsplit("/Data/",1)[-1]:i.file_size for i in f.infolist() if "/Data/" in i.filename}
+              for path in ["efi_vars.fd","vda.qcow2","vdb.qcow2"]:
+                  assert 0<names.get(path,0)<=(4<<30), (path,names)
+              print("Authentic LineageOS VM disks:",names)
+          PY
