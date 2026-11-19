@@ -1,0 +1,30 @@
+name: CHK - Prove Android guest boots with real Google Play
+on:
+  push:
+    branches: [test/arm64-lineage-gms-boot-20261119]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-real-android:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install QEMU AArch64 and Android debug bridge
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends qemu-system-arm qemu-utils qemu-efi-aarch64 adb
+      - name: Boot real Android, inspect boot property and Google Play packages
+        run: bash guest/ci-boot-smoke.sh
+      - name: Keep serial logs and REAL emulator screenshot on failure or success
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CHK-Android-ARM64-boot-proof-${{ github.run_number }}
+          path: |
+            .ci-real-guest/qemu.log
+            .ci-real-guest/serial.log
+            .ci-real-guest/vm-frame.ppm
+          if-no-files-found: ignore
+          retention-days: 5
