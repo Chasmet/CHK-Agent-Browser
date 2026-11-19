@@ -40,17 +40,17 @@ QEMU=qemu-system-aarch64
 "$QEMU" -machine virt -cpu max,pauth-impdef=on -accel tcg,thread=multi,tb-size=256 \
   -m 2048 -smp 2 -display none -monitor none -serial file:serial.log \
   -qmp unix:qmp.sock,server=on,wait=off \
-  -device virtio-gpu-pci -device qemu-xhci,id=usb \
+  -device virtio-gpu-pci,romfile= -device qemu-xhci,id=usb \
   -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0 \
   -device virtio-rng-pci -device virtio-serial \
-  -device virtio-net-pci,netdev=net0 \
+  -device virtio-net-pci,netdev=net0,romfile= \
   -netdev user,id=net0,hostfwd=tcp:127.0.0.1:15555-:5555 \
   -drive if=pflash,unit=0,format=raw,readonly=on,file=code.fd \
   -drive if=pflash,unit=1,format=qcow2,file=efi_vars.fd \
   -drive file=vda.qcow2,if=none,id=vda,format=qcow2 \
-  -device virtio-blk-pci,drive=vda,bootindex=0 \
+  -device virtio-blk-pci,drive=vda,bootindex=0,romfile= \
   -drive file=vdb.qcow2,if=none,id=vdb,format=qcow2 \
-  -device virtio-blk-pci,drive=vdb,bootindex=1 \
+  -device virtio-blk-pci,drive=vdb,bootindex=1,romfile= \
   > qemu.log 2>&1 &
 PID=$!
 cleanup() { kill "$PID" 2>/dev/null || true; }
@@ -60,12 +60,18 @@ python3 - <<'PY'
 import json,socket,time,os
 path='qmp.sock'
 for _ in range(100):
-    if os.path.exists(path):break
+    if os.path.exists(path):
+        try:
+            s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+            s.settimeout(12)
+            s.connect(path)
+            break
+        except (ConnectionRefusedError,FileNotFoundError):
+            s.close()
     time.sleep(.2)
-else:raise SystemExit("QEMU never created its monitor")
-s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
-s.settimeout(12)
-s.connect(path)
+else:
+    print(open('qemu.log').read()[-2000:])
+    raise SystemExit("QEMU never accepted a monitor connection")
 def take():
     b=b''
     while not b.endswith(b'\n'):
