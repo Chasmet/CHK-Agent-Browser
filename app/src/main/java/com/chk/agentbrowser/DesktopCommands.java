@@ -12,7 +12,7 @@ final class DesktopCommands {
     static JSONObject parameters(String action,JSONObject args)throws Exception{
         JSONObject p=action.equals("type")?new JSONObject(args.getString("text")):args;
         if(p==null||p.toString().getBytes("UTF-8").length>60000)throw new Exception("Commande IA trop grande (60 Ko maximum).");
-        if(!java.util.Arrays.asList("vision","pointer","files","tasks","terminal","browser","control","hearing","studio","tor","social_native","production","local_ai","android_space","android_emulator").contains(p.optString("tool")))throw new Exception("Outil IA inconnu.");return p;
+        if(!java.util.Arrays.asList("vision","pointer","files","tasks","terminal","browser","control","hearing","studio","tor","social_native","production","local_ai","android_emulator").contains(p.optString("tool")))throw new Exception("Outil IA inconnu.");return p;
     }
     static boolean nativeTarget(JSONObject command){
         if(!handles(command.optString("action"),command.optJSONObject("args")))return false;
@@ -45,17 +45,6 @@ final class DesktopCommands {
             case "production":ProductionMcp.execute(c,web,p,cb);return;
             case "tor":TorMcp.execute(c,p,cb);return;
             case "android_emulator": EmulatorMcp.execute(c,p,cb); return;
-            case "android_space":
-                WorkspaceCommands.IO.execute(()->{
-                    try {
-                        JSONObject value=NativeDisplayMcp.command(c,p);
-                        WorkspaceCommands.UI.post(()->{if(cb.isActive())cb.finish(true,value.toString());});
-                    }catch(Exception ex){
-                        WorkspaceCommands.UI.post(()->{if(cb.isActive())cb.finish(false,
-                            ex.getMessage()==null?"Android intégré indisponible":ex.getMessage());});
-                    }
-                });
-                return;
             case "browser":BrowserAutomation.execute(c,web,p,cb);return;
             case "vision":AgentVision.execute(c,web,p,cb);return;
             case "pointer":AgentPointer.execute(c,web,p,cb);return;
