@@ -12,7 +12,6 @@ import android.os.Looper;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.KeyEvent;
-import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -42,7 +41,7 @@ public final class NativeAndroidActivity extends Activity {
     private TextView status, placeholder;
     private Bitmap rendered;
     private boolean visible, capturePending;
-    private int screenWidth = 720, screenHeight = 1280;
+    private int screenWidth = 540, screenHeight = 960;
     private float gestureX, gestureY;
     private long gestureTime;
     private final EngineClient.Listener listener = () -> ui.post(this::refreshState);
@@ -51,15 +50,14 @@ public final class NativeAndroidActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         setContentView(R.layout.activity_native_android);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         engine = EngineClient.get(this);
         screen = findViewById(R.id.native_screen);
         status = findViewById(R.id.native_status);
         placeholder = findViewById(R.id.native_placeholder);
-        findViewById(R.id.native_exit).setOnClickListener(v -> finish());
+        findViewById(R.id.native_exit).setOnClickListener(v -> { io.execute(engine::releaseDisplay); finish(); });
         findViewById(R.id.native_help).setOnClickListener(v -> showHelp());
         findViewById(R.id.native_shizuku).setOnClickListener(v -> setupShizuku());
-        findViewById(R.id.native_start).setOnClickListener(v -> action(() -> engine.createDisplay(720, 1280, 320)));
+        findViewById(R.id.native_start).setOnClickListener(v -> action(() -> engine.createDisplay(540, 960, 240)));
         findViewById(R.id.native_apps).setOnClickListener(v -> chooseApp());
         findViewById(R.id.native_release).setOnClickListener(v -> new AgentDialog.Builder(this)
                 .setTitle("Arrêter l'écran Android direct ?")
@@ -87,15 +85,22 @@ public final class NativeAndroidActivity extends Activity {
     @Override protected void onPause() {
         visible = false;
         ui.removeCallbacks(poll);
+        // No display polling when CHK is no longer visible.
         super.onPause();
+    }
+    @Override protected void onStop() {
+        super.onStop();
+        if (!NativeDisplayAccess.agentAllowed() && !io.isShutdown())
+            io.execute(engine::releaseDisplay);
     }
 
     @Override protected void onDestroy() {
         engine.removeListener(listener);
         ui.removeCallbacksAndMessages(null);
-        io.shutdownNow();
+        io.shutdown();
         screen.setImageDrawable(null);
         if (rendered != null) rendered.recycle();
+        if (!NativeDisplayAccess.agentAllowed()) WorkspaceCommands.IO.execute(engine::stopService);
         super.onDestroy();
     }
 
@@ -108,19 +113,19 @@ public final class NativeAndroidActivity extends Activity {
                 : "Shizuku absent ou arrêté · voir Aide";
         ((TextView)findViewById(R.id.native_shizuku)).setText(
                 engine.isBinderAlive() && engine.hasPermission() ? "Reconnecter" : "Autoriser Shizuku");
-        status.setText(prefix + (EmulatorConnection.agentAllowed() ? " · Local 3 autorisé" : ""));
+        status.setText(prefix + (NativeDisplayAccess.agentAllowed() ? " · Local 3 autorisé" : ""));
         if (engine.isServiceConnected()) {
             io.execute(() -> {
                 try {
                     JSONObject info = new JSONObject(engine.status());
                     if (info.optBoolean("display_ready")) {
-                        screenWidth = info.optInt("display_width", 720);
-                        screenHeight = info.optInt("display_height", 1280);
+                        screenWidth = info.optInt("display_width", 540);
+                        screenHeight = info.optInt("display_height", 960);
                     }
                     String detail = info.optString("display_state", "");
                     ui.post(() -> {
                         if (!isDestroyed()) status.setText(prefix + (detail.isEmpty() ? "" : " · écran " + detail)
-                                + (EmulatorConnection.agentAllowed() ? " · Local 3 autorisé" : ""));
+                                + (NativeDisplayAccess.agentAllowed() ? " · Local 3 autorisé" : ""));
                     });
                 } catch (Exception ignored) { }
             });
@@ -138,10 +143,10 @@ public final class NativeAndroidActivity extends Activity {
     }
 
     private void showHelp() {
-        new AgentDialog.Builder(this).setTitle("Android direct dans CHK")
+        new AgentDialog.Builder(this).setTitle("Android intégré dans CHK")
                 .setMessage("Ce mode ne démarre PAS une deuxième copie d'Android. Il crée un écran virtuel où les applications réellement installées sur ce téléphone peuvent apparaître.\n\n"
                         + "Pour l'autoriser, installe et démarre Shizuku sur le téléphone avec le débogage sans fil, puis accorde l'accès à CHK. Aucune connexion PC ni nouveau serveur CHK n'est nécessaire.\n\n"
-                        + "Le résultat dépend des limitations Honor/Android. Certains programmes refusent les écrans secondaires ou cachent leurs vidéos protégées. Les applications partagent leurs données et comptes existants ; elles ne sont pas clonées.")
+                        + "Play Store et TikTok apparaissent dans CHK uniquement si Honor/Android autorise leur affichage sur un écran secondaire. Aucun succès ne peut être promis sans essai réel. Les données et comptes sont ceux du téléphone, pas un profil séparé.")
                 .setNegativeButton("Fermer", null)
                 .setPositiveButton("Site officiel Shizuku", (d,w) -> startActivity(
                         new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://shizuku.rikka.app/"))))
@@ -209,7 +214,7 @@ public final class NativeAndroidActivity extends Activity {
         }
         capturePending = true;
         io.execute(() -> {
-            EngineClient.Frame next = engine.capture(250, 58);
+            EngineClient.Frame next = engine.capture(250, 52);
             Bitmap bitmap = next.ok() ? BitmapFactory.decodeByteArray(next.jpeg,0,next.jpeg.length) : null;
             ui.post(() -> {
                 capturePending = false;
@@ -221,7 +226,8 @@ public final class NativeAndroidActivity extends Activity {
                     placeholder.setVisibility(View.GONE);
                     if (old != null) old.recycle();
                 }
-                if (visible) ui.postDelayed(poll, bitmap == null ? 2500 : 850);
+                if (visible) ui.postDelayed(poll, bitmap == null ? 4000 :
+                        (android.os.SystemClock.elapsedRealtime()-gestureTime < 12000L ? 1300L : 3200L));
             });
         });
     }
@@ -268,15 +274,15 @@ public final class NativeAndroidActivity extends Activity {
     }
 
     private void agentAccess() {
-        if (EmulatorConnection.agentAllowed()) {
-            EmulatorConnection.stopAgent();
+        if (NativeDisplayAccess.agentAllowed()) {
+            NativeDisplayAccess.stopAgent(this);
             message("Accès Local 3 arrêté.");
         } else {
             new AgentDialog.Builder(this).setTitle("Autoriser Local 3 ?")
                     .setMessage("Pendant 20 minutes, ChatGPT peut voir et contrôler les applications affichées sur l'écran virtuel CHK. Les actions dans tes comptes restent réelles.")
                     .setNegativeButton("Annuler", null)
                     .setPositiveButton("Autoriser",(dialog,which) -> {
-                        EmulatorConnection.allowAgent();
+                        NativeDisplayAccess.allowAgent(this);
                         refreshState();
                     }).show();
         }
