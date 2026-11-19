@@ -43,9 +43,6 @@ final class EmulatorMcp {
 
     private static JSONObject command(Context app, JSONObject args) throws Exception {
         String operation = args.optString("operation", "status");
-        if (operation.startsWith("native_")) {
-            return NativeDisplayMcp.command(app, args);
-        }
         if ("status".equals(operation)) {
             JSONObject result = new JSONObject().put("source", "android_emulator").put("authorized", EmulatorConnection.agentAllowed())
                     .put("preview_allowed", AgentClient.get(app).isPreviewAllowed());
