@@ -209,11 +209,27 @@ final class EmulatorConnection {
         stopAgent();
     }
 
-    static void allowAgent() { agentUntil = SystemClock.elapsedRealtime() + 20 * 60_000L; }
+    private static final android.os.Handler AGENT_TIMER =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private static Runnable agentExpiry;
+    static synchronized void allowAgent() {
+        agentUntil = SystemClock.elapsedRealtime() + 20 * 60_000L;
+        if (agentExpiry != null) AGENT_TIMER.removeCallbacks(agentExpiry);
+        agentExpiry = () -> {
+            if (!agentAllowed()) WorkspaceCommands.IO.execute(() -> {
+                try { INSTANCE.stop(); } catch (Exception ignored) { }
+            });
+        };
+        AGENT_TIMER.postDelayed(agentExpiry, 20 * 60_000L);
+    }
     synchronized long bootElapsedSeconds() {
         return running() && startedElapsed > 0 ? (SystemClock.elapsedRealtime() - startedElapsed) / 1000L : 0L;
     }
-    static void stopAgent() { agentUntil = 0L; }
+    static synchronized void stopAgent() {
+        agentUntil = 0L;
+        if (agentExpiry != null) AGENT_TIMER.removeCallbacks(agentExpiry);
+        agentExpiry = null;
+    }
     static boolean agentAllowed() { return agentUntil > SystemClock.elapsedRealtime(); }
 
     synchronized JSONObject status() throws Exception {
