@@ -9,7 +9,7 @@
             android:layout_width="48dp" android:layout_height="48dp" android:minWidth="0dp" android:text="‹"
             android:textSize="24sp" android:contentDescription="Accueil des navigateurs" />
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-            android:text="Navigateur Android" android:textStyle="bold" android:textSize="18sp" android:textColor="#F2F2FA" />
+            android:text="Android invité · CHK" android:textStyle="bold" android:textSize="18sp" android:textColor="#F2F2FA" />
         <Button android:id="@+id/emulator_menu" style="?android:attr/borderlessButtonStyle"
             android:layout_width="48dp" android:layout_height="48dp" android:minWidth="0dp" android:text="⋮"
             android:textSize="20sp" android:contentDescription="Outils du navigateur Android" />
@@ -17,10 +17,6 @@
     <TextView android:id="@+id/emulator_status" android:layout_width="match_parent" android:layout_height="wrap_content"
         android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingBottom="6dp"
         android:textColor="#BDB6E0" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
-    <Button android:id="@+id/emulator_native_mode"
-        android:layout_width="match_parent" android:layout_height="48dp"
-        android:text="Android direct rapide · sans QEMU"
-        android:textAllCaps="false" android:backgroundTint="#393548" />
     <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
         <FrameLayout android:id="@+id/emulator_screen" android:layout_width="match_parent" android:layout_height="match_parent"
             android:background="#101114">
