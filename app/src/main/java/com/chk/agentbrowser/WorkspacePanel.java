@@ -785,7 +785,9 @@ public final class WorkspacePanel {
                 WorkspaceStore store=new WorkspaceStore(a);
                 JSONObject info=FileFormats.detect(a,path);
                 String[] formats=MediaConverter.isMediaInput(store,path,info)
-                    ?new String[]{"mp3","wav","flac","m4a","aac","ogg","opus","mp4","mov","mkv","avi","webm","3gp","gif"}
+                    ?("audio".equals(info.optString("kind"))||store.mime(path).startsWith("audio/")
+                        ?new String[]{"mp3","wav","flac","m4a","aac","ogg","opus"}
+                        :new String[]{"mp4","mov","mkv","avi","webm","3gp","gif","mp3","wav","flac","m4a","aac","ogg","opus"})
                     :"image".equals(info.optString("kind"))?new String[]{"png","jpg","webp"}
                     :java.util.Arrays.asList("csv","tsv").contains(info.optString("format"))?new String[]{"csv","xlsx","txt","pdf","docx"}
                     :java.util.Arrays.asList("text","document").contains(info.optString("kind"))?new String[]{"txt","pdf","docx","pptx","json"}:new String[0];
@@ -793,16 +795,44 @@ public final class WorkspacePanel {
                     if(disposed||a.isFinishing()||a.isDestroyed())return;
                     if(formats.length==0){toast("Aucune conversion prise en charge pour ce format");return;}
                     new AgentDialog.Builder(a).setTitle("Convertir une copie").setItems(formats,(d,i)->{
-                        String format=formats[i],base=path.substring(0,Math.max(path.lastIndexOf('/'),path.lastIndexOf('.')));
+                        String format=formats[i];
+                        int dot=path.lastIndexOf('.'),slash=path.lastIndexOf('/');
+                        String base=dot>slash?path.substring(0,dot):path;
                         String suggestion=base+" - converti."+format;
-                        prompt("Destination de la copie",suggestion,destination->work(()->{
-                            JSONObject args=new JSONObject().put("path",path).put("destination",destination).put("format",format);
-                            UniversalFiles.convert(a.getApplicationContext(),args,(ok,result)->{});
-                            return "Copie convertie : "+destination;
-                        }));
+                        if("mp3".equals(format)){
+                            int[] rates={320,256,192,128};
+                            new AgentDialog.Builder(a).setTitle("Qualité MP3").setItems(new String[]{"320 kb/s · radio","256 kb/s","192 kb/s","128 kb/s · fichier léger"},(q,j)->{
+                                prompt("Destination de la copie",suggestion,destination->convertWithCancel(path,destination,format,rates[j]));
+                            }).setNegativeButton("Annuler",null).show();
+                        }else prompt("Destination de la copie",suggestion,destination->convertWithCancel(path,destination,format,0));
                     }).setNegativeButton("Annuler",null).show();
                 });
             }catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}
+        });
+    }
+    private void convertWithCancel(String source,String destination,String format,int bitrate){
+        java.util.concurrent.atomic.AtomicBoolean active=new java.util.concurrent.atomic.AtomicBoolean(true);
+        android.app.AlertDialog dialog=new AgentDialog.Builder(a).setTitle("Conversion locale")
+            .setMessage("Création de la copie "+format.toUpperCase(java.util.Locale.ROOT)+"…\nLe fichier original reste intact.")
+            .setCancelable(false).setNegativeButton("Annuler",(d,i)->{active.set(false);toast("Arrêt demandé");}).create();
+        dialog.show();
+        WorkspaceCommands.IO.execute(()->{
+            String message;
+            try{
+                JSONObject args=new JSONObject().put("path",source).put("destination",destination).put("format",format);
+                if(bitrate>0)args.put("bitrate_kbps",bitrate);
+                UniversalFiles.convert(a.getApplicationContext(),args,new AgentClient.ResultCallback(){
+                    public void finish(boolean ok,String result){}
+                    public boolean isActive(){return active.get();}
+                });
+                message="Copie convertie : "+destination;
+            }catch(Exception e){message=e.getMessage();}
+            final String result=message;
+            WorkspaceCommands.UI.post(()->{
+                if(disposed||a.isFinishing()||a.isDestroyed())return;
+                if(dialog.isShowing())dialog.dismiss();
+                toast(result);refresh();
+            });
         });
     }
     private void openOtherFile(String path){try{WorkspaceStore store=new WorkspaceStore(a);Intent view=new Intent(Intent.ACTION_VIEW).setDataAndType(store.uri(path),store.mime(path)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);a.startActivity(Intent.createChooser(view,"Ouvrir le fichier"));}catch(Exception ex){toast("Fichier illisible");}}

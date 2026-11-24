@@ -21,6 +21,27 @@ public class MediaConverterIntegrationTest {
         assertTrue(a.contains("/tmp/Mon morceau.wav"));
         try{MediaConverter.command(new File("a.wav"),new File("b.exe"),"exe",new JSONObject(),1000000);fail("Format interdit");}catch(IOException expected){}
     }
+    @Test public void videoRemuxTranscodeAndAudioExtraction()throws Exception{
+        Context app=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        org.junit.Assume.assumeTrue(MediaConverter.deviceSupported());
+        WorkspaceStore store=new WorkspaceStore(app);
+        String name="media-video-test-"+UUID.randomUUID(),input=name+".mp4",output=name+".mkv",sound=name+".mp3";
+        File source=store.file(input),video=store.file(output),audio=store.file(sound);
+        try{
+            try(InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("editor-fixture.mp4");
+                OutputStream out=new FileOutputStream(source)){
+                byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
+            }
+            String hash=WorkspaceTransfer.stat(store,input,true).getString("sha256");
+            AgentClient.ResultCallback active=(ok,result)->{};
+            JSONObject result=UniversalFiles.convert(app,new JSONObject().put("path",input).put("destination",output).put("format","mkv").put("max_dimension",320),active);
+            assertTrue(result.getBoolean("verified"));assertTrue(video.length()>1000);
+            assertEquals("video",result.getJSONArray("streams").getJSONObject(0).getString("codec_type"));
+            JSONObject extract=UniversalFiles.convert(app,new JSONObject().put("path",input).put("destination",sound).put("format","mp3"),active);
+            assertTrue(extract.getBoolean("verified"));assertTrue(audio.length()>1000);assertEquals("mp3",extract.getJSONArray("streams").getJSONObject(0).getString("codec_name"));
+            assertEquals(hash,WorkspaceTransfer.stat(store,input,true).getString("sha256"));
+        }finally{source.delete();video.delete();audio.delete();}
+    }
     @Test public void realWavToMp3AndFlacPreservesOriginal()throws Exception{
         Context app=InstrumentationRegistry.getInstrumentation().getTargetContext();
         // Supported CI ABI must actually run the codec; older/unsupported devices retain their existing tools.

@@ -24,7 +24,7 @@ Les fichiers restent dans le stockage CHK ou sont importés depuis les accès SA
 
 ## Local 2 : utiliser le relais actuel
 
-Le catalogue natif passe à `workspace_version=5`. Il reste accessible avec Windows 1.3.0/1.4.x par l’outil existant :
+Le catalogue natif passe à `workspace_version=6`. Il reste accessible avec Windows 1.3.0/1.4.x par l’outil existant :
 
 ```json
 {"action":"android_action","args":{"action":"files_open","args":{"path":"Categories/Videos/dans la brume 2/01_LA_VILLE_FANTOME/META_A_COPIER.txt"}}}
@@ -44,7 +44,7 @@ Le catalogue natif passe à `workspace_version=5`. Il reste accessible avec Wind
 | files_archive_read | path, entry : texte d’une entrée, maximum 1 Mo décompressé |
 | files_extract_archive | path, destination, entries facultatif : noms exacts, nouveau dossier obligatoire |
 | files_database | path, table facultatif, offset : 100 lignes par réponse |
-| files_convert | path, destination, format, quality/max_dimension facultatifs pour images |
+| files_convert | path, destination, format ; quality/max_dimension pour images, bitrate_kbps/sample_rate/channels pour audio et max_dimension pour vidéo ; détails dans MEDIA_CONVERTER.md |
 | files_search_content | folder, query : 2 000 entrées, 32 Mo scannés, fichiers de 8 Mo maximum, 10 secondes et 100 résultats ; complete=false si une limite est atteinte |
 | files_verify | path, expected_sha256 facultatif : présence, taille et SHA-256 |
 | files_batch | id stable, operations=[{action,args}] : tâche durable de 1 à 50 étapes autorisées |
