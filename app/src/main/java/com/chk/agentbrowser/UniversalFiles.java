@@ -104,6 +104,9 @@ final class UniversalFiles {
     static JSONObject convert(Context app,JSONObject args,AgentClient.ResultCallback active)throws Exception{
         WorkspaceStore s=new WorkspaceStore(app);String path=args.getString("path"),destination=args.getString("destination"),format=args.getString("format").toLowerCase(Locale.ROOT);JSONObject detected=FileFormats.detect(app,path);
         File target=s.file(destination);if(target.exists()||!target.getParentFile().isDirectory()||!FileFormats.extension(destination).equals(format))throw new IOException("Nouvelle destination avec l’extension du format requise");
+        if(MediaConverter.isMediaInput(s,path,detected)){
+            return MediaConverter.convert(app,s,path,destination,format,args,active);
+        }
         if(detected.getString("kind").equals("image")&&Arrays.asList("png","jpg","webp").contains(format)){
             BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeFile(s.file(path).getPath(),bounds);if(bounds.outWidth<=0)throw new IOException("Codec image absent ou image corrompue");
             int maximum=args.optInt("max_dimension",2048),quality=args.optInt("quality",90);if(maximum<16||maximum>4096||quality<1||quality>100)throw new IOException("Dimension 16..4096 et qualité 1..100 requises");

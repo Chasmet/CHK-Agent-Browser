@@ -6,7 +6,7 @@ import java.util.*;
 
 /** Versioned, paged discovery usable even through the Windows 1.3.0 android_action tool. */
 final class WorkspaceCapabilities {
-    static final int VERSION=5;
+    static final int VERSION=6;
     private WorkspaceCapabilities(){}
     static JSONObject catalog(JSONObject args)throws Exception{
         List<JSONObject> all=new ArrayList<>();
@@ -18,7 +18,7 @@ final class WorkspaceCapabilities {
         add(all,"files_archive_list","Liste paginée du ZIP sans extraction, 100 entrées par page, maximum 5000.","path:string","offset:integer?");
         add(all,"files_archive_read","Aperçu texte d’une entrée ZIP, maximum 1 Mo décompressé.","path:string","entry:string");
         add(all,"files_extract_archive","Extraction ZIP complète ou sélective dans un nouveau dossier, sans écrasement.","path:string","destination:string","entries:array?");
-        add(all,"files_convert","Copie convertie : images vers png/jpg/webp ; texte vers txt/pdf/docx/pptx/json ; csv/tsv vers csv/xlsx. Cadres simples, pas de conservation d’une mise en page Office arbitraire.","path:string","destination:string","format:string","quality:integer?","max_dimension:integer?");
+        add(all,"files_convert","Copie locale sans écrasement : audio/vidéo vers mp3,wav,flac,m4a,aac,ogg,opus,mp4,mov,mkv,avi,webm,3gp,gif selon codecs ; images png/jpg/webp ; texte txt/pdf/docx/pptx/json ; csv/tsv csv/xlsx. MP3 320 kb/s par défaut. Les formats non pris en charge échouent explicitement.","path:string","destination:string","format:string","quality:integer?","max_dimension:integer?","bitrate_kbps:integer?","sample_rate:integer?","channels:integer?");
         add(all,"files_search_content","Recherche progressive, 2000 entrées et 32 Mo scannés maximum ; complete=false si limite atteinte.","folder:string?","query:string");
         add(all,"files_database","SQLite en lecture seule, choix table et pagination de 100 lignes.","path:string","table:string?","offset:integer?");
         add(all,"files_media_inspect","Aperçu universel selon signature, texte/PDF/Office/table/ZIP/SQLite/hex et propriétés médias.","path:string","offset:integer?","page:integer?","byte_offset:integer?");

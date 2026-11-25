@@ -766,7 +766,7 @@ public final class WorkspacePanel {
             else{selectMode=true;selected.clear();refresh();}
         }).show();
     }
-    private void fileMenu(String path){boolean directory=false;try{directory=new WorkspaceStore(a).file(path).isDirectory();}catch(Exception ignored){}final boolean dir=directory;new AgentDialog.Builder(a).setTitle(path.substring(path.lastIndexOf('/')+1)).setItems(dir?new String[]{"Renommer","Déplacer","Mettre à la corbeille","Enregistrer sur le téléphone","Propriétés"}:new String[]{"Ouvrir","Partager","Enregistrer sur le téléphone","Renommer","Déplacer","Modifier le texte","Mettre à la corbeille","Copier","Monter dans Studio","Informations du média","Ouvrir avec…"},(d,i)->{int choice=dir?new int[]{3,4,6,11,9}[i]:i;switch(choice){
+    private void fileMenu(String path){boolean directory=false;try{directory=new WorkspaceStore(a).file(path).isDirectory();}catch(Exception ignored){}final boolean dir=directory;new AgentDialog.Builder(a).setTitle(path.substring(path.lastIndexOf('/')+1)).setItems(dir?new String[]{"Renommer","Déplacer","Mettre à la corbeille","Enregistrer sur le téléphone","Propriétés"}:new String[]{"Ouvrir","Partager","Enregistrer sur le téléphone","Renommer","Déplacer","Modifier le texte","Mettre à la corbeille","Copier","Monter dans Studio","Informations du média","Ouvrir avec…","Convertir…"},(d,i)->{int choice=dir?new int[]{3,4,6,11,9}[i]:i;switch(choice){
         case 0:openFile(path,false);break;case 1:openFile(path,true);break;case 2:savePathsToPhone(java.util.Collections.singletonList(path));break;
         case 3:renameItem(path);break;
         case 4:prompt("Chemin de destination","",name->work(()->{new WorkspaceStore(a).move(path,name);return "Élément déplacé";}));break;
@@ -775,9 +775,66 @@ public final class WorkspacePanel {
         case 8:a.startActivity(new Intent(a,VideoEditorActivity.class).putExtra(path.toLowerCase(java.util.Locale.ROOT).endsWith(".json")?"project_path":"add_path",path));break;
         case 9:showSelectedInfo(path);break;
         case 10:openWithExternal(path);break;
+        case 12:convertFileDialog(path);break;
         case 11:savePathsToPhone(java.util.Collections.singletonList(path));break;
         case 6:confirm("Mettre cet élément à la corbeille ?",()->work(()->{new WorkspaceStore(a).trash(path);return "Élément dans la corbeille";}));break;
     }}).setNegativeButton("Fermer",null).show();}
+    private void convertFileDialog(String path){
+        WorkspaceCommands.IO.execute(()->{
+            try{
+                WorkspaceStore store=new WorkspaceStore(a);
+                JSONObject info=FileFormats.detect(a,path);
+                String[] formats=MediaConverter.isMediaInput(store,path,info)
+                    ?("audio".equals(info.optString("kind"))||store.mime(path).startsWith("audio/")
+                        ?new String[]{"mp3","wav","flac","m4a","aac","ogg","opus"}
+                        :new String[]{"mp4","mov","mkv","avi","webm","3gp","gif","mp3","wav","flac","m4a","aac","ogg","opus"})
+                    :"image".equals(info.optString("kind"))?new String[]{"png","jpg","webp"}
+                    :java.util.Arrays.asList("csv","tsv").contains(info.optString("format"))?new String[]{"csv","xlsx","txt","pdf","docx"}
+                    :java.util.Arrays.asList("text","document").contains(info.optString("kind"))?new String[]{"txt","pdf","docx","pptx","json"}:new String[0];
+                WorkspaceCommands.UI.post(()->{
+                    if(disposed||a.isFinishing()||a.isDestroyed())return;
+                    if(formats.length==0){toast("Aucune conversion prise en charge pour ce format");return;}
+                    new AgentDialog.Builder(a).setTitle("Convertir une copie").setItems(formats,(d,i)->{
+                        String format=formats[i];
+                        int dot=path.lastIndexOf('.'),slash=path.lastIndexOf('/');
+                        String base=dot>slash?path.substring(0,dot):path;
+                        String suggestion=base+" - converti."+format;
+                        if("mp3".equals(format)){
+                            int[] rates={320,256,192,128};
+                            new AgentDialog.Builder(a).setTitle("Qualité MP3").setItems(new String[]{"320 kb/s · radio","256 kb/s","192 kb/s","128 kb/s · fichier léger"},(q,j)->{
+                                prompt("Destination de la copie",suggestion,destination->convertWithCancel(path,destination,format,rates[j]));
+                            }).setNegativeButton("Annuler",null).show();
+                        }else prompt("Destination de la copie",suggestion,destination->convertWithCancel(path,destination,format,0));
+                    }).setNegativeButton("Annuler",null).show();
+                });
+            }catch(Exception e){WorkspaceCommands.UI.post(()->toast(e.getMessage()));}
+        });
+    }
+    private void convertWithCancel(String source,String destination,String format,int bitrate){
+        java.util.concurrent.atomic.AtomicBoolean active=new java.util.concurrent.atomic.AtomicBoolean(true);
+        android.app.AlertDialog dialog=new AgentDialog.Builder(a).setTitle("Conversion locale")
+            .setMessage("Création de la copie "+format.toUpperCase(java.util.Locale.ROOT)+"…\nLe fichier original reste intact.")
+            .setCancelable(false).setNegativeButton("Annuler",(d,i)->{active.set(false);toast("Arrêt demandé");}).create();
+        dialog.show();
+        WorkspaceCommands.IO.execute(()->{
+            String message;
+            try{
+                JSONObject args=new JSONObject().put("path",source).put("destination",destination).put("format",format);
+                if(bitrate>0)args.put("bitrate_kbps",bitrate);
+                UniversalFiles.convert(a.getApplicationContext(),args,new AgentClient.ResultCallback(){
+                    public void finish(boolean ok,String result){}
+                    public boolean isActive(){return active.get();}
+                });
+                message="Copie convertie : "+destination;
+            }catch(Exception e){message=e.getMessage();}
+            final String result=message;
+            WorkspaceCommands.UI.post(()->{
+                if(disposed||a.isFinishing()||a.isDestroyed())return;
+                if(dialog.isShowing())dialog.dismiss();
+                toast(result);refresh();
+            });
+        });
+    }
     private void openOtherFile(String path){try{WorkspaceStore store=new WorkspaceStore(a);Intent view=new Intent(Intent.ACTION_VIEW).setDataAndType(store.uri(path),store.mime(path)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);a.startActivity(Intent.createChooser(view,"Ouvrir le fichier"));}catch(Exception ex){toast("Fichier illisible");}}
     private void openFile(String path,boolean share){
         if(!share){

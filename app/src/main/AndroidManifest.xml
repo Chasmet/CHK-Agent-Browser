@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <!-- Only the isolated, API-29-gated Tor component requires Android 10. The main app keeps minSdk 23. -->
-    <uses-sdk tools:overrideLibrary="org.torproject.jni,rikka.shizuku.api,rikka.shizuku.provider" />
+    <uses-sdk tools:overrideLibrary="org.torproject.jni,rikka.shizuku.api,rikka.shizuku.provider,com.arthenica.ffmpegkit" />
     <uses-permission android:name="android.permission.INTERNET" />
     <queries>
         <package android:name="org.torproject.torbrowser" />

@@ -1,4 +1,4 @@
-## Retrait des modes Android
+# Convertisseur multimédia local\n\n- Menu Fichiers > Convertir une copie ; MP3 320/256/192/128 kb/s, WAV, FLAC, AAC/M4A, OGG/Opus, vidéo MP4/MOV/MKV/AVI/WebM/3GP et GIF selon codecs disponibles. Extraction audio depuis vidéo.\n- Encodage local sur Android 7+ 64 bits, sans serveur ni abonnement ; source conservée, conversion annulable, contrôle des pistes/durée et refus d'écraser la destination. Les autres outils et la signature sont conservés.\n- Commande MCP files_convert étendue, catalogue version 6. Détails et limites : docs/MEDIA_CONVERTER.md.\n\n## Retrait des modes Android
 
 - CHK Agent Browser s’ouvre directement sur le navigateur Web. Les entrées Émulateur Android et Android direct ont été retirées, ainsi que QEMU et l’intégration Shizuku.
 - Cette mise à jour conserve les données locales et les connexions existantes. Elle n’efface pas les images Android déjà téléchargées.
