@@ -44,6 +44,8 @@ jobs:
         run: bash validation/check.sh
       - name: Compiler APK debug
         run: ./gradlew --no-daemon assembleDebug lintDebug
+      - name: Vérifier les bibliothèques FFmpeg dans l'APK debug
+        run: python3 validation/check_ffmpeg_apk.py app/build/outputs/apk/debug/app-debug.apk
       - name: Afficher les erreurs Android si la vérification échoue
         if: failure()
         run: |
@@ -141,6 +143,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           APK=app/build/outputs/apk/release/app-release.apk
+          python3 validation/check_ffmpeg_apk.py "$APK"
           python3 - "$APK" <<'PYAPK'
           import sys, zipfile
           with zipfile.ZipFile(sys.argv[1]) as apk:
