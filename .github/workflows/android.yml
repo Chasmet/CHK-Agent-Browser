@@ -130,6 +130,16 @@ jobs:
         run: |
           CURRENT=$(git ls-remote origin refs/heads/main | cut -f1)
           test "$CURRENT" = "$GITHUB_SHA"
+      - name: Vérifier provenance et notices FFmpeg avant diffusion
+        if: github.ref == 'refs/heads/main'
+        run: |
+          python3 validation/check_ffmpeg_distribution.py
+          AAR=$(find "$HOME/.gradle/caches/modules-2/files-2.1/dev.ffmpegkit-maintained/ffmpeg-kit-full/8.1.9" -name 'ffmpeg-kit-full-8.1.9.aar' -type f)
+          test -f "$AAR"
+          ./gradlew --no-daemon :app:assembleDebug -PchkFfmpegAar="$AAR"
+          python3 validation/check_ffmpeg_apk.py app/build/outputs/apk/debug/app-debug.apk
+          zip -r FFmpeg-NOTICES.zip ffmpeg-release-notices
+          test -s FFmpeg-NOTICES.zip
       - name: Charger signature persistante via GitHub OIDC et Render existant
         if: github.ref == 'refs/heads/main'
         run: python3 signing/prepare_ci.py
@@ -187,9 +197,9 @@ jobs:
         run: |
           CURRENT=$(git ls-remote origin refs/heads/main | cut -f1)
           test "$CURRENT" = "$GITHUB_SHA"
-          ASSETS=("CHK-Agent-Browser-${RELEASE_VERSION}.apk")
+          ASSETS=("CHK-Agent-Browser-${RELEASE_VERSION}.apk" FFmpeg-NOTICES.zip)
           sha256sum "${ASSETS[@]}" > SHA256SUMS.txt
-          gh release create "v${RELEASE_VERSION}" "CHK-Agent-Browser-${RELEASE_VERSION}.apk" \
+          gh release create "v${RELEASE_VERSION}" "${ASSETS[@]}" \
             --title "CHK Agent Browser ${RELEASE_VERSION}" \
             --notes-file docs/RELEASE_NOTES.md
           gh release upload "v${RELEASE_VERSION}" SHA256SUMS.txt
